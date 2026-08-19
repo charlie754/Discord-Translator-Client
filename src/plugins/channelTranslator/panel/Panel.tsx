@@ -35,7 +35,7 @@ const LANGUAGES: Array<{ value: string; label: string; }> = [
 
 const KOFI_URL = "https://ko-fi.com/irp_hongkong";
 /** TODO: confirm once the repo is pushed — one line to change. */
-const GITHUB_URL = "https://github.com/charlie754/Discord-Translator";
+const GITHUB_URL = "https://github.com/charlie754/Discord-Translator-Client";
 
 export function Panel() {
     const channelId = useStateFromStores([SelectedChannelStore], () =>
