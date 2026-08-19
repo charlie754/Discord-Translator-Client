@@ -1,0 +1,22 @@
+/* Message-content styles. Unlike the panel, these must live in the light DOM,
+   so they ship as a real stylesheet rather than inside the panel's shadow root. */
+
+.ct-sep {
+    border: none;
+    border-top: 1px dashed var(--background-modifier-accent, rgba(255, 255, 255, 0.15));
+    margin: 4px 0;
+}
+
+.ct-translated-row {
+    margin-top: 2px;
+    padding-left: 8px;
+    border-left: 2px solid var(--brand-experiment, #5865f2);
+    color: var(--text-normal, #dbdee1);
+    white-space: pre-wrap;
+}
+
+.ct-rewritten {
+    border-left: 2px solid var(--brand-experiment, #5865f2);
+    padding-left: 6px;
+    margin-left: -8px;
+}
