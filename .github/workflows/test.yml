@@ -24,3 +24,8 @@ jobs:
 
       - name: Build
         run: npx --yes pnpm@10 build
+
+      # Enumerates every host in the packed archives against scripts/allowed-hosts.txt.
+      # Must run after the build: it reads dist/*.asar, never the sources.
+      - name: Check third-party hosts
+        run: node scripts/checkHosts.mjs

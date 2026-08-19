@@ -49,7 +49,6 @@ export const CspPolicies: PolicyMap = {
 
     // CDNs used for some things by Vencord.
     // FIXME: we really should not be using CDNs anymore
-    "cdnjs.cloudflare.com": ImageScriptsAndCssSrc,
     "cdn.jsdelivr.net": ImageScriptsAndCssSrc,
 
     // Function Specific.
@@ -59,7 +58,11 @@ export const CspPolicies: PolicyMap = {
     // requests them any more, and a CSP entry is a standing permission, so they
     // are gone.
     "api.github.com": ConnectSrc, // update checks against our own releases
-    "translate-pa.googleapis.com": ConnectSrc, // Google Translate API — the translator's transport
+    // The gtx endpoint the Google provider builds its URLs against. The translation
+    // request itself is issued by a main-process fetch (channelTranslator/native.ts),
+    // which no CSP applies to — this entry only covers requests originating in the
+    // renderer, so it is a fallback, not the guard on the transport.
+    "translate.googleapis.com": ConnectSrc,
 };
 
 const findHeader = (headers: PolicyMap, headerName: Lowercase<string>) => {

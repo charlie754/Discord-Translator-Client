@@ -48,6 +48,13 @@ if (!IS_COMPANION_TEST && process.argv.includes("--companion-test"))
     console.error("--companion-test must be run with --reporter for any effect");
 
 export const IS_UPDATER_DISABLED = process.argv.includes("--disable-updater");
+
+// Release builds ship no sourcemaps at all: nothing in a packaged install ever
+// requests them, yet they were ~80% of the bytes in the packed asar. Watch mode
+// inlines them, and a non-watch --dev build still writes .map files next to the
+// bundles so they can be served over the vencord:// protocol handler.
+/** @type {import("esbuild").BuildOptions["sourcemap"]} */
+export const sourcemap = watch ? "inline" : IS_DEV ? "external" : false;
 export const gitHash = process.env.DISCORD_TRANSLATOR_HASH || execSync("git rev-parse HEAD", { encoding: "utf-8" }).trim();
 
 export const banner = {
@@ -351,7 +358,7 @@ export const commonOpts = {
     logLevel: "info",
     bundle: true,
     minify: !watch && !IS_REPORTER,
-    sourcemap: watch ? "inline" : "external",
+    sourcemap,
     legalComments: "linked",
     banner,
     plugins: [fileUrlPlugin, gitHashPlugin, gitRemotePlugin, stylePlugin],

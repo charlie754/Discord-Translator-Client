@@ -1,0 +1,82 @@
+# Hosts allowed to appear in dist/desktop.asar and dist/equibop.asar.
+#
+# scripts/checkHosts.mjs enumerates every host present in the packed archives
+# and fails CI on anything not listed here. Adding a line is a deliberate
+# decision to ship one more third party the user's client can be pointed at —
+# it is not housekeeping. Justify it in the PR that adds it.
+#
+# Removing code that reaches a host? Remove its line too, or the next audit
+# reads a stale list as the current attack surface.
+#
+# Derived by running `node scripts/checkHosts.mjs` against the build at
+# dist/desktop.asar sha256 fcd8510aed7890c00196a5c2b1c1fae5895e715eafa277c4d48c437f06564f43
+# and dist/equibop.asar sha256 6b700e7b9b85fa21a7d7fb57b8985bde0c323b8a1651dc2f4645efc15b905210
+# — that is, from what actually ships, not from what src/main/csp/index.ts says.
+#
+# The section headings below are context for reviewers. The checker does not
+# read them: every uncommented line is simply an allowed entry.
+
+# --- Fetched at runtime, or permitted to be, by the CSP allow-map ---
+api.github.com
+cdn.jsdelivr.net
+clients2.google.com
+files.catbox.moe
+fonts.googleapis.com
+githack.com
+github.io
+gitlab.io
+i.ibb.co
+i.imgur.com
+i.pinimg.com
+jsdelivr.net
+raw.githubusercontent.com
+translate.googleapis.com
+codeberg.page
+
+# --- Link targets shown to the user; navigated only on an explicit click ---
+betterdiscord.app
+codeberg.org
+discord.gg
+github.com
+gitlab.com
+ko-fi.com
+
+# --- Licence and specification URLs in headers, LEGAL.txt and SVG xmlns ---
+mozilla.org
+www.apache.org
+www.gnu.org
+www.w3.org
+
+# --- Documentation placeholder ---
+example.com
+
+# --- NOT hosts. These share the hostname shape but are filenames, contributor
+# handles, settings keys and Symbol.for() ids. Listed rather than filtered out
+# in code, because a suffix filter smart enough to drop "main.js" is also smart
+# enough to hide a real host on a colliding TLD — blahaj.zip below is a
+# contributor handle, but .zip is a real TLD and a checker cannot tell. ---
+app.asar
+index.js
+main.js
+main.js.map
+native-settings.json
+package.json
+patcher.js
+patcher.js.map
+preload.js
+preload.js.map
+renderer.css
+renderer.js
+renderer.js.map
+settings.json
+blahaj.zip
+example.user
+luca.beyer
+m.shl
+notifications.position
+notifications.timeout
+react.fragment
+replacement.match
+replacement.replace
+vencord.lazy.cached
+vencord.lazy.get

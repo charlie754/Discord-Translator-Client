@@ -20,11 +20,11 @@
 // @ts-check
 
 import { createPackage } from "@electron/asar";
-import { readdir, writeFile } from "fs/promises";
+import { readdir, rm, writeFile } from "fs/promises";
 import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
 
-import { BUILD_TIMESTAMP, commonOpts, exists, globPlugins, IS_DEV, IS_REPORTER, IS_COMPANION_TEST, IS_STANDALONE, IS_UPDATER_DISABLED, resolvePluginName, VERSION, commonRendererPlugins, watch, buildOrWatchAll, stringifyValues, IS_ANTI_CRASH_TEST } from "./common.mjs";
+import { BUILD_TIMESTAMP, commonOpts, exists, globPlugins, IS_DEV, IS_REPORTER, IS_COMPANION_TEST, IS_STANDALONE, IS_UPDATER_DISABLED, resolvePluginName, sourcemap, VERSION, commonRendererPlugins, watch, buildOrWatchAll, stringifyValues, IS_ANTI_CRASH_TEST } from "./common.mjs";
 
 const defines = stringifyValues({
     IS_STANDALONE,
@@ -59,8 +59,10 @@ const nodeCommonOpts = {
     external: ["electron", "original-fs", "~pluginNatives", ...commonOpts.external]
 };
 
-const sourceMapFooter = s => watch ? "" : `//# sourceMappingURL=vencord://${s}.js.map`;
-const sourcemap = watch ? "inline" : "external";
+// Only the "external" (non-watch dev) build writes .map files to disk, so it is the
+// only one that may point at them - watch mode carries them inline, and release has
+// none to link to.
+const sourceMapFooter = s => sourcemap === "external" ? `//# sourceMappingURL=vencord://${s}.js.map` : "";
 
 /**
  * @type {import("esbuild").Plugin}
@@ -225,6 +227,17 @@ const buildConfigs = ([
         }
     }
 ]);
+
+// esbuild only overwrites the files it emits, so anything a previous build left behind
+// - such as the sourcemaps releases no longer produce - would still be picked up by the
+// unfiltered createPackage below. Watch mode keeps its output in place so a client
+// running against dist isn't left without a bundle mid-rebuild.
+if (!watch) {
+    await Promise.all([
+        rm("dist/desktop", { recursive: true, force: true }),
+        rm("dist/equibop", { recursive: true, force: true })
+    ]);
+}
 
 await buildOrWatchAll(buildConfigs);
 
