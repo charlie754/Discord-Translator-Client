@@ -17,6 +17,7 @@ import { Notice } from "@components/Notice";
 import { Paragraph } from "@components/Paragraph";
 import { openPluginModal, SettingsTab, wrapTab } from "@components/settings";
 import { QuickAction, QuickActionCard } from "@components/settings/QuickAction";
+import { GoatBanner } from "@plugins/channelTranslator/panel/goatBanner";
 import { gitRemote } from "@shared/vencordUserAgent";
 import { IS_WINDOWS } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
@@ -184,6 +185,12 @@ function EquicordSettings() {
                     }
                 />
             </QuickActionCard>
+
+            {/* Light DOM: GoatBanner injects its own stylesheet into document.head,
+                so nothing has to be wired up here beyond the spacing. */}
+            <div className={Margins.top16}>
+                <GoatBanner />
+            </div>
 
             <Divider className={Margins.top20} />
 

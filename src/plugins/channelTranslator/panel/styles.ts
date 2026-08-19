@@ -5,6 +5,7 @@
  */
 
 // plugin/panel/styles.ts
+import { GOAT_BANNER_CSS } from "./goatBanner";
 
 /**
  * Design vocabulary lifted from F:\google map plugin\extension\content\widget.js
@@ -401,4 +402,4 @@ select option { background: #1c1a26; color: var(--ink-cream); text-align: center
   .gh:hover .gh__star, .gh:hover .gh__label { transform: none !important; }
   .shell:hover .row, .shell:hover .kofi, .shell:hover .gh { opacity: 1; }
 }
-`;
+` + GOAT_BANNER_CSS;

@@ -11,6 +11,7 @@ import { PanelState } from "../core/modes";
 import { patchesOk } from "../patches";
 import { settings } from "../settings";
 import { breakerOpen, pendingCount, persist,repaintChannel, subscribeProgress, toggle } from "../state";
+import { GoatBanner } from "./goatBanner";
 
 const STATE_LABEL: Record<PanelState, string> = {
     off: "Off",
@@ -198,6 +199,8 @@ export function Panel() {
                         <span className="gh__label">Star Project on Github</span>
                     </span>
                 </button>
+
+                <GoatBanner />
 
                 {state === "unavailable" && (
                     <div className="row">

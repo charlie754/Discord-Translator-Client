@@ -43,6 +43,9 @@ codeberg.page
 # --- Link targets shown to the user; navigated only on an explicit click ---
 betterdiscord.app
 codeberg.org
+# The Goat Project campaign banner in the translator panel and the settings tab.
+# An <a href> only: the lockup beside it is inline SVG, so nothing is fetched.
+dagoat.io
 discord.gg
 github.com
 gitlab.com
