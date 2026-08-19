@@ -1,5 +1,11 @@
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 IRP_HongKong
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 // plugin/panel/index.tsx
-import { React, createRoot } from "@webpack/common";
+import { createRoot,React } from "@webpack/common";
 
 import { Panel } from "./Panel";
 import { PANEL_CSS } from "./styles";
@@ -7,6 +13,8 @@ import { PANEL_CSS } from "./styles";
 const HOST_ID = "channel-translator-host";
 let root: any = null;
 let reposition: (() => void) | null = null;
+let chatObserver: ResizeObserver | null = null;
+let observedAnchor: Element | null = null;
 
 export function mountPanel(): void {
     if (document.getElementById(HOST_ID)) return;
@@ -34,8 +42,26 @@ export function mountPanel(): void {
     // Anchor to the top-right of the chat area rather than the window, so the
     // panel moves correctly when the member list or sidebar is toggled.
     reposition = () => {
-        const chat = document.querySelector('[class*="chatContent"], main[class*="chatContent"]')
+        // Anchor to the message column, not the chat region: the latter spans
+        // the member list, so the panel would sit on top of it when open.
+        // data-list-id is a Discord data attribute and churns far less than
+        // its generated class names.
+        const chat =
+            document.querySelector('[data-list-id="chat-messages"]')
+            ?? document.querySelector('[class*="messagesWrapper"]')
+            ?? document.querySelector('[class*="chatContent"]')
             ?? document.querySelector("main");
+        // Discord replaces the message column on every channel switch, so an
+        // observer bound at mount time silently stops firing. Re-bind whenever
+        // the node identity changes; comparing identity keeps this from
+        // looping when the observer's own callback lands here.
+        if (chat && chat !== observedAnchor) {
+            chatObserver?.disconnect();
+            observedAnchor = chat;
+            chatObserver = new ResizeObserver(() => reposition?.());
+            chatObserver.observe(chat);
+        }
+
         const box = chat?.getBoundingClientRect();
 
         // Anchor the right edge so the shell grows leftward when it expands
@@ -71,6 +97,9 @@ export function mountPanel(): void {
 export function unmountPanel(): void {
     if (reposition) window.removeEventListener("resize", reposition);
     reposition = null;
+    chatObserver?.disconnect();
+    chatObserver = null;
+    observedAnchor = null;
     root?.unmount();
     root = null;
     document.getElementById(HOST_ID)?.remove();

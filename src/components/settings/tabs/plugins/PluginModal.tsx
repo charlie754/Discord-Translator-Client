@@ -42,7 +42,7 @@ import { PluginMeta } from "~plugins";
 
 import { OptionComponentMap } from "./components";
 import { openContributorModal } from "./ContributorModal";
-import { FavoriteButton, GithubButton, WebsiteButton } from "./PluginModalButtons";
+import { FavoriteButton, GithubButton } from "./PluginModalButtons";
 
 const cl = classNameFactory("vc-plugin-modal-");
 
@@ -261,10 +261,6 @@ export default function PluginModal({ plugin, onRestartNeeded, onClose, transiti
                                 <FavoriteButton
                                     isFavorite={pluginSettings.isFavorite ?? false}
                                     onClick={() => pluginSettings.isFavorite = !pluginSettings.isFavorite}
-                                />
-                                <WebsiteButton
-                                    text="Website"
-                                    href={isEquicordPlugin ? `https://equicord.org/plugins/${plugin.name}` : `https://vencord.dev/plugins/${plugin.name}`}
                                 />
                                 <GithubButton
                                     text="Source Code"

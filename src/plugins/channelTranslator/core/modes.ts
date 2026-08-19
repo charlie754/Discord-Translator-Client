@@ -1,3 +1,9 @@
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 IRP_HongKong
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 export type Mode = "replace" | "bilingual";
 
 export type PanelState = "off" | "translating" | "on" | "degraded" | "unavailable";

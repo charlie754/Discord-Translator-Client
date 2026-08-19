@@ -52,27 +52,14 @@ export const CspPolicies: PolicyMap = {
     "cdnjs.cloudflare.com": ImageScriptsAndCssSrc,
     "cdn.jsdelivr.net": ImageScriptsAndCssSrc,
 
-    // Function Specific
-    "api.github.com": ConnectSrc, // used for updating Vencord itself
-    "ws.audioscrobbler.com": ConnectSrc, // Last.fm API
-    "musicbrainz.org": ConnectSrc,
-    "*.listenbrainz.org": ConnectSrc,
-    "coverartarchive.org": ConnectSrc,
-    "archive.org": ConnectSrc,
-    "*.archive.org": ConnectSrc,
-    "translate-pa.googleapis.com": ConnectSrc, // Google Translate API
-    "*.vencord.dev": ImageSrc, // VenCloud (api.vencord.dev) and Badges (badges.vencord.dev)
-    "manti.vendicated.dev": ImageSrc, // ReviewDB API
-    "decor.fieryflames.dev": ConnectSrc, // Decor API
-    "ugc.decor.fieryflames.dev": ImageSrc, // Decor CDN
-    "sponsor.ajay.app": ConnectSrc, // Dearrow API
-    "dearrow-thumb.ajay.app": ImageSrc, // Dearrow Thumbnail CDN
-    "usrbg.is-hardly.online": ImageSrc, // USRBG API
-    "icons.duckduckgo.com": ImageSrc, // DuckDuckGo Favicon API (Reverse Image Search)
-
-    // Tenor, used by TenorSearch plugin and some themes
-    "*.tenor.com": ImageAndMediaSrc,
-    "*.tenor.co": ImageAndMediaSrc,
+    // Function Specific.
+    // Upstream allow-listed roughly a dozen more hosts for plugins this fork
+    // does not ship (Last.fm, ListenBrainz, ReviewDB, Decor, Dearrow, USRBG,
+    // Tenor) plus *.vencord.dev for its cloud and badge services. Nothing here
+    // requests them any more, and a CSP entry is a standing permission, so they
+    // are gone.
+    "api.github.com": ConnectSrc, // update checks against our own releases
+    "translate-pa.googleapis.com": ConnectSrc, // Google Translate API — the translator's transport
 };
 
 const findHeader = (headers: PolicyMap, headerName: Lowercase<string>) => {

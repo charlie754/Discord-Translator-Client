@@ -142,7 +142,10 @@ const DefaultSettings: Settings = {
 
     cloud: {
         authenticated: false,
-        url: "https://cloud.equicord.org/",
+        // This fork operates no sync service. Upstream defaulted to a third
+        // party, so a user enabling sync here would have uploaded settings to
+        // someone else’s server. Empty disables the feature.
+        url: "",
         settingsSync: false,
         settingsSyncVersion: 0
     },

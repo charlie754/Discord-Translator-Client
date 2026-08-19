@@ -1,3 +1,9 @@
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 IRP_HongKong
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 export const PLUGIN_NAME = "ChannelTranslator";
 
 /** A message as the adapter hands it to the core. The core never sees a Discord object. */

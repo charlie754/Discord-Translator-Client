@@ -27,7 +27,7 @@ async function runReporter() {
                 match: /"Could not find app-mount"/,
                 replace: "(Vencord.Webpack._initReporter(),$&)"
             }
-        }, "Equicord Reporter");
+        }, "Discord Translator Reporter");
 
         // @ts-expect-error
         Vencord.Webpack._initReporter = function () {

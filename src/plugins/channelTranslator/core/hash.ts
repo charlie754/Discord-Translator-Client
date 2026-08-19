@@ -1,3 +1,9 @@
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 IRP_HongKong
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 /**
  * FNV-1a over UTF-16 code units. Not cryptographic — this is a cache key.
  * Chosen over crypto.subtle because the core must stay synchronous and

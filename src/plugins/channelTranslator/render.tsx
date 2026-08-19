@@ -1,3 +1,9 @@
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 IRP_HongKong
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 // plugin/render.tsx
 import { Parser } from "@webpack/common";
 
@@ -47,7 +53,7 @@ export function wrapContent(content: any, messageId: string, channelId: string):
     // Off means off: never render a translation, however warm the cache is.
     if (!toggle.isOn(guildIdOf(channelId))) return content;
 
-    const mode = settings.store.mode;
+    const { mode } = settings.store;
     const target = settings.store.targetLanguage;
     const entry = entryForMessage(messageId);
     if (!entry) return content;

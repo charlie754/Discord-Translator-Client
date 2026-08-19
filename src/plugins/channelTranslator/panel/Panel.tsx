@@ -1,10 +1,16 @@
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 IRP_HongKong
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 // plugin/panel/Panel.tsx
 import { React, SelectedChannelStore, SelectedGuildStore, useStateFromStores } from "@webpack/common";
 
 import { PanelState } from "../core/modes";
 import { patchesOk } from "../patches";
 import { settings } from "../settings";
-import { breakerOpen, pendingCount, repaintChannel, subscribeProgress, toggle, persist } from "../state";
+import { breakerOpen, pendingCount, persist,repaintChannel, subscribeProgress, toggle } from "../state";
 
 const STATE_LABEL: Record<PanelState, string> = {
     off: "Off",

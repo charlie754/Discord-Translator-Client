@@ -20,87 +20,14 @@ import "./fixDiscordBadgePadding.css";
 
 import { _getBadges, BadgePosition, BadgeUserArgs, ProfileBadge } from "@api/Badges";
 import ErrorBoundary from "@components/ErrorBoundary";
-import { openContributorModal } from "@components/settings/tabs";
 import { Devs } from "@utils/constants";
 import { copyWithToast } from "@utils/discord";
 import { Logger } from "@utils/Logger";
-import { shouldShowContributorBadge, shouldShowEquicordContributorBadge } from "@utils/misc";
 import definePlugin from "@utils/types";
-import { ContextMenuApi, Menu, Toasts, UserStore } from "@webpack/common";
+import { ContextMenuApi, Menu } from "@webpack/common";
 
-import Plugins, { PluginMeta } from "~plugins";
-
-import { EquicordDonorModal, EquicordTranslatorModal, VencordDonorModal } from "./modals";
-
-const CONTRIBUTOR_BADGE = "https://cdn.discordapp.com/emojis/1092089799109775453.png?size=64";
-const EQUICORD_CONTRIBUTOR_BADGE = "https://equicord.org/assets/favicon.png";
-const USERPLUGIN_CONTRIBUTOR_BADGE = "https://equicord.org/assets/icons/misc/userplugin.png";
-
-const ContributorBadge: ProfileBadge = {
-    id: "vencord_contributor_badge",
-    description: "Vencord Contributor",
-    iconSrc: CONTRIBUTOR_BADGE,
-    position: BadgePosition.START,
-    shouldShow: ({ userId }) => shouldShowContributorBadge(userId),
-    onClick: (_, { userId }) => openContributorModal(UserStore.getUser(userId))
-};
-
-const EquicordContributorBadge: ProfileBadge = {
-    id: "equicord_contributor_badge",
-    description: "Equicord Contributor",
-    iconSrc: EQUICORD_CONTRIBUTOR_BADGE,
-    position: BadgePosition.START,
-    shouldShow: ({ userId }) => shouldShowEquicordContributorBadge(userId),
-    onClick: (_, { userId }) => openContributorModal(UserStore.getUser(userId)),
-    props: {
-        style: {
-            borderRadius: "50%",
-            transform: "scale(0.9)"
-        }
-    },
-};
-
-const UserPluginContributorBadge: ProfileBadge = {
-    id: "user_plugin_contributor_badge",
-    description: "User Plugin Contributor",
-    iconSrc: USERPLUGIN_CONTRIBUTOR_BADGE,
-    position: BadgePosition.START,
-    shouldShow: ({ userId }) => {
-        if (!IS_DEV) return false;
-        const allPlugins = Object.values(Plugins);
-        return allPlugins.some(p => {
-            const pluginMeta = PluginMeta[p.name];
-            return pluginMeta?.userPlugin && p.authors.some(a => a.id.toString() === userId);
-        });
-    },
-    onClick: (_, { userId }) => openContributorModal(UserStore.getUser(userId)),
-    props: {
-        style: {
-            borderRadius: "50%",
-            transform: "scale(0.9)"
-        }
-    },
-};
-
-let DonorBadges = {} as Record<string, Array<Record<"tooltip" | "badge", string>>>;
-let EquicordDonorBadges = {} as Record<string, Array<Record<"tooltip" | "badge", string>>>;
-
-async function loadBadges(url: string, noCache = false) {
-    const init = {} as RequestInit;
-    if (noCache) init.cache = "no-cache";
-
-    return await fetch(url, init).then(r => r.json());
-}
-
-async function loadAllBadges(noCache = false) {
-    const vencordBadges = await loadBadges("https://badges.vencord.dev/badges.json", noCache);
-    const equicordBadges = await loadBadges("https://badge.equicord.org/badges.json", noCache);
-
-    DonorBadges = vencordBadges;
-    EquicordDonorBadges = equicordBadges;
-}
-
-let intervalId: any;
+const DonorBadges = {} as Record<string, Array<Record<"tooltip" | "badge", string>>>;
+const EquicordDonorBadges = {} as Record<string, Array<Record<"tooltip" | "badge", string>>>;
 
 export function BadgeContextMenu({ badge }: { badge: Omit<ProfileBadge, "id"> & BadgeUserArgs; }) {
     return (
@@ -175,28 +102,7 @@ export default definePlugin({
         return EquicordDonorBadges;
     },
 
-    toolboxActions: {
-        async "Refetch Badges"() {
-            await loadAllBadges(true);
-            Toasts.show({
-                id: Toasts.genId(),
-                message: "Successfully refetched badges!",
-                type: Toasts.Type.SUCCESS
-            });
-        }
-    },
-
-    userProfileBadges: [ContributorBadge, EquicordContributorBadge, UserPluginContributorBadge],
-
-    async start() {
-        await loadAllBadges();
-        clearInterval(intervalId);
-        intervalId = setInterval(loadAllBadges, 1000 * 60 * 30); // 30 minutes
-    },
-
-    async stop() {
-        clearInterval(intervalId);
-    },
+    userProfileBadges: [],
 
     getBadges(profile: { userId: string; guildId: string; }) {
         if (!profile) return [];
@@ -242,9 +148,6 @@ export default definePlugin({
             onContextMenu(event, badge) {
                 ContextMenuApi.openContextMenu(event, () => <BadgeContextMenu badge={badge} />);
             },
-            onClick() {
-                return VencordDonorModal();
-            },
         } satisfies ProfileBadge));
     },
 
@@ -262,9 +165,6 @@ export default definePlugin({
             },
             onContextMenu(event, badge) {
                 ContextMenuApi.openContextMenu(event, () => <BadgeContextMenu badge={badge} />);
-            },
-            onClick() {
-                return badge.tooltip === "Equicord Translator" ? EquicordTranslatorModal() : EquicordDonorModal();
             },
         } satisfies ProfileBadge));
     }

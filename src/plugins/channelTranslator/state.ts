@@ -1,3 +1,9 @@
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 IRP_HongKong
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 // plugin/state.ts
 import { updateMessage } from "@api/MessageUpdater";
 import { ChannelStore, MessageStore } from "@webpack/common";

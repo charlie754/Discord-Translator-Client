@@ -1,7 +1,14 @@
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 IRP_HongKong
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+import "./styles.css";
+
 import { popNotice, showNotice } from "@api/Notices";
 import definePlugin from "@utils/types";
 
-import "./styles.css";
 import { mountPanel, unmountPanel } from "./panel";
 import { CHANNEL_TRANSLATOR_PATCHES, patchHit } from "./patches";
 import { transformMessage, wrapContent } from "./render";

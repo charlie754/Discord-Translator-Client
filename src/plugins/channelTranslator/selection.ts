@@ -1,8 +1,14 @@
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 IRP_HongKong
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 import { protect, restore } from "./core/protect";
 import { registry } from "./core/providers/registry";
 import type { HttpTransport } from "./core/providers/types";
 import { settings } from "./settings";
-import { entryForMessage, scheduler, toggle, guildIdOf } from "./state";
+import { entryForMessage, guildIdOf,scheduler, toggle } from "./state";
 
 const POPOVER_ID = "channel-translator-popover";
 

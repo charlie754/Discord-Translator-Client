@@ -89,32 +89,11 @@ export function PluginCard({ plugin, disabled, onRestartNeeded, onMouseEnter, on
         settings.enabled = !wasEnabled;
     }
 
-    const pluginInfo = [
-        {
-            condition: isModifiedPlugin,
-            src: "https://equicord.org/assets/icons/equicord/modified.png",
-            alt: "Modified",
-            title: "Modified Vencord Plugin"
-        },
-        {
-            condition: isEquicordPlugin,
-            src: "https://equicord.org/assets/favicon.png",
-            alt: "Equicord",
-            title: "Equicord Plugin"
-        },
-        {
-            condition: isVencordPlugin,
-            src: "https://equicord.org/assets/icons/vencord/icon-light.png",
-            alt: "Vencord",
-            title: "Vencord Plugin"
-        },
-        {
-            condition: isUserPlugin,
-            src: "https://equicord.org/assets/icons/misc/userplugin.png",
-            alt: "User",
-            title: "User Plugin"
-        }
-    ];
+    // Upstream showed a badge naming which project a plugin came from,
+    // loading four images from a third-party host on every settings open.
+    // This fork ships one plugin, so the distinction is meaningless and the
+    // requests were pure IP leakage.
+    const pluginInfo: Array<{ condition: boolean; src: string; alt: string; title: string; }> = [];
 
     const pluginDetails = pluginInfo.find(p => p.condition);
 

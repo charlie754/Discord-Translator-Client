@@ -1,3 +1,9 @@
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 IRP_HongKong
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 export interface Protected {
     masked: string;
     tokens: string[];
@@ -17,14 +23,14 @@ const CLOSE = "\uE001";
  * before their inner content, or the inner pattern eats part of the outer one.
  */
 const PATTERNS: RegExp[] = [
-    /```[\s\S]*?```/g,             // fenced code
-    /\|\|[\s\S]*?\|\|/g,           // spoiler
-    /`[^`\n]+`/g,                  // inline code
-    /<a?:\w+:\d+>/g,               // custom / animated emoji
-    /<@[!&]?\d+>/g,                // user or role mention
-    /<#\d+>/g,                     // channel mention
-    /<t:\d+(?::[tTdDfFR])?>/g,     // timestamp
-    /https?:\/\/\S+/g              // url
+    /```[\s\S]*?```/g, // fenced code
+    /\|\|[\s\S]*?\|\|/g, // spoiler
+    /`[^`\n]+`/g, // inline code
+    /<a?:\w+:\d+>/g, // custom / animated emoji
+    /<@[!&]?\d+>/g, // user or role mention
+    /<#\d+>/g, // channel mention
+    /<t:\d+(?::[tTdDfFR])?>/g, // timestamp
+    /https?:\/\/\S+/g // url
 ];
 
 export function protect(text: string): Protected {
