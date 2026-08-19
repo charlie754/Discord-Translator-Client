@@ -31,13 +31,17 @@ jobs:
         run: |
           test -f dist/desktop.asar
           test -f dist/equibop.asar
+          # The desktop variant puts main-process code in patcher.js; main.js
+          # only exists in the equibop build. Check each where it actually lands.
           grep -q "ChannelTranslator" dist/desktop/renderer.js
-          grep -q "fetchTranslation" dist/desktop/main.js
+          grep -q "fetchTranslation" dist/desktop/patcher.js
+          grep -q "ChannelTranslator" dist/equibop/renderer.js
+          grep -q "fetchTranslation" dist/equibop/main.js
           ls -la dist/*.asar
 
       - name: Verify no upstream branding leaked into the build
         run: |
-          if grep -qi "EquicordData" dist/desktop/renderer.js dist/desktop/main.js; then
+          if grep -qi "EquicordData" dist/desktop/renderer.js dist/desktop/patcher.js dist/equibop/renderer.js dist/equibop/main.js; then
             echo "EquicordData found in build output — the data directory rebrand regressed"
             exit 1
           fi
