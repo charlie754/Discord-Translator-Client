@@ -1,0 +1,340 @@
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2025 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+import { definePluginSettings } from "@api/Settings";
+import { BackupRestoreIcon, CloudIcon, LogIcon, MainSettingsIcon, PaintbrushIcon, PatchHelperIcon, PluginsIcon, UpdaterIcon } from "@components/Icons";
+import {
+    BackupAndRestoreTab,
+    ChangelogTab,
+    CloudTab,
+    PatchHelperTab,
+    PluginsTab,
+    ThemesTab,
+    UpdaterTab,
+    VencordTab,
+} from "@components/settings";
+import { gitHashShort } from "@shared/vencordUserAgent";
+import { Devs } from "@utils/constants";
+import { isTruthy } from "@utils/guards";
+import definePlugin, { IconProps, OptionType } from "@utils/types";
+import { waitFor } from "@webpack";
+import { React } from "@webpack/common";
+import type { ComponentType, PropsWithChildren, ReactNode } from "react";
+
+const enum LayoutType {
+    ROOT = 0,
+    SECTION = 1,
+    SIDEBAR_ITEM = 2,
+    PANEL = 3,
+    SPLIT = 4,
+    CATEGORY = 5,
+    ACCORDION = 6,
+    LIST = 7,
+    RELATED = 8,
+    FIELD_SET = 9,
+    TAB_ITEM = 10,
+    STATIC = 11,
+    BUTTON = 12,
+    TOGGLE = 13,
+    SLIDER = 14,
+    SELECT = 15,
+    RADIO = 16,
+    NAVIGATOR = 17,
+    CUSTOM = 18
+}
+
+let LayoutTypes = {
+    SECTION: 1,
+    SIDEBAR_ITEM: 2,
+    PANEL: 3,
+    CATEGORY: 5,
+    CUSTOM: 19,
+};
+waitFor(["SECTION", "SIDEBAR_ITEM", "PANEL", "CUSTOM"], v => LayoutTypes = v);
+
+const enum SectionType {
+    HEADER = "HEADER",
+    DIVIDER = "DIVIDER",
+    CUSTOM = "CUSTOM"
+}
+
+type SettingsLocation =
+    | "top"
+    | "aboveNitro"
+    | "belowNitro"
+    | "aboveActivity"
+    | "belowActivity"
+    | "bottom";
+
+interface SettingsLayoutNode {
+    type: LayoutType;
+    key?: string;
+    legacySearchKey?: string;
+    getLegacySearchKey?(): string;
+    useLabel?(): string;
+    useTitle?(): string;
+    buildLayout?(): SettingsLayoutNode[];
+    icon?(): ReactNode;
+    render?(): ReactNode;
+    StronglyDiscouragedCustomComponent?(): ReactNode;
+}
+
+interface EntryOptions {
+    key: string;
+    title: string;
+    panelTitle?: string;
+    Component: ComponentType<{}>;
+    Icon: ComponentType<IconProps>;
+}
+
+interface SettingsLayoutBuilder {
+    key?: string;
+    buildLayout(): SettingsLayoutNode[];
+}
+
+const settings = definePluginSettings({
+    settingsLocation: {
+        type: OptionType.SELECT,
+        description: "Where to put the Equicord settings section",
+        options: [
+            { label: "At the very top", value: "top" },
+            { label: "Above Billing section", value: "aboveNitro", default: true },
+            { label: "Below Billing section", value: "belowNitro" },
+            { label: "Above Games & Apps Settings", value: "aboveActivity" },
+            { label: "Below Games & Apps Settings", value: "belowActivity" },
+            { label: "At the very bottom", value: "bottom" },
+        ] as { label: string; value: SettingsLocation; default?: boolean; }[]
+    },
+    includeVencordInfoWhenCopying: {
+        type: OptionType.BOOLEAN,
+        description: "Also copy Equicord info (Equicord, Electron, Chromium) when clicking the version info in the bottom left area of the Settings page",
+        default: true
+    }
+});
+
+export default definePlugin({
+    name: "Settings",
+    description: "Adds Settings UI and debug info",
+    authors: [Devs.Ven, Devs.Megu],
+    tags: ["Utility"],
+    required: true,
+
+    settings,
+
+    patches: [
+        {
+            find: "#{intl::COPY_VERSION}",
+            replacement: [
+                {
+                    match: /\.RELEASE_CHANNEL/,
+                    replace: "$&.replace(/^./, c => c.toUpperCase())"
+                },
+                {
+                    match: /"text-xxs\/normal".{0,300}?(?=null!=(\i)&&(.{0,20}\i\.\i.{0,200}?,children:).{0,15}?("span"),({className:\i\.\i,children:\["Build Override: ",\1\.id\]\})\)\}\))/,
+                    replace: (m, _buildOverride, makeRow, component, props) => {
+                        props = props.replace(/children:\[.+\]/, "");
+                        return `${m},$self.makeInfoElements(${component},${props}).map(e=>${makeRow}e})),`;
+                    }
+                },
+                {
+                    match: /copyValue:\i\.join\(" "\)/g,
+                    replace: "$& + $self.getInfoString()"
+                }
+            ]
+        },
+        {
+            find: ".buildLayout().map",
+            replacement: {
+                match: /(\i)\.buildLayout\(\)(?=\.map)/,
+                replace: "$self.buildLayout($1)"
+            }
+        }
+    ],
+
+    buildEntry(options: EntryOptions): SettingsLayoutNode {
+        const { key, title, panelTitle = title, Component, Icon } = options;
+
+        const panel: SettingsLayoutNode = {
+            key: key + "_panel",
+            type: LayoutTypes.PANEL,
+            useTitle: () => panelTitle,
+            buildLayout: () => [{
+                type: LayoutTypes.CATEGORY,
+                key: key + "_category",
+                buildLayout: () => [{
+                    type: LayoutTypes.CUSTOM,
+                    key: key + "_custom",
+                    Component: Component,
+                    useSearchTerms: () => [title]
+                }]
+            }]
+        };
+
+        return ({
+            key,
+            type: LayoutTypes.SIDEBAR_ITEM,
+            useTitle: () => title,
+            icon: () => <Icon width={20} height={20} />,
+            buildLayout: () => [panel]
+        });
+    },
+
+    buildLayout(originalLayoutBuilder: SettingsLayoutBuilder) {
+        const layout = originalLayoutBuilder.buildLayout();
+        if (originalLayoutBuilder.key !== "$Root") return layout;
+        if (!Array.isArray(layout)) return layout;
+        if (layout.some(s => s?.key === "equicord_section")) return layout;
+
+        const { buildEntry } = this;
+
+        const equicordEntries: SettingsLayoutNode[] = [
+            buildEntry({
+                key: "equicord_main",
+                title: "Equicord",
+                panelTitle: "Equicord Settings",
+                Component: VencordTab,
+                Icon: MainSettingsIcon
+            }),
+            buildEntry({
+                key: "equicord_plugins",
+                title: "Plugins",
+                Component: PluginsTab,
+                Icon: PluginsIcon
+            }),
+            buildEntry({
+                key: "equicord_themes",
+                title: "Themes",
+                Component: ThemesTab,
+                Icon: PaintbrushIcon
+            }),
+            !IS_UPDATER_DISABLED && UpdaterTab && buildEntry({
+                key: "equicord_updater",
+                title: "Updater",
+                panelTitle: "Equicord Updater",
+                Component: UpdaterTab,
+                Icon: UpdaterIcon
+            }),
+            buildEntry({
+                key: "equicord_changelog",
+                title: "Changelog",
+                Component: ChangelogTab,
+                Icon: LogIcon,
+            }),
+            buildEntry({
+                key: "equicord_cloud",
+                title: "Cloud",
+                panelTitle: "Equicord Cloud",
+                Component: CloudTab,
+                Icon: CloudIcon
+            }),
+            buildEntry({
+                key: "equicord_backup_restore",
+                title: "Backup & Restore",
+                Component: BackupAndRestoreTab,
+                Icon: BackupRestoreIcon
+            }),
+            !IS_STANDALONE && PatchHelperTab && buildEntry({
+                key: "equicord_patch_helper",
+                title: "Patch Helper",
+                Component: PatchHelperTab,
+                Icon: PatchHelperIcon
+            }),
+            ...this.customEntries.map(buildEntry)
+        ].filter(isTruthy);
+
+        const equicordSection: SettingsLayoutNode = {
+            key: "equicord_section",
+            type: LayoutTypes.SECTION,
+            useTitle: () => "Equicord Settings",
+            buildLayout: () => equicordEntries
+        };
+
+        const { settingsLocation } = settings.store;
+
+        const places: Record<SettingsLocation, string> = {
+            top: "user_section",
+            aboveNitro: "billing_section",
+            belowNitro: "billing_section",
+            aboveActivity: "games_and_apps_section",
+            belowActivity: "games_and_apps_section",
+            bottom: "utility_section"
+        };
+
+        const key = places[settingsLocation] ?? places.top;
+        let idx = layout.findIndex(s => typeof s?.key === "string" && s.key === key);
+
+        if (idx === -1) {
+            idx = 2;
+        } else if (settingsLocation.startsWith("below")) {
+            idx += 1;
+        }
+
+        layout.splice(idx, 0, equicordSection);
+
+        return layout;
+    },
+
+    customSections: [] as ((SectionTypes: Record<string, string>) => { section: string; element: ComponentType; label: string; id?: string; })[],
+    customEntries: [] as EntryOptions[],
+
+    get electronVersion() {
+        return VencordNative.native.getVersions().electron ?? window.legcord?.electron ?? null;
+    },
+
+    get chromiumVersion() {
+        try {
+            return (
+                VencordNative.native.getVersions().chrome ??
+                // @ts-expect-error userAgentData types
+                navigator.userAgentData?.brands?.find(
+                    (b: { brand: string; }) => b.brand === "Chromium" || b.brand === "Google Chrome",
+                )?.version ??
+                null
+            );
+        } catch {
+            return null;
+        }
+    },
+
+    getVersionInfo(support = true) {
+        let version = "";
+
+        if (IS_DEV) version = "Dev Build";
+        if (IS_WEB) version = "Web";
+        if (IS_VESKTOP) version = `Vesktop v${VesktopNative.app.getVersion()}`;
+        if (IS_EQUIBOP) version = `Equibop v${VesktopNative.app.getVersion()}`;
+        if (IS_STANDALONE) version = "Standalone";
+
+        return support && version ? ` (${version})` : version;
+    },
+
+    getInfoRows() {
+        const { electronVersion, chromiumVersion, getVersionInfo } = this;
+
+        const rows = [`Equicord ${gitHashShort}${getVersionInfo()}`];
+
+        if (electronVersion) rows.push(`Electron ${electronVersion}`);
+        if (chromiumVersion) rows.push(`Chromium ${chromiumVersion}`);
+
+        return rows;
+    },
+
+    getInfoString() {
+        if (!settings.store.includeVencordInfoWhenCopying) return "";
+        return "\n" + this.getInfoRows().join("\n");
+    },
+
+    makeInfoElements(
+        Component: ComponentType<React.PropsWithChildren>,
+        props: PropsWithChildren,
+    ) {
+        return this.getInfoRows().map((text, i) => (
+            <Component key={i} {...props}>
+                {text}
+            </Component>
+        ));
+    },
+});

@@ -1,0 +1,20 @@
+packages:
+    - packages/*
+peerDependencyRules:
+    ignoreMissing:
+        - eslint-plugin-import
+        - eslint
+allowedDeprecatedVersions:
+    source-map-resolve: "*"
+    resolve-url: "*"
+    source-map-url: "*"
+    urix: "*"
+    q: "*"
+strictPeerDependencies: false
+allowBuilds:
+    esbuild: true
+pmOnFail: warn
+verifyDepsBeforeRun: prompt
+minimumReleaseAge: 7
+minimumReleaseAgeExclude:
+    - "@song-spotlight/api"
