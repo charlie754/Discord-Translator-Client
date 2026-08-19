@@ -1,0 +1,55 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install dependencies
+        run: npx --yes pnpm@10 install --frozen-lockfile
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npx --yes pnpm@10 build
+
+      - name: Verify the translator is actually in the bundle
+        run: |
+          test -f dist/desktop.asar
+          test -f dist/equibop.asar
+          grep -q "ChannelTranslator" dist/desktop/renderer.js
+          grep -q "fetchTranslation" dist/desktop/main.js
+          ls -la dist/*.asar
+
+      - name: Verify no upstream branding leaked into the build
+        run: |
+          if grep -qi "EquicordData" dist/desktop/renderer.js dist/desktop/main.js; then
+            echo "EquicordData found in build output — the data directory rebrand regressed"
+            exit 1
+          fi
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/desktop.asar
+            dist/equibop.asar
+          generate_release_notes: true
+          body: |
+            Install with the [Discord Translator Installer](https://github.com/charlie754/Discord-Translator-Installer/releases/latest),
+            which downloads `desktop.asar` from this release and patches your Discord desktop app.
+
+            To build from source instead, see the README.
