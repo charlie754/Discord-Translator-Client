@@ -4,9 +4,11 @@
 <head>
     <meta charset="utf-8" />
     <title>Discord Translator QuickCSS Editor</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/monaco-editor@0.50.0/min/vs/editor/editor.main.css"
-        integrity="sha256-tiJPQ2O04z/pZ/AwdyIghrOMzewf+PIvEl1YKbQvsZk=" crossorigin="anonymous"
-        referrerpolicy="no-referrer" />
+    <!-- Monaco is copied into dist/<variant>/monaco/vs by scripts/build/build.mjs and
+         resolved relative to this page, so nothing here touches the network. No SRI:
+         a hash over a file inside our own asar guards nothing the asar does not
+         already guard, and crossorigin on a same-origin file request can itself fail. -->
+    <link rel="stylesheet" href="./monaco/vs/editor/editor.main.css" />
     <style>
         html,
         body,
@@ -25,14 +27,14 @@
 
 <body>
     <div id="container"></div>
-    <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.50.0/min/vs/loader.js"
-        integrity="sha256-KcU48TGr84r7unF7J5IgBo95aeVrEbrGe04S7TcFUjs=" crossorigin="anonymous"
-        referrerpolicy="no-referrer"></script>
+    <script src="./monaco/vs/loader.js"></script>
 
     <script>
         require.config({
+            // Whatever version node_modules holds; deliberately not pinned here, since
+            // the old hardcoded 0.50.0 had already drifted from the installed package.
             paths: {
-                vs: "https://cdn.jsdelivr.net/npm/monaco-editor@0.50.0/min/vs",
+                vs: "./monaco/vs",
             },
         });
 

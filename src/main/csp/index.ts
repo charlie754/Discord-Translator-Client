@@ -47,10 +47,6 @@ export const CspPolicies: PolicyMap = {
     "cdn.discordapp.com": ImageAndCssSrc, // Discord CDN, used by Vencord and some themes to load media
     "media.discordapp.net": ImageSrc, // Discord media CDN, possible alternative to Discord CDN
 
-    // CDNs used for some things by Vencord.
-    // FIXME: we really should not be using CDNs anymore
-    "cdn.jsdelivr.net": ImageScriptsAndCssSrc,
-
     // Function Specific.
     // Upstream allow-listed roughly a dozen more hosts for plugins this fork
     // does not ship (Last.fm, ListenBrainz, ReviewDB, Decor, Dearrow, USRBG,

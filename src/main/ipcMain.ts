@@ -23,7 +23,6 @@ import "./settings";
 import { debounce } from "@shared/debounce";
 import { IpcEvents } from "@shared/IpcEvents";
 import { app, BrowserWindow, dialog, ipcMain, nativeTheme, shell, systemPreferences } from "electron";
-import monacoHtml from "file://monacoWin.html?minify&base64";
 import { FSWatcher, mkdirSync, readFileSync, watch, writeFileSync } from "fs";
 import { open, readdir, readFile, unlink } from "fs/promises";
 import { release } from "os";
@@ -176,7 +175,12 @@ ipcMain.handle(IpcEvents.OPEN_MONACO_EDITOR, async () => {
 
     makeLinksOpenExternally(monacoWin);
 
-    await monacoWin.loadURL(`data:text/html;base64,${monacoHtml}`);
+    // A real file URL, not the data: URL this used to be: relative paths are how the
+    // page reaches the bundled Monaco, and they need a document URL to resolve
+    // against. __dirname points inside the asar and Electron's asar layer serves file
+    // reads from it. src/preload.ts keys off this pathname to tell the editor window
+    // apart from Discord's - change one and you must change the other.
+    await monacoWin.loadFile(join(__dirname, "monacoWin.html"));
 });
 
 app.on("before-quit", async event => {

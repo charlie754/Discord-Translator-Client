@@ -58,11 +58,31 @@ function isFirstParty(host) {
 const unparseable = new Set();
 
 /**
+ * Indicates whether an archive path points to code within a vendored third-party package.
+ *
+ * For vendored dependencies, a dotted identifier is not evidence of outbound network access —
+ * it may be a TextMate scope name ("variable.php"), a settings key ("workbench.hover.delay"),
+ * or any other internal token. Only absolute URLs are actionable evidence. The control for a
+ * vendored dependency is its pinned version in package.json, not this host list. So we scan
+ * only for absolute URLs, bypassing the bare-token heuristic that catches CSP allow-map entries
+ * in our own source.
+ */
+function isVendoredPath(archivePath) {
+    // asar entry paths carry the host platform's separator, so on Windows these arrive
+    // as "\monaco\vs\...". Testing only "monaco/" matched nothing there and the gate
+    // failed on 491 Monaco token scopes while looking like it was working.
+    const normalized = archivePath.replace(/\\/g, "/").replace(/^\.?\/+/, "");
+    return normalized.startsWith("monaco/");
+}
+
+/**
  * @param {string} text
+ * @param {string} [vendorPath] - archive path being scanned; if under a vendored package, skips bare-token matching
  * @returns {{ host: string, via: string }[]} every hostname in `text`, including ones only present base64-encoded
  */
-function extractHosts(text) {
+function extractHosts(text, vendorPath) {
     const hosts = [];
+    const skipBareTokens = vendorPath && isVendoredPath(vendorPath);
 
     const scan = (s, encoding) => {
         for (const raw of s.match(URL_RE) ?? []) {
@@ -81,8 +101,12 @@ function extractHosts(text) {
             hosts.push({ host, via: `url${encoding}` });
         }
 
-        for (const [, host] of s.matchAll(BARE_HOST_RE)) {
-            hosts.push({ host, via: `bare${encoding}` });
+        // For vendored dependencies, bare dotted tokens (TextMate scopes, settings keys, etc.)
+        // carry no signal about network access. Only absolute URLs are checked.
+        if (!skipBareTokens) {
+            for (const [, host] of s.matchAll(BARE_HOST_RE)) {
+                hosts.push({ host, via: `bare${encoding}` });
+            }
         }
     };
 
@@ -165,7 +189,7 @@ for (const archive of ARCHIVES) {
             process.exit(1);
         }
 
-        for (const { host, via } of extractHosts(text)) {
+        for (const { host, via } of extractHosts(text, name)) {
             if (isFirstParty(host)) continue;
 
             const seen = found.get(host);

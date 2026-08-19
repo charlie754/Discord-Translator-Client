@@ -20,7 +20,7 @@
 // @ts-check
 
 import { createPackage } from "@electron/asar";
-import { readdir, rm, writeFile } from "fs/promises";
+import { copyFile, cp, readdir, rm, writeFile } from "fs/promises";
 import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
 
@@ -240,6 +240,47 @@ if (!watch) {
 }
 
 await buildOrWatchAll(buildConfigs);
+
+const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "../..");
+const MONACO_VS = join(REPO_ROOT, "node_modules/monaco-editor/min/vs");
+const MONACO_WIN_HTML = join(REPO_ROOT, "src/main/monacoWin.html");
+
+// The QuickCSS editor used to pull Monaco from a CDN, which meant unpinned remote
+// code in an Electron window and the user's IP disclosed on every open. Monaco now
+// ships inside the asar, so the whole AMD module tree has to be on disk next to the
+// editor page.
+//
+// min/vs is ~16 MB whole. These entries are dead weight for a window that only ever
+// opens one CSS document, and they are the bulk of the size. Everything not matched
+// here is copied: the AMD loader resolves modules lazily, so a chunk missing from
+// the copy is not a build error, it is a blank editor the next user to open it finds.
+// Filenames under min/vs are content-hashed and change on every Monaco upgrade, so
+// these match by shape rather than by literal hash.
+const MONACO_SKIP = [
+    // Language workers for languages this editor cannot open: TypeScript (6.7 MB),
+    // HTML (677 KB), JSON (374 KB). css.worker and editor.worker are kept.
+    /[\\/]assets[\\/](?:ts|html|json)\.worker-[^\\/]+\.js$/,
+    // Editor-chrome translations, ~1.5 MB across 14 languages. The English bundle is
+    // the one with no language tag - nls.messages.js.js - and is excluded from this.
+    /[\\/]nls\.messages\.(?!js\.js$)[^\\/]+\.js\.js$/
+];
+
+/** @param {string} variant */
+async function emitEditorAssets(variant) {
+    await cp(MONACO_VS, join("dist", variant, "monaco/vs"), {
+        recursive: true,
+        filter: src => !MONACO_SKIP.some(re => re.test(src))
+    });
+    // Emitted as a real file rather than inlined as a data: URL, because relative
+    // sub-resource paths - which is how the page now finds ./monaco/vs - only
+    // resolve against a real document URL.
+    await copyFile(MONACO_WIN_HTML, join("dist", variant, "monacoWin.html"));
+}
+
+await Promise.all([
+    emitEditorAssets("desktop"),
+    emitEditorAssets("equibop")
+]);
 
 await Promise.all([
     writeFile("dist/desktop/package.json", JSON.stringify({

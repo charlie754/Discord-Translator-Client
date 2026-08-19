@@ -24,8 +24,15 @@ import VencordNative, { invoke, sendSync } from "./VencordNative";
 
 contextBridge.exposeInMainWorld("VencordNative", VencordNative);
 
+// The QuickCSS editor window is now loaded from a real file so that its relative
+// paths to the bundled Monaco resolve (src/main/ipcMain.ts). Test for it positively:
+// the old "not data:" check silently classified the editor as Discord the moment it
+// stopped being a data: URL, which loses setCss/getCurrentCss/getTheme and leaves a
+// blank window. The data: arm stays for anything still opened that way.
+const isQuickCssEditor = location.protocol === "data:" || location.pathname.endsWith("/monacoWin.html");
+
 // Discord
-if (location.protocol !== "data:") {
+if (!isQuickCssEditor) {
     invoke(IpcEvents.INIT_FILE_WATCHERS);
 
     if (IS_DISCORD_DESKTOP) {

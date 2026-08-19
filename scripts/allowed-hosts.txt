@@ -9,16 +9,23 @@
 # reads a stale list as the current attack surface.
 #
 # Derived by running `node scripts/checkHosts.mjs` against the build at
-# dist/desktop.asar sha256 fcd8510aed7890c00196a5c2b1c1fae5895e715eafa277c4d48c437f06564f43
-# and dist/equibop.asar sha256 6b700e7b9b85fa21a7d7fb57b8985bde0c323b8a1651dc2f4645efc15b905210
+# dist/desktop.asar sha256 4c63403876db40c59948e884efd1d4623e9ae913cd7284c75ac1a0429c512628
+# and dist/equibop.asar sha256 e8179cca62956e7e303928599bf197a01d58d4b95197c5a588c77bd34708b50a
 # — that is, from what actually ships, not from what src/main/csp/index.ts says.
+#
+# KNOWN GAP as of that build: the archives now carry a vendored Monaco tree
+# (monaco/vs/**), and checkHosts.mjs's bare-hostname pass reads Monaco's dotted
+# identifiers — TextMate scope names like `variable.php`, settings keys like
+# `workbench.hover.delay` — as hostnames. That is ~491 entries the checker cannot
+# tell apart from real hosts, and it is a scoping defect in checkHosts.mjs, not a
+# reason to list them here. Its URL pass is unaffected and still authoritative;
+# the four real hosts it found in that tree are listed below.
 #
 # The section headings below are context for reviewers. The checker does not
 # read them: every uncommented line is simply an allowed entry.
 
 # --- Fetched at runtime, or permitted to be, by the CSP allow-map ---
 api.github.com
-cdn.jsdelivr.net
 clients2.google.com
 files.catbox.moe
 fonts.googleapis.com
@@ -40,6 +47,18 @@ discord.gg
 github.com
 gitlab.com
 ko-fi.com
+
+# --- Reference links inside the vendored Monaco editor. These are documentation
+# URLs in hover text and setting descriptions (MDN for every CSS property, Sass
+# docs for @use/@forward, VS Code docs for editor settings). Nothing fetches them;
+# they render as links in the QuickCSS editor's hover widget and open externally
+# only when the user clicks one. They arrived with the local Monaco bundle that
+# replaced the cdn.jsdelivr.net fetch — a net reduction: these are click targets,
+# that was unpinned script execution. ---
+code.visualstudio.com
+developer.mozilla.org
+microsoft.com
+sass-lang.com
 
 # --- Licence and specification URLs in headers, LEGAL.txt and SVG xmlns ---
 mozilla.org
