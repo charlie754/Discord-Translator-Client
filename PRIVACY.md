@@ -12,16 +12,41 @@ The translation cache is stored locally in the app's settings directory. Nothing
 
 ## Every Server This App Contacts
 
-Two, and only two:
-
 | Host | When | What it receives |
 |---|---|---|
-| `translate-pa.googleapis.com` | you enable translation, or double/triple-click text | the message text being translated, and the language pair |
+| `translate.googleapis.com` | you enable translation, or double/triple-click text | the message text being translated, and the language pair |
 | `api.github.com` | on update checks | a request for this project's latest release; no account, no identifiers |
+| `cdn.jsdelivr.net` | you open the QuickCSS editor | your IP — the editor's own code is fetched from this CDN when the window opens |
+| `clients2.google.com` | only if you turn on **Enable React DevTools** | your IP, to download that extension |
 
-The app's Content Security Policy allow-list contains exactly these two hosts
-plus Discord's own CDNs and the public code-hosting sites used for loading
-user-supplied themes. Any other outbound request is blocked by the app itself.
+**Message text goes to exactly one of these — the first.** Nothing else on the list ever
+receives message content. Nothing here is contacted at startup, and nothing is contacted
+on a schedule.
+
+## What Enforces That
+
+Less than you might assume, so it is worth stating precisely.
+
+The translation transport runs in the Electron **main process**, where the renderer's
+Content Security Policy does not apply. It is guarded instead by an explicit hostname
+allow-list checked before the request leaves
+(`src/plugins/channelTranslator/native.ts`): non-HTTPS URLs, and any host other than the
+translation endpoint, are refused. **That check — not the CSP — is what constrains where
+your message text can go.**
+
+The CSP allow-list is a separate thing, and it covers only requests **originating in the
+renderer**. It holds 23 entries. Beyond the hosts above, most exist so that **themes you
+choose to install** can load images and fonts: GitHub Pages, GitLab Pages, Codeberg
+Pages, `raw.githubusercontent.com`, jsDelivr, githack, Imgur, ImgBB, Pinterest, Catbox
+and Google Fonts. **None of those is contacted unless a theme you installed references
+it.** The full list is `CspPolicies` in `src/main/csp/index.ts`.
+
+`scripts/checkHosts.mjs` enumerates every host present in the packed release archives and
+fails CI on anything not declared in `scripts/allowed-hosts.txt`, so this document cannot
+quietly drift away from what ships.
+
+Some settings screens link out to third-party sites — BetterDiscord's theme directory,
+for instance. Those are ordinary links: nothing is requested until you click one.
 
 Upstream Equicord additionally fetched donor badges from `badges.vencord.dev`
 and `badge.equicord.org` on every start, keyed by your Discord user ID, and

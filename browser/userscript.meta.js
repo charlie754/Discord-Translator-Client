@@ -1,11 +1,11 @@
 // ==UserScript==
-// @name            Equicord
+// @name            Discord Translator
 // @description     A Discord client mod - Web version
 // @version         %version%
-// @author          Equicord (https://github.com/Equicord)
-// @namespace       https://github.com/Equicord/Equicord
-// @supportURL      https://github.com/Equicord/Equicord
-// @icon            https://raw.githubusercontent.com/Equicord/Equicord/refs/heads/main/browser/icon.png
+// @author          IRP_HongKong (https://github.com/charlie754)
+// @namespace       https://github.com/charlie754/Discord-Translator-Client
+// @supportURL      https://github.com/charlie754/Discord-Translator-Client
+// @icon            https://raw.githubusercontent.com/charlie754/Discord-Translator-Client/refs/heads/main/browser/icon.png
 // @license         GPL-3.0
 // @match           *://*.discord.com/*
 // @grant           GM_xmlhttpRequest
@@ -23,4 +23,4 @@
 // to overwrite stuff on the window on sites that use CSP. Use Tampermonkey or use a chromium based browser
 // https://github.com/violentmonkey/violentmonkey/issues/997
 
-// this is a compiled and minified version of Equicord. For the source code, visit the GitHub repo
+// this is a compiled and minified version of Discord Translator. For the source code, visit the GitHub repo

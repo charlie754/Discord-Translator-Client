@@ -1,10 +1,10 @@
 {
     "manifest_version": 3,
     "minimum_chrome_version": "111",
-    "name": "Equicord Web",
+    "name": "Discord Translator Web",
     "description": "The other cutest Discord mod now in your browser",
-    "author": "Equicord",
-    "homepage_url": "https://github.com/Equicord/Equicord",
+    "author": "IRP_HongKong",
+    "homepage_url": "https://github.com/charlie754/Discord-Translator-Client",
     "icons": {
         "128": "icon.png"
     },
@@ -33,7 +33,7 @@
                 "*://*.discord.com/*"
             ],
             "js": [
-                "dist/Equicord.js"
+                "dist/DiscordTranslator.js"
             ],
             "all_frames": true,
             "world": "MAIN"
