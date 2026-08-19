@@ -22,10 +22,12 @@ import { join } from "path";
 
 const suffix = IS_DEV ? "dev" : "";
 
-export const DATA_DIR = process.env.EQUICORD_USER_DATA_DIR ?? (
+// CRITICAL: Changing this folder name prevents data corruption with other Discord mods
+// If this stays "EquicordData", settings.json will be shared with any installed Equicord
+export const DATA_DIR = process.env.DISCORD_TRANSLATOR_USER_DATA_DIR ?? (
     process.env.DISCORD_USER_DATA_DIR
-        ? join(process.env.DISCORD_USER_DATA_DIR, "..", "EquicordData", suffix)
-        : join(app.getPath("userData"), "..", "Equicord", suffix)
+        ? join(process.env.DISCORD_USER_DATA_DIR, "..", "DiscordTranslatorData", suffix)
+        : join(app.getPath("userData"), "..", "DiscordTranslator", suffix)
 );
 
 export const SETTINGS_DIR = join(DATA_DIR, "settings");
@@ -68,7 +70,7 @@ if (IS_DEV) {
                 app.relaunch();
                 app.exit(0);
             } catch (err) {
-                console.error("[Equicord] Failed to copy prod data:", err);
+                console.error("[Discord Translator] Failed to copy prod data:", err);
             }
         }, 5000);
     }

@@ -133,7 +133,11 @@ try {
         stdio: "inherit",
         env: {
             ...process.env,
-            EQUICORD_USER_DATA_DIR: BASE_DIR,
+            // Only DISCORD_TRANSLATOR_USER_DATA_DIR is read by our TypeScript (constants.ts).
+            // EQUICORD_DIRECTORY and EQUICORD_DEV_INSTALL are consumed by Equilotl, the external Go installer binary.
+            // Renaming them breaks the handshake with that external tool and must be coordinated in a later phase
+            // when Equilotl itself is forked. Do not "tidy" these — they change on both sides or not at all.
+            DISCORD_TRANSLATOR_USER_DATA_DIR: BASE_DIR,
             EQUICORD_DIRECTORY: join(BASE_DIR, "dist/desktop"),
             EQUICORD_DEV_INSTALL: "1"
         }
