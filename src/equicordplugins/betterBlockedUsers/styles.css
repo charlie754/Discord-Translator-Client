@@ -1,8 +1,0 @@
-[class*="usersList"] [class*="text"] {
-    user-select: text !important;
-}
-
-.vc-bbu-search,
-.vc-bbu-search * {
-    border-radius: 0 !important;
-}

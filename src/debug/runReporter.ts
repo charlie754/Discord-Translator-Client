@@ -5,7 +5,6 @@
  */
 
 import { addPatch } from "@api/PluginManager";
-import { initWs } from "@plugins/devCompanion.dev/initWs";
 import { Logger } from "@utils/Logger";
 import * as Webpack from "@webpack";
 import { getBuildNumber, patches, patchTimings } from "@webpack/patcher";
@@ -121,9 +120,6 @@ async function runReporter() {
             }
         }
 
-        // if we are running the reporter with companion integration, send the list to vscode as soon as we can
-        if (IS_COMPANION_TEST)
-            initWs();
         ReporterLogger.log("Finished test");
     } catch (e) {
         ReporterLogger.log("A fatal error occurred:", e);

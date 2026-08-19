@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { isPluginEnabled } from "@api/PluginManager";
-import declutter from "@equicordplugins/declutter";
 import { Devs } from "@utils/constants";
 import definePlugin from "@utils/types";
 import { findCssClassesLazy } from "@webpack";
@@ -36,17 +34,9 @@ export default definePlugin({
 
     renderButtons(props: { nameplate?: any; }) {
         return Vencord.Api.UserArea._renderButtons({
-            nameplate: !this.shouldHideNameplate() ? props.nameplate : null,
+            nameplate: props.nameplate,
             iconForeground: accountClasses.iconForeground,
-            hideTooltips: this.shouldHideTooltips()
+            hideTooltips: false
         });
-    },
-
-    shouldHideTooltips() {
-        return isPluginEnabled(declutter.name) && declutter.settings.store.removeButtonTooltips;
-    },
-
-    shouldHideNameplate() {
-        return isPluginEnabled(declutter.name) && declutter.settings.store.removeNameplate;
     }
 });

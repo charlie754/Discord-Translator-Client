@@ -4,11 +4,12 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { IconsDef } from "@equicordplugins/iconViewer/types";
 import { Devs } from "@utils/constants";
 import definePlugin from "@utils/types";
 
-export let iconsModule: IconsDef;
+// IconsDef was previously imported from the removed iconViewer plugin
+// Using unknown since the actual structure from concatenated modules doesn't need strict typing here
+export let iconsModule: unknown;
 
 export default definePlugin({
     name: "ConcatenatedModules",
@@ -23,7 +24,7 @@ export default definePlugin({
             }
         }
     ],
-    setIconsModule(value: IconsDef) {
+    setIconsModule(value: unknown) {
         iconsModule = value;
 
         // incase you dont want to use iconviewer you can do
