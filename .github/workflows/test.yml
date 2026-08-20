@@ -22,6 +22,12 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
 
+      # Unit tests for the translator core. Uses vitest.config.ts, which excludes
+      # test/live/** — those hit the real translate endpoint over the network and
+      # are opt-in only via `pnpm test:live`. CI must never reach them.
+      - name: Unit tests
+        run: npx --yes pnpm@10 test:unit
+
       - name: Build
         run: npx --yes pnpm@10 build
 

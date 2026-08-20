@@ -36,9 +36,25 @@ pnpm repair
 
 Discord must be fully closed when injecting or repairing.
 
+## Translation providers
+
+**The default is Google’s `translate.googleapis.com/translate_a/single?client=gtx` endpoint.** It is the default so the app works the moment you install it — nothing to sign up for, no key to paste.
+
+Be clear about what that endpoint is: **it is unofficial.** Google publishes no terms, no quota and no guarantee for it, and it *will* rate-limit you if you translate heavily. When it does, the panel reads **Rate limited** and translation pauses until it recovers.
+
+**DeepL is the way out of that**, using an API key of your own:
+
+1. Get a key from [DeepL’s API page](https://www.deepl.com/pro-api). The free tier is enough for ordinary use; free keys end in `:fx`.
+2. Open **Settings → Plugins → ChannelTranslator**.
+3. Paste the key into **deeplApiKey**, then set **Provider** to **DeepL (your own key)**.
+
+The key is yours: this project ships none and shares none. It is stored locally alongside your other plugin settings and is sent only to DeepL. Free keys are routed to `api-free.deepl.com` and paid keys to `api.deepl.com` — the app picks the host from the `:fx` suffix, so there is nothing else to configure.
+
+Select DeepL without entering a key and the app says so and translates nothing. It will not fail silently.
+
 ## Privacy
 
-Message text is sent to a third-party translation service for processing. This includes other people’s messages. See [PRIVACY.md](./PRIVACY.md) for details.
+Message text is sent to a third-party translation service for processing. This includes other people’s messages. See [PRIVACY.md](./PRIVACY.md) for details, including every host contacted and what each one receives.
 
 DMs and group DMs are excluded from translation by default.
 

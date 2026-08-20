@@ -2,7 +2,9 @@
 
 ## Data Transmission
 
-When you enable channel translation, the text of messages is sent to a configured translation service (currently Google's public translate endpoint) via the app's Electron main process for processing. This transmission is necessary for translation to occur.
+When you enable channel translation, the text of messages is sent to the translation service you have selected, via the app's Electron main process. This transmission is necessary for translation to occur.
+
+The default is Google's public translate endpoint, and with the shipped settings it is the only one used. **DeepL is contacted only if you change the provider setting to DeepL and supply an API key of your own** — this app ships no DeepL key, shares none, and refuses to select the provider until you have entered one. Your key is stored locally with the rest of your plugin settings and is sent to DeepL and nowhere else.
 
 **This includes messages from other users who did not consent to translation.** You are responsible for ensuring that translating messages in a server complies with that server's policies and applicable laws.
 
@@ -14,12 +16,16 @@ The translation cache is stored locally in the app's settings directory. Nothing
 
 | Host | When | What it receives |
 |---|---|---|
-| `translate.googleapis.com` | you enable translation, or double/triple-click text | the message text being translated, and the language pair |
+| `translate.googleapis.com` | the default provider: you enable translation, or double/triple-click text | the message text being translated, and the language pair |
+| `api-free.deepl.com` | **only if** you set the provider to DeepL and configure a free DeepL key (free keys end in `:fx`) | the message text being translated, the language pair, and your own DeepL API key |
+| `api.deepl.com` | **only if** you set the provider to DeepL and configure a paid DeepL key | the message text being translated, the language pair, and your own DeepL API key |
 | `api.github.com` | at startup, and on any later update check | a request for this project's latest release; no account, no identifiers |
 | `clients2.google.com` | only if you turn on **Enable React DevTools** | your IP, to download that extension |
 
-**Message text goes to exactly one of these — the first.** Nothing else on the list ever
-receives message content.
+**Message text goes to exactly one of these, and with the shipped settings that one is the
+first.** The two DeepL rows are the only alternative, they are mutually exclusive with each
+other and with Google, and reaching either requires you to change the provider setting *and*
+enter your own key. Nothing else on the list ever receives message content.
 
 **One request is made at startup**, and it is the update check: `src/Vencord.ts` calls
 `checkForUpdates()`, which asks `api.github.com` for this project's latest release. It is
@@ -41,12 +47,16 @@ The translation transport runs in the Electron **main process**, where the rende
 Content Security Policy does not apply. It is guarded instead by an explicit hostname
 allow-list checked before the request leaves
 (`src/plugins/channelTranslator/native.ts`): non-HTTPS URLs, and any host other than the
-translation endpoint, are refused. **That check — not the CSP — is what constrains where
-your message text can go.**
+three translation endpoints in the table above, are refused. The match is on the full
+hostname with `===`, not a suffix or a wildcard, so `evil-deepl.com` is refused exactly as
+`localhost` is. **That check — not the CSP — is what constrains where your message text can
+go.** Adding DeepL added two entries to that set and nothing to the CSP, because the
+translation transport never runs in the renderer.
 
 The CSP allow-list is a separate thing, and it covers only requests **originating in the
-renderer**. It holds 22 entries. Two are the hosts above (`api.github.com`,
-`translate.googleapis.com`); four are loopback addresses for local development; two are
+renderer**. It holds 22 entries, unchanged by the DeepL provider. Two of them are in the table above
+(`api.github.com`, `translate.googleapis.com`); four are loopback addresses for local
+development; two are
 Discord's own CDNs. The remaining fourteen exist so that **themes you choose to install**
 can load images and fonts: GitHub Pages and `github.com`, `raw.githubusercontent.com`,
 GitLab Pages and `gitlab.com`, Codeberg Pages and `codeberg.org`, githack, jsDelivr,

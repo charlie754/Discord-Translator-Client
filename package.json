@@ -39,7 +39,10 @@
         "lint:patches": "node scripts/lintPatches.mjs",
         "test": "pnpm buildStandalone && pnpm testTsc && pnpm lint:fix && pnpm lint-styles && pnpm lint:intl && pnpm lint:patches && pnpm generatePluginJson",
         "testWeb": "pnpm lint:fix && pnpm buildWeb && pnpm testTsc",
-        "testTsc": "tsc --noEmit"
+        "testTsc": "tsc --noEmit",
+        "test:unit": "vitest run",
+        "test:unit:watch": "vitest",
+        "test:live": "vitest run --config vitest.live.config.ts"
     },
     "dependencies": {
         "@ffmpeg/ffmpeg": "^0.12.10",
@@ -95,6 +98,7 @@
         "typescript": "^6.0.3",
         "typescript-eslint": "^8.62.1",
         "typescript-transform-paths": "^3.5.6",
+        "vitest": "^3.2.0",
         "zip-local": "^0.3.5"
     },
     "packageManager": "pnpm@11.21.0",

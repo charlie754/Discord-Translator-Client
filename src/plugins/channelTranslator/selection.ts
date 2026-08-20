@@ -5,8 +5,8 @@
  */
 
 import { protect, restore } from "./core/protect";
-import { registry } from "./core/providers/registry";
 import type { HttpTransport } from "./core/providers/types";
+import { currentProvider } from "./provider";
 import { settings } from "./settings";
 import { entryForMessage, guildIdOf,scheduler, toggle } from "./state";
 
@@ -65,8 +65,14 @@ async function translateSelection(event: MouseEvent): Promise<void> {
 
     showPopover(event.clientX, event.clientY, "…");
 
-    const provider = registry.get(settings.store.provider)?.(http);
-    if (!provider) return;
+    // The popover is already open showing "…", so an unusable provider has to
+    // replace it with the reason rather than leaving that ellipsis on screen.
+    const resolved = currentProvider(http);
+    if (!resolved.ok) {
+        showPopover(event.clientX, event.clientY, resolved.reason);
+        return;
+    }
+    const { provider } = resolved;
 
     try {
         // Always sl=auto. Asserting the source is an assumption we cannot

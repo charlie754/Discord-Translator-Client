@@ -13,13 +13,24 @@ export interface HttpResponse {
 }
 
 /**
- * Exact hostnames this transport may reach — currently only the gtx endpoint in
- * core/providers/google.ts. Main-process fetch is not subject to renderer CSP, and
- * this handler is reachable from Discord's own world via VencordNative, so without
- * this list any page script would hold an unrestricted GET proxy onto localhost and
- * the LAN. Adding a provider means adding its host here.
+ * Exact hostnames this transport may reach. Main-process fetch is not subject to
+ * renderer CSP, and this handler is reachable from Discord's own world via
+ * VencordNative, so without this list any page script would hold an unrestricted
+ * GET proxy onto localhost and the LAN. Adding a provider means adding its host here.
+ *
+ * Every entry is a full hostname and is matched with ===. Do not relax this into a
+ * suffix or wildcard test to save two lines: `endsWith("deepl.com")` also admits
+ * evil-deepl.com, and a subdomain wildcard trusts whatever DNS the vendor ever
+ * delegates. DeepL needs two entries because it splits its API by plan —
+ * see endpointForKey() in core/providers/deepl.ts.
  */
-const ALLOWED_HOSTS: ReadonlySet<string> = new Set(["translate.googleapis.com"]);
+const ALLOWED_HOSTS: ReadonlySet<string> = new Set([
+    // core/providers/google.ts — the default, keyless gtx endpoint
+    "translate.googleapis.com",
+    // core/providers/deepl.ts — contacted only if the user configures a DeepL key
+    "api-free.deepl.com",
+    "api.deepl.com"
+]);
 
 /**
  * Main-process transport for translation requests. Never throws — a thrown error

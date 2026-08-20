@@ -45,6 +45,17 @@ jsdelivr.net
 raw.githubusercontent.com
 translate.googleapis.com
 codeberg.page
+# The two DeepL API hosts, reached only by
+# src/plugins/channelTranslator/core/providers/deepl.ts. Neither is contacted with the
+# shipped defaults: the provider setting is "google", and the registry refuses to construct
+# DeepL at all until the user pastes a key of their own (resolveProvider() in
+# core/providers/registry.ts). They exist so that a gtx rate limit is inconvenient rather
+# than terminal. DeepL splits its API by plan and a key is valid on one host only — free
+# keys end in ":fx" and route to api-free, everything else to api — so both are needed.
+# Both also appear in the ALLOWED_HOSTS set in native.ts; a host declared in one place and
+# not the other is either a dead provider or an undeclared third party.
+api-free.deepl.com
+api.deepl.com
 
 # --- Link targets shown to the user; navigated only on an explicit click ---
 betterdiscord.app

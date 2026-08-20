@@ -13,9 +13,9 @@ import { aggregate, shouldTranslate, splitJoined } from "./core/detect";
 import { hashContent } from "./core/hash";
 import { ToggleState } from "./core/modes";
 import { protect, restore } from "./core/protect";
-import { registry } from "./core/providers/registry";
 import type { HttpTransport } from "./core/providers/types";
 import { Scheduler } from "./core/scheduler";
+import { currentProvider, warnProviderUnavailable } from "./provider";
 import { settings } from "./settings";
 
 type TranslationNative = {
@@ -119,8 +119,15 @@ export function requestTranslation(message: any): void {
     };
     if (!shouldTranslate(raw, target)) return;
 
-    const provider = registry.get(settings.store.provider)?.(http);
-    if (!provider) return;
+    // A provider that cannot run says why. Returning quietly here is what would
+    // turn "DeepL selected, key not pasted" into a channel that simply never
+    // translates and never explains itself.
+    const resolved = currentProvider(http);
+    if (!resolved.ok) {
+        warnProviderUnavailable(resolved.reason);
+        return;
+    }
+    const { provider } = resolved;
 
     inFlight.add(flightKey);
     pending++;
