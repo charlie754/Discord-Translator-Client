@@ -8,18 +8,24 @@
 # Removing code that reaches a host? Remove its line too, or the next audit
 # reads a stale list as the current attack surface.
 #
-# Derived by running `node scripts/checkHosts.mjs` against the build at
-# dist/desktop.asar sha256 4c63403876db40c59948e884efd1d4623e9ae913cd7284c75ac1a0429c512628
-# and dist/equibop.asar sha256 e8179cca62956e7e303928599bf197a01d58d4b95197c5a588c77bd34708b50a
+# Derived by running `node scripts/checkHosts.mjs` against the STANDALONE build
+# (`pnpm build --standalone`, which is what release.yml now publishes) at
+# dist/desktop.asar sha256 f840f6912c4a910ad5f28651c0a8a9ae98e254bebd9d62b59bc3d2f2d4e42932
+# and dist/equibop.asar sha256 1076a606f047fcbf1217a158e7b635e69bf6c961479eec51a26ac50cd4f411e2
 # — that is, from what actually ships, not from what src/main/csp/index.ts says.
+# That run reported: OK: 55 entries, all listed in scripts/allowed-hosts.txt.
 #
-# KNOWN GAP as of that build: the archives now carry a vendored Monaco tree
-# (monaco/vs/**), and checkHosts.mjs's bare-hostname pass reads Monaco's dotted
+# Build the same way before regenerating this list. A non-standalone build ships
+# the git updater instead of the http one, so it enumerates a different set: it
+# omits the two .asar filenames below and it is not the artifact users install.
+#
+# The archives carry a vendored Monaco tree (monaco/vs/**), whose dotted
 # identifiers — TextMate scope names like `variable.php`, settings keys like
-# `workbench.hover.delay` — as hostnames. That is ~491 entries the checker cannot
-# tell apart from real hosts, and it is a scoping defect in checkHosts.mjs, not a
-# reason to list them here. Its URL pass is unaffected and still authoritative;
-# the four real hosts it found in that tree are listed below.
+# `workbench.hover.delay` — are shaped like hostnames. checkHosts.mjs suppresses
+# its bare-hostname pass under vendored paths for exactly that reason (see
+# isVendoredPath), which is why ~491 such tokens do not appear below. Its URL
+# pass still runs over that tree and is authoritative; the four real hosts it
+# finds there are listed under the Monaco heading below.
 #
 # The section headings below are context for reviewers. The checker does not
 # read them: every uncommented line is simply an allowed entry.
@@ -78,6 +84,12 @@ example.com
 # enough to hide a real host on a colliding TLD — blahaj.zip below is a
 # contributor handle, but .zip is a real TLD and a checker cannot tell. ---
 app.asar
+# The two below are ASAR_FILE in src/main/updater/common.ts — the name of the
+# archive the http updater writes over on disk, not somewhere it connects to.
+# They appear only in a --standalone build, because a non-standalone build ships
+# the git updater instead and never references either name.
+desktop.asar
+equibop.asar
 index.js
 main.js
 main.js.map

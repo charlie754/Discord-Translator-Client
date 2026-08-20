@@ -1,7 +1,7 @@
 {
     "name": "discord-translator",
     "private": "true",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "description": "A Discord client mod for translating messages in real-time across channels",
     "homepage": "https://github.com/Equicord/Equicord#readme",
     "bugs": {

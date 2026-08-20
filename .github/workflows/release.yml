@@ -18,14 +18,47 @@ jobs:
         with:
           node-version: "24"
 
+      # VERSION is baked into the bundle at build time from package.json, and the
+      # About window renders it as both the version text and a link to
+      # releases/tag/v{{VERSION}}. If package.json and the tag ever disagree, the
+      # published asar tells users it is a version it is not, and links them at a
+      # different release's notes — which cannot be corrected without a new tag.
+      # Fail here instead, before anything is built or published.
+      - name: Tag matches package.json version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          pkg="$(node -p "require('./package.json').version")"
+          tag="${GITHUB_REF_NAME#v}"
+          if [ "$pkg" != "$tag" ]; then
+            echo "package.json version $pkg does not match tag $GITHUB_REF_NAME"
+            exit 1
+          fi
+
       - name: Install dependencies
         run: npx --yes pnpm@10 install --frozen-lockfile
 
       - name: Typecheck
         run: npx tsc --noEmit
 
+      # --standalone is not optional for a published build. Without it,
+      # scripts/build/build.mjs replaces every `process.platform` with the
+      # runner's own platform ("linux") and esbuild then deletes the branches
+      # that can no longer be reached — so the asar shipped to Windows and macOS
+      # users has its platform-specific code stripped out. It also selects the
+      # git updater over the http one (src/main/updater/index.ts), which would
+      # run `git` inside the user's Discord install directory.
       - name: Build
-        run: npx --yes pnpm@10 build
+        run: npx --yes pnpm@10 build --standalone
+
+      # Reads the build banner in the artifact, not the source that produced it.
+      - name: Verify the build is platform-universal
+        run: |
+          head -c 200 dist/desktop/patcher.js
+          echo
+          head -c 200 dist/desktop/patcher.js | grep -q "Standalone: true"
+          head -c 200 dist/desktop/patcher.js | grep -q "Platform: Universal"
+          head -c 200 dist/equibop/main.js | grep -q "Standalone: true"
+          head -c 200 dist/equibop/main.js | grep -q "Platform: Universal"
 
       - name: Verify the translator is actually in the bundle
         run: |
@@ -46,8 +79,34 @@ jobs:
             exit 1
           fi
 
+      # Both the Go installer and the in-app http updater decide "am I out of
+      # date?" by taking the text after the last space of the release NAME and
+      # comparing it to the commit hash in the shipped bundle's banner. Assert
+      # here that the hash baked into the artifact is the one this job is about
+      # to put in the release name, so the two can never silently diverge.
+      - name: Verify the built hash matches the release name
+        run: |
+          built="$(grep -a -o -m1 '// Discord Translator [0-9a-f]\{40\}' dist/desktop/patcher.js | awk '{print $4}')"
+          echo "banner hash: $built"
+          echo "github.sha:  ${{ github.sha }}"
+          test "$built" = "${{ github.sha }}"
+
+      # Enumerates every host in the packed archives against scripts/allowed-hosts.txt.
+      # Must run after the build: it reads dist/*.asar, never the sources. This is
+      # the same gate test.yml runs, but test.yml is filtered to branches and never
+      # fires on a tag ref — so without this step nothing checks the artifact that
+      # actually reaches users.
+      - name: Check third-party hosts
+        run: node scripts/checkHosts.mjs
+
       - uses: softprops/action-gh-release@v2
         with:
+          # The release name must END with the commit hash stamped into the
+          # bundle banner: github_downloader.go and src/main/updater/http.ts both
+          # parse it as the substring after the last space. Naming the release
+          # after the tag instead makes every install look permanently outdated
+          # and re-download the asar on every run.
+          name: Discord Translator ${{ github.sha }}
           files: |
             dist/desktop.asar
             dist/equibop.asar

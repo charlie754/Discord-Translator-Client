@@ -52,6 +52,27 @@ if (IS_REPORTER) {
     require("./debug/runReporter");
 }
 
+/**
+ * Neutralise cloud settings sync left over from an older install.
+ *
+ * v0.1.0 shipped upstream's Cloud Settings tab, whose `cloud.url` defaulted to a
+ * third-party host, so a user could authenticate and enable sync. This release deleted
+ * that tab. Hiding the switch is not turning it off: the flags are persisted settings, so
+ * an upgraded install would keep pushing settings to a server the user can no longer see,
+ * disable, or point elsewhere.
+ *
+ * Clearing both flags here makes it unreachable rather than merely invisible —
+ * `syncSettings()` gates every push and pull on `cloud.authenticated`, and the debounced
+ * push listener it installs gates on `cloud.settingsSync` as well.
+ *
+ * Called before init() so it lands before syncSettings() can read either flag. Guarded on
+ * the current value so a fresh install (both already false) writes nothing.
+ */
+function disableCloudSync() {
+    if (Settings.cloud.authenticated) Settings.cloud.authenticated = false;
+    if (Settings.cloud.settingsSync) Settings.cloud.settingsSync = false;
+}
+
 async function syncSettings() {
     const hasCloudAuth = await dsGet("Vencord_cloudSecret");
     if (!hasCloudAuth) {
@@ -227,6 +248,10 @@ async function init() {
             );
     }
 }
+
+// Must precede init(): init() calls syncSettings(), which is the only consumer of these
+// flags, and this is the point at which any v0.1.0 state has been loaded but not yet read.
+disableCloudSync();
 
 initPluginManager();
 initStyles();

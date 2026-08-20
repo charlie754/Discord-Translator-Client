@@ -20,6 +20,21 @@ The following modifications were made on August 18, 2026:
 - Removed the bundled Vencord translate plugin
 - Added the ChannelTranslator feature
 
+The following further modifications were made on August 19, 2026, and are the changes
+released as v0.2.0:
+
+- Removed every remaining third-party endpoint and Equicord string, including the donor
+  badge and cloud service hosts
+- Restricted the main-process translation transport to an explicit hostname allow-list,
+  and corrected the translation host actually contacted
+- Stopped shipping sourcemaps in the packed archives
+- Vendored the Monaco editor into the archive, so the QuickCSS editor no longer fetches
+  its code from a CDN
+- Rebranded the browser and userscript variants
+- Removed upstream's Cloud Settings tab, and disabled settings sync at startup for
+  installs upgraded from an earlier version
+- Added a Goat Project campaign banner to the translator panel and the settings tab
+
 ### Source Attribution
 
 All upstream copyright notices are preserved in the source code. The message-interception technique, patch anchor, and translation regexes used by the ChannelTranslator feature are derived from Equicord's own `MessageTranslate` plugin.
