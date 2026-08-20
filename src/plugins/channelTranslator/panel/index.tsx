@@ -14,6 +14,7 @@ const HOST_ID = "channel-translator-host";
 let root: any = null;
 let reposition: (() => void) | null = null;
 let chatObserver: ResizeObserver | null = null;
+let ariaObserver: MutationObserver | null = null;
 let observedAnchor: Element | null = null;
 
 export function mountPanel(): void {
@@ -39,6 +40,24 @@ export function mountPanel(): void {
     root = createRoot(mountPoint);
     root.render(<Panel />);
 
+    // The host is fixed at z-index 2147483000 on document.body, so it sits above
+    // Discord's full-screen settings/modal layers, which live inside #app-mount.
+    // When a layer opens on top, Discord marks the layers underneath it
+    // aria-hidden="true" — that is the signal used here, rather than a class
+    // name, because it is semantically correct and Discord's generated class
+    // names churn between builds.
+    const applyLayerVisibility = () => {
+        // Nearest ancestor of the anchor that carries the attribute at all;
+        // closest() includes the anchor itself, which is correct.
+        const layer = observedAnchor?.closest("[aria-hidden]");
+        // Fail toward SHOWING. No anchor (settings opened before any channel was
+        // ever rendered), or no ancestor carrying the attribute, must not hide
+        // the panel — a wrong guess in that direction hides it permanently,
+        // because nothing would be left to observe that could bring it back.
+        const hidden = layer?.getAttribute("aria-hidden") === "true";
+        host.style.display = hidden ? "none" : "";
+    };
+
     // Anchor to the top-right of the chat area rather than the window, so the
     // panel moves correctly when the member list or sidebar is toggled.
     reposition = () => {
@@ -60,6 +79,21 @@ export function mountPanel(): void {
             observedAnchor = chat;
             chatObserver = new ResizeObserver(() => reposition?.());
             chatObserver.observe(chat);
+
+            // Re-bound on the same trigger, by the same node-identity test, for
+            // the same reason: the ancestor chain above the message column is
+            // replaced along with it, so an observer bound once at mount time
+            // would silently stop firing after the first channel switch.
+            //
+            // Every ancestor is observed, not just the nearest one carrying
+            // aria-hidden today, because the attribute is ADDED when a layer
+            // opens: an element with no aria-hidden right now is exactly the one
+            // that has to be watched. One observer, many observe() calls.
+            ariaObserver?.disconnect();
+            ariaObserver = new MutationObserver(() => applyLayerVisibility());
+            for (let node: Element | null = chat; node != null; node = node.parentElement) {
+                ariaObserver.observe(node, { attributes: true, attributeFilter: ["aria-hidden"] });
+            }
         }
 
         const box = chat?.getBoundingClientRect();
@@ -85,6 +119,11 @@ export function mountPanel(): void {
         host.style.top = `${Math.max(8, top)}px`;
         host.style.right = `${right}px`;
         host.style.left = "auto";
+
+        // Re-evaluated here too, not only from the MutationObserver: on a channel
+        // switch the anchor changes and the observer is rebound, so the state has
+        // to be read once against the new chain.
+        applyLayerVisibility();
     };
     reposition();
     // Discord's chat container is not laid out on the first frame after mount,
@@ -99,6 +138,8 @@ export function unmountPanel(): void {
     reposition = null;
     chatObserver?.disconnect();
     chatObserver = null;
+    ariaObserver?.disconnect();
+    ariaObserver = null;
     observedAnchor = null;
     root?.unmount();
     root = null;

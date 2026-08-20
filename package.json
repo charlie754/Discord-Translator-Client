@@ -1,18 +1,18 @@
 {
     "name": "discord-translator",
     "private": "true",
-    "version": "0.2.0",
+    "version": "0.2.1",
     "description": "A Discord client mod for translating messages in real-time across channels",
-    "homepage": "https://github.com/Equicord/Equicord#readme",
+    "homepage": "https://github.com/charlie754/Discord-Translator-Client#readme",
     "bugs": {
-        "url": "https://github.com/Equicord/Equicord/issues"
+        "url": "https://github.com/charlie754/Discord-Translator-Client/issues"
     },
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/Equicord/Equicord.git"
+        "url": "git+https://github.com/charlie754/Discord-Translator-Client.git"
     },
     "license": "GPL-3.0-or-later",
-    "author": "Equicord",
+    "author": "IRP_HongKong",
     "scripts": {
         "build": "node --require=./scripts/suppressExperimentalWarnings.js scripts/build/build.mjs",
         "buildStandalone": "pnpm build --standalone",

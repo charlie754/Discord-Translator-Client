@@ -4,15 +4,11 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { Settings } from "@api/Settings";
-import { FolderIcon, PaintbrushIcon, PencilIcon, PlusIcon, RestartIcon } from "@components/Icons";
+import { FolderIcon, PaintbrushIcon, PlusIcon, RestartIcon } from "@components/Icons";
 import { QuickAction, QuickActionCard } from "@components/settings";
-import { openPluginModal } from "@components/settings/tabs/plugins/PluginModal";
 import { findLazy } from "@webpack";
 import { React } from "@webpack/common";
 import type { ComponentType, Ref, SyntheticEvent } from "react";
-
-import Plugins from "~plugins";
 
 type FileInputType = ComponentType<{
     ref: Ref<HTMLInputElement>;
@@ -64,13 +60,12 @@ export function QuickActionsSection({ fileInputRef, onFileUpload, refreshLocalTh
                 action={() => VencordNative.quickCss.openEditor()}
                 Icon={PaintbrushIcon}
             />
-            {Settings.plugins.ClientTheme.enabled && (
-                <QuickAction
-                    text="Edit ClientTheme"
-                    action={() => openPluginModal(Plugins.ClientTheme)}
-                    Icon={PencilIcon}
-                />
-            )}
+            {/* The "Edit ClientTheme" action lived here. ClientTheme is one of the
+                361 plugins this fork deleted, so Settings.plugins.ClientTheme is
+                undefined and reading .enabled threw, taking the whole Themes tab
+                down. Optional chaining would have silenced the crash but left a
+                quick action that can only ever open a plugin that does not exist,
+                so the block is gone rather than guarded. */}
         </QuickActionCard>
     );
 }

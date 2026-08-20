@@ -437,7 +437,15 @@ export const GOAT_BANNER_CSS = `
 /* ---- Goat lockup banner ----
  * Hover component from brand/lockup-hover, not the looping SVG. The two
  * campaign lines sit above the lockup. Animation is :hover on .goat-lockup
- * only -- hovering the sentences or StarGithub must not play it. */
+ * only -- hovering the sentences or StarGithub must not play it.
+ *
+ * .goat is a plain container, NOT a link: only the lockup navigates. The
+ * sentences used to be inside the anchor and clicking them opened dagoat.io,
+ * which the operator did not want. So .goat keeps layout, margins and colour,
+ * and everything interactive -- cursor, text-decoration, the focus ring --
+ * moved to .goat__link, which wraps the lockup alone. Every .goat / .goat--panel
+ * / .goat--settings descendant rule below is unaffected, because .goat__link
+ * sits between them without introducing a box of its own. */
 
 .goat {
   display: block;
@@ -448,10 +456,16 @@ export const GOAT_BANNER_CSS = `
   margin-top: 22px;
   margin-bottom: 2px;
   color: var(--ink-cream, #f0e6d2);
+}
+/* The only clickable element in the banner. display:block so the lockup keeps
+   the container's full width, exactly as it had when .goat was the anchor. */
+.goat__link {
+  display: block;
+  color: inherit;
   cursor: pointer;
   text-decoration: none;
 }
-.goat:focus-visible { outline: 2px solid var(--accent, #3ecf8e); outline-offset: 2px; border-radius: 8px; }
+.goat__link:focus-visible { outline: 2px solid var(--accent, #3ecf8e); outline-offset: 2px; border-radius: 8px; }
 .goat__copy { display: flex; flex-direction: column; gap: 4px; margin: 0 0 8px; }
 .goat__line { margin: 0; font-size: 10.5px; line-height: 1.4; font-weight: 500; }
 .goat__line--ask { color: var(--ink-muted, #a99f8c); font-weight: 400; }
@@ -571,11 +585,12 @@ export function GoatBanner({ variant }: { variant: "panel" | "settings"; }): JSX
     React.useEffect(ensureBannerCss, []);
 
     return (
-        <a className={`goat goat--${variant}`} href={GOAT_URL} target="_blank" rel="noopener noreferrer">
+        <div className={`goat goat--${variant}`}>
             <span className="goat__copy">
                 <span className="goat__line">Goat Project - Help fight Cancer, Alzheimer&rsquo;s, Parkinson&rsquo;s, COVID-19, Dengue, Hepatitis C etc.</span>
                 <span className="goat__line goat__line--ask">Contribute your idle compute to Earn GOAT.</span>
             </span>
+            <a className="goat__link" href={GOAT_URL} target="_blank" rel="noopener noreferrer">
             <span className="goat-lockup" data-goat-mark>
             <span className="goat-lockup__meteors" aria-hidden="true">
             <i>
@@ -634,6 +649,7 @@ export function GoatBanner({ variant }: { variant: "panel" | "settings"; }): JSX
             <span className="goat-lockup__tag">The People&rsquo;s Compute Commons</span>
             </span>
             </span>
-        </a>
+            </a>
+        </div>
     );
 }

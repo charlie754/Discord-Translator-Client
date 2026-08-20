@@ -59,7 +59,20 @@ export const UserSettingsDefinitions: Record<PropertyKey, UserSettingDefinition<
  * @param name The name of the setting
  */
 export function getUserSettingDefinition<T = any>(group: string, name: string): UserSettingDefinition<T> | undefined {
-    if (!Settings.plugins.UserSettingDefinitionsAPI.enabled) throw new Error("Cannot use UserSettingDefinitionsAPI without setting as dependency.");
+    // There is no plugin named UserSettingDefinitionsAPI in this fork, and there
+    // never can be one: the surviving API plugin is UserSettingsAPI, which injects
+    // userSettingsAPIGroup/userSettingsAPIName (see src/api/UserSettings.ts) — not
+    // the userSettingDefinitionsAPI* fields the loop below matches on. Nothing in
+    // the tree imports this module, and src/api/index.ts exports UserSettings
+    // rather than this file, so the module is orphaned by the strip.
+    //
+    // Renaming the guard to UserSettingsAPI would therefore be wrong: it would let
+    // an enabled-but-unrelated plugin wave the call through to a loop that can
+    // never match, returning undefined silently. Keeping the public API but reading
+    // the missing plugin defensively makes the guard fail the way it was written to
+    // fail — an informative Error naming the missing dependency — instead of the
+    // TypeError that a bare .enabled on undefined produced.
+    if (!Settings.plugins.UserSettingDefinitionsAPI?.enabled) throw new Error("Cannot use UserSettingDefinitionsAPI without setting as dependency.");
 
     for (const key in UserSettingsDefinitions) {
         const userSettingDefinition = UserSettingsDefinitions[key];
