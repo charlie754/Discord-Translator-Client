@@ -483,23 +483,51 @@ export const GOAT_BANNER_CSS = `
  * Chrome against this exact stylesheet, so these numbers are observations,
  * not estimates. */
 
-/* Panel: the translator panel's real content width is 218px. At the shipped
+/* Panel: the translator panel has 220px of content width. At the shipped
  * defaults the lockup needs 314px with the tagline and 248px without it -
- * clipped by 96px and 30px respectively, and the clipped case cut the wordmark
- * to "GOATPROJEC...". Dropping the tagline alone is not enough because the
- * 20px name floor by itself needs 242px, still 24px over budget. So the panel
- * does both things the brand README prescribes for a narrow host: it drops the
- * descriptor rather than shrinking it ("With the tagline present the lockup
- * needs roughly 340px. Below that, drop the descriptor rather than shrinking
- * it."), and it overrides --gl-name-min in place, which is the token's
- * documented escape hatch. 15px + a 1.8x stamp measures 202px - it fits with
- * 16px to spare, and the enlarged seal keeps the thumbs-up legible at a size
- * where 36 of 250 viewBox units would otherwise render under ~12px. */
+ * clipped by 94px and 28px respectively, and the clipped case cut the wordmark
+ * to "GOATPROJEC...". So the panel overrides --gl-name-min in place, which is
+ * the token's documented escape hatch, and keeps the descriptor instead of
+ * dropping it.
+ *
+ * The tagline departs from the brand's 10px floor AND its 0.28em tracking, and
+ * both departures are deliberate. Measured in headless Chrome against this
+ * exact stylesheet with the stamp at 1.44:
+ *
+ *     10px / 0.28em -> 311px   clipped by 91px
+ *      8px / 0.28em -> 262px   clipped by 42px
+ *      6px / 0.28em -> 213px   fits, 7px spare
+ *      7px / 0.18em -> 218px   fits, 2px spare      <- shipped
+ *    7.5px / 0.14em -> 220px   fits, 0px spare (too tight to be safe)
+ *      8px / 0.10em -> 222px   clipped by 2px
+ *
+ * At the brand's 0.28em, 32% of the tagline's width is letter-spacing, so
+ * tightening the tracking buys more glyph size than shrinking the font does:
+ * 7px/0.18em gives 17% larger glyphs than plain shrinking to 6px would, and
+ * still reads as a tracked micro-label rather than as body text. The
+ * alternative here was not a bigger tagline - it was dropping the descriptor
+ * entirely, which is what this variant used to do.
+ *
+ * text-indent goes to 0 on both rows. The brand recentres each line against
+ * its own trailing letter-space (0.24em on the name, 0.28em on the tag), which
+ * in a left-aligned lockup leaves the two left edges 1.9px apart; zeroing both
+ * makes them share an exact left edge and reclaims 2px of width.
+ *
+ * The stamp sits at 1.44 (1.8 x 0.8), rendering 12px rather than 15px, which
+ * still keeps the thumbs-up legible at a size where 36 of 250 viewBox units
+ * would otherwise render very small. */
 .goat--panel .goat-lockup {
   --gl-name-min: 15px;
-  --gl-seal-scale: 1.8;
+  --gl-tag-min: 7px;
+  --gl-seal-scale: 1.44;
 }
-.goat--panel .goat-lockup__tag { display: none; }
+.goat--panel .goat-lockup__name {
+  text-indent: 0;
+}
+.goat--panel .goat-lockup__tag {
+  letter-spacing: 0.18em;
+  text-indent: 0;
+}
 
 /* Settings: 594px of content width, so the brand floors are affordable and the
  * tagline stays. At font-size 16px the full lockup measures 343px. The stamp
@@ -546,7 +574,7 @@ export function GoatBanner({ variant }: { variant: "panel" | "settings"; }): JSX
         <a className={`goat goat--${variant}`} href={GOAT_URL} target="_blank" rel="noopener noreferrer">
             <span className="goat__copy">
                 <span className="goat__line">Goat Project - Help fight Cancer, Alzheimer&rsquo;s, Parkinson&rsquo;s, COVID-19, Dengue, Hepatitis C etc.</span>
-                <span className="goat__line goat__line--ask">Contribute your idle computer to Earn GOAT.</span>
+                <span className="goat__line goat__line--ask">Contribute your idle compute to Earn GOAT.</span>
             </span>
             <span className="goat-lockup" data-goat-mark>
             <span className="goat-lockup__meteors" aria-hidden="true">
