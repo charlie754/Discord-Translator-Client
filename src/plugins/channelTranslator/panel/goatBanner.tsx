@@ -550,6 +550,42 @@ export const GOAT_BANNER_CSS = `
 .goat--settings .goat-lockup {
   font-size: 16px;
   --gl-seal-scale: 1.2;
+}
+
+/* Hover lift. The .goat .goat-lockup rule already declares the transform and box-shadow
+ * transitions above — only the trigger was missing, so the banner sat still while
+ * every other control in the panel grew under the cursor.
+ *
+ * 1.05 / 0.96 are the panel's existing values for the Star-Github button, and the
+ * same pair the google-map widget uses on this exact element, so the banner now
+ * matches its neighbours rather than inventing a third scale.
+ *
+ * Gated on .shell:hover in the panel the same way .gh is: the shell is
+ * collapsed until hovered, and a control should not react to the cursor before
+ * the panel it lives in has opened.
+ *
+ * The settings copy is ~618px wide, where 5% is a lurch rather than a lift, so it
+ * gets a gentler pair. This is the one place the two variants deliberately differ
+ * on the same gesture. */
+.shell:hover .goat--panel .goat-lockup:hover {
+  transform: scale(1.05);
+  box-shadow: var(--glass-shadow-hover, 0 18px 44px rgba(0, 0, 0, 0.55));
+}
+.shell:hover .goat--panel .goat-lockup:active { transform: scale(0.96); }
+
+.goat--settings .goat-lockup:hover {
+  transform: scale(1.02);
+  box-shadow: var(--glass-shadow-hover, 0 18px 44px rgba(0, 0, 0, 0.55));
+}
+.goat--settings .goat-lockup:active { transform: scale(0.99); }
+
+/* The travelling parts of the lockup already stand still under reduced motion;
+ * the lift has to opt out too or it is the only thing left moving. */
+@media (prefers-reduced-motion: reduce) {
+  .shell:hover .goat--panel .goat-lockup:hover,
+  .shell:hover .goat--panel .goat-lockup:active,
+  .goat--settings .goat-lockup:hover,
+  .goat--settings .goat-lockup:active { transform: none; }
 }`;
 
 /** Stable id so remounting the settings tab cannot append a second copy. */
