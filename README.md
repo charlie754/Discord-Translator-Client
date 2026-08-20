@@ -2,6 +2,10 @@
 
 A Discord client mod that translates a whole channel, including scrollback, into your language.
 
+![Discord Translator translating a Japanese channel](assets/preview.gif)
+
+*A Japanese server, translated in place. 47 seconds, so give it a moment to load.*
+
 ## Features
 
 - **Whole-channel translation** with a per-server toggle
