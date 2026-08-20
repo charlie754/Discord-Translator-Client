@@ -200,7 +200,7 @@ export function Panel() {
                     </span>
                 </button>
 
-                <GoatBanner />
+                <GoatBanner variant="panel" />
 
                 {state === "unavailable" && (
                     <div className="row">

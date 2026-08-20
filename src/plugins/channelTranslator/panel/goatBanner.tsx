@@ -15,10 +15,20 @@ const GOAT_URL = "https://dagoat.io";
  * the same well the Ko-fi and Star-Github buttons came from. Everything is
  * inline SVG and CSS: no remote asset, so scripts/checkHosts.mjs stays quiet.
  *
- * Two deliberate divergences from the reference stylesheet, and only two:
+ * The lockup stylesheet below is the brand sheet verbatim, backticks escaped
+ * so it survives a template literal. Everything after the "Goat lockup banner"
+ * banner comment is ours. Our divergences from the reference, and only these:
+ *
  *  1. the panel's design tokens carry fallbacks, because this component also
  *     renders in Discord's light DOM where :host never defined them;
- *  2. .goat's top margin is 22px rather than 16px, at the operator's request.
+ *  2. .goat's top margin is 22px rather than 16px, at the operator's request;
+ *  3. .goat .goat-lockup re-states the base sheet's `overflow: hidden;
+ *     overflow: clip` pair. Ours has to win on specificity to keep the panel's
+ *     rounded plate clipping its background, and a bare `hidden` there would
+ *     have silently reverted the base's upgrade to `clip` - which is what stops
+ *     the inset meteor layer creating a scroll container;
+ *  4. two size variants, .goat--panel and .goat--settings, documented at the
+ *     rules themselves.
  *
  * .goat-lockup--paper is kept even though nothing toggles it - the operator
  * wants the dark plate everywhere, and dead rules in an upstream sheet cost
@@ -59,11 +69,26 @@ export const GOAT_BANNER_CSS = `
   --gl-t-out: 360ms;          /* leaving is always faster than arriving */
   --gl-t-fade: 450ms;         /* the length of the glyph cross-fade */
 
+  /* ---- type floors: below these the wordmark stops scaling with the mark ---- */
+  --gl-name-min: 20px;
+  --gl-tag-min: 10px;
+
+  /* ---- stamp: 1 keeps the brand lockup's own proportion. Raise it on small
+          lockups, where 36 of 250 viewBox units renders under ~12px and the
+          thumbs-up inside stops reading. Static - it never changes on hover. ---- */
+  --gl-seal-scale: 1;
+
   position: relative;
   display: inline-flex;
   align-items: center;
   gap: 2em;
   isolation: isolate;
+  overflow: hidden;            /* fallback for browsers without \`clip\` */
+  overflow: clip;              /* the meteor layer is inset past the lockup on
+                                  every side; without this it can push page-level
+                                  horizontal scroll when the lockup sits near the
+                                  viewport edge. \`clip\` does not create a scroll
+                                  container and does not clip the focus ring. */
   color: var(--gl-name);
   text-decoration: none;
   -webkit-tap-highlight-color: transparent;
@@ -73,7 +98,7 @@ export const GOAT_BANNER_CSS = `
   --gl-cream: #1a1917;
   --gl-glyph: #f6efe6;
   --gl-name: #1a1917;
-  --gl-tag: #6d675e;
+  --gl-tag: #4f4a42;
   --gl-spark: #b3382c;
   --gl-focus: rgba(26, 25, 23, 0.72);
   --gl-meteor-tail: rgba(26, 25, 23, 0);
@@ -115,6 +140,12 @@ export const GOAT_BANNER_CSS = `
    behind it. Nothing in here moves or scales.
    -------------------------------------------------------------------------- */
 
+.gl-seal {
+  transform-box: fill-box;      /* bbox is exactly the 36x36 stamp square */
+  transform-origin: 50% 50%;
+  transform: scale(var(--gl-seal-scale, 1));
+}
+
 .gl-seal-face { fill: var(--gl-seal); transition: fill var(--gl-t-out) var(--gl-out); }
 
 .gl-seal-glow {
@@ -128,17 +159,15 @@ export const GOAT_BANNER_CSS = `
 
 /* --------------------------------------------------------------------------
    The glyph cross-fade: character out, thumbs-up in.
+   The character is the real 羊 outline taken from SimSun - the font the brand
+   lockup's own stack (goat-mark-cream.svg) resolves to - baked to a path so it
+   needs no CJK font installed and renders identically inside an <img>.
    The thumb is a solid silhouette with no internal detail, which is what keeps
    it readable at stamp size - roughly 20px wide on a hero lockup.
    -------------------------------------------------------------------------- */
 
-.gl-s {
-  stroke: var(--gl-glyph);
-  stroke-width: 3.2;
-  stroke-linecap: round;
-}
-
-.gl-strokes {
+.gl-char {
+  fill: var(--gl-glyph);
   opacity: 1;
   transition: opacity var(--gl-t-out) var(--gl-out);
 }
@@ -195,7 +224,7 @@ export const GOAT_BANNER_CSS = `
 }
 
 .goat-lockup__name {
-  font-size: 1em;
+  font-size: max(var(--gl-name-min), 1em);
   line-height: 1;
   letter-spacing: 0.24em;
   text-transform: uppercase;
@@ -205,11 +234,12 @@ export const GOAT_BANNER_CSS = `
 }
 
 .goat-lockup__tag {
-  font-size: 0.43em;
+  font-size: max(var(--gl-tag-min), 0.43em);
+  font-weight: 500;
   line-height: 1;
-  letter-spacing: 0.34em;
+  letter-spacing: 0.28em;
   text-transform: uppercase;
-  text-indent: 0.34em;
+  text-indent: 0.28em;
   color: var(--gl-tag);
   white-space: nowrap;
   transition: color var(--gl-t-out) var(--gl-out);
@@ -309,9 +339,9 @@ export const GOAT_BANNER_CSS = `
 
 /* ---- the cross-fade ---- */
 
-.goat-lockup:hover .gl-strokes,
-.goat-lockup:focus-visible .gl-strokes,
-.goat-lockup.is-active .gl-strokes {
+.goat-lockup:hover .gl-char,
+.goat-lockup:focus-visible .gl-char,
+.goat-lockup.is-active .gl-char {
   opacity: 0;
   transition: opacity var(--gl-t-fade) linear;
 }
@@ -434,12 +464,50 @@ export const GOAT_BANNER_CSS = `
   box-sizing: border-box;
   padding: 10px 12px;
   border-radius: 8px;
+  /* Same pair as the base sheet, restated because this selector outranks it:
+     hidden for browsers without clip, then clip so the inset meteor layer
+     never turns the plate into a scroll container. */
   overflow: hidden;
+  overflow: clip;
   background: #0b0b0d;
   transition: transform var(--dur-base, 300ms) var(--ease, cubic-bezier(0.25, 0.1, 0.25, 1)), box-shadow var(--dur-base, 300ms) var(--ease, cubic-bezier(0.25, 0.1, 0.25, 1));
 }
 .goat .goat-lockup.goat-lockup--paper {
   background: #f6efe6;
+}
+
+/* ---- size variants ----
+ * The brand sheet's new type floors (--gl-name-min: 20px, --gl-tag-min: 10px)
+ * stop the wordmark shrinking with font-size, so the lockup now has a hard
+ * minimum width that the two hosts do not both clear. Measured in headless
+ * Chrome against this exact stylesheet, so these numbers are observations,
+ * not estimates. */
+
+/* Panel: the translator panel's real content width is 218px. At the shipped
+ * defaults the lockup needs 314px with the tagline and 248px without it -
+ * clipped by 96px and 30px respectively, and the clipped case cut the wordmark
+ * to "GOATPROJEC...". Dropping the tagline alone is not enough because the
+ * 20px name floor by itself needs 242px, still 24px over budget. So the panel
+ * does both things the brand README prescribes for a narrow host: it drops the
+ * descriptor rather than shrinking it ("With the tagline present the lockup
+ * needs roughly 340px. Below that, drop the descriptor rather than shrinking
+ * it."), and it overrides --gl-name-min in place, which is the token's
+ * documented escape hatch. 15px + a 1.8x stamp measures 202px - it fits with
+ * 16px to spare, and the enlarged seal keeps the thumbs-up legible at a size
+ * where 36 of 250 viewBox units would otherwise render under ~12px. */
+.goat--panel .goat-lockup {
+  --gl-name-min: 15px;
+  --gl-seal-scale: 1.8;
+}
+.goat--panel .goat-lockup__tag { display: none; }
+
+/* Settings: 594px of content width, so the brand floors are affordable and the
+ * tagline stays. At font-size 16px the full lockup measures 343px. The stamp
+ * still gets a modest lift because 16px is well under the 20px hero size the
+ * 1x proportion was drawn for. */
+.goat--settings .goat-lockup {
+  font-size: 16px;
+  --gl-seal-scale: 1.2;
 }`;
 
 /** Stable id so remounting the settings tab cannot append a second copy. */
@@ -466,81 +534,78 @@ function ensureBannerCss() {
  * nothing. From inside the shadow root that injection is inert - document
  * styles do not cross a shadow boundary - so the panel is unaffected either
  * way, and the guard above keeps it to one element regardless.
+ *
+ * `variant` is required, not defaulted: the two hosts have 218px and 594px to
+ * work with and the wrong one clips the wordmark, so a third call site must be
+ * made to choose rather than inheriting whichever default happened to be here.
  */
-export function GoatBanner(): JSX.Element {
+export function GoatBanner({ variant }: { variant: "panel" | "settings"; }): JSX.Element {
     React.useEffect(ensureBannerCss, []);
 
     return (
-        <a className="goat" href={GOAT_URL} target="_blank" rel="noopener noreferrer">
+        <a className={`goat goat--${variant}`} href={GOAT_URL} target="_blank" rel="noopener noreferrer">
             <span className="goat__copy">
                 <span className="goat__line">Goat Project - Help fight Cancer, Alzheimer&rsquo;s, Parkinson&rsquo;s, COVID-19, Dengue, Hepatitis C etc.</span>
                 <span className="goat__line goat__line--ask">Contribute your idle computer to Earn GOAT.</span>
             </span>
-                <span className="goat-lockup" data-goat-mark>
-                <span className="goat-lockup__meteors" aria-hidden="true">
-                <i>
-                </i>
-                <i>
-                </i>
-                <i>
-                </i>
-                <i>
-                </i>
-                <i>
-                </i>
-                <i>
-                </i>
-                <i>
-                </i>
-                <i>
-                </i>
-                <i>
-                </i>
-                </span>
-                <span className="goat-lockup__mark" aria-hidden="true">
-                <svg className="goat-lockup__svg" viewBox="46 -16 220 250" xmlns="http://www.w3.org/2000/svg" focusable="false">
-                <g className="gl-head">
-                <path d="M62 210 C74 148 120 98 190 80 C152 106 106 150 82 216 Z"/>
-                <path d="M186 84 C214 62 226 32 210 8 C216 36 200 62 174 80 Z"/>
-                <path d="M170 82 C190 60 194 34 180 16 C186 40 172 62 156 78 Z"/>
-                <path d="M188 82 C206 90 218 104 222 122 C212 106 200 94 182 90 Z"/>
-                <path d="M206 122 C215 134 217 149 209 160 C212 147 208 133 200 127 Z"/>
-                <circle cx="197" cy="99" r="3.6"/>
-                </g>
-                <g className="gl-seal">
-                <rect className="gl-seal-glow" x="214" y="182" width="36" height="36" rx="4"/>
-                <rect className="gl-seal-face" x="214" y="182" width="36" height="36" rx="4"/>
-                <svg className="gl-glyph" x="214" y="182" width="36" height="36" viewBox="0 0 100 100">
-                <path className="gl-thumb" d="M30 50 C26 50 24 52 24 56 L24 87 C24 91 26 93 30 93 L73 93 C79 93 84 90 85 84 L89 55 C90 49 86 44 80 44 L63 44 C65 38 67 25 65 18 C63 12 55 12 53 18 C51 24 53 33 51 42 C50 47 47 50 42 50 Z" transform="translate(-5 -3)"/>
-                <g className="gl-strokes" fill="none">
-                <line className="gl-s" x1="35.3" y1="17.1" x2="47.3" y2="30.9"/>
-                <line className="gl-s" x1="67.3" y1="17.1" x2="52.7" y2="30.9"/>
-                <line className="gl-s" x1="24.7" y1="33.5" x2="76.4" y2="33.5"/>
-                <line className="gl-s" x1="27.3" y1="48.4" x2="75.6" y2="48.4"/>
-                <line className="gl-s" x1="21.1" y1="60" x2="80" y2="60"/>
-                <line className="gl-s" x1="49" y1="25.5" x2="49" y2="80"/>
-                </g>
-                <g className="gl-burst" transform="translate(53 0)" fill="none">
-                <circle className="gl-ring" cx="0" cy="0" r="12"/>
-                <line className="gl-ray gl-ray--1" transform="rotate(-168)" x1="10" y1="0" x2="40" y2="0"/>
-                <line className="gl-ray gl-ray--2" transform="rotate(-138)" x1="10" y1="0" x2="40" y2="0"/>
-                <line className="gl-ray gl-ray--3" transform="rotate(-108)" x1="10" y1="0" x2="40" y2="0"/>
-                <line className="gl-ray gl-ray--4" transform="rotate(-76)" x1="10" y1="0" x2="40" y2="0"/>
-                <line className="gl-ray gl-ray--5" transform="rotate(-44)" x1="10" y1="0" x2="40" y2="0"/>
-                <line className="gl-ray gl-ray--6" transform="rotate(-14)" x1="10" y1="0" x2="40" y2="0"/>
-                <circle className="gl-ember gl-ember--a" cx="-7" cy="-2" r="2.2"/>
-                <circle className="gl-ember gl-ember--b" cx="8" cy="-5" r="1.9"/>
-                <circle className="gl-ember gl-ember--c" cx="0" cy="-9" r="1.6"/>
-                </g>
-                </svg>
-                </g>
-                </svg>
-                </span>
-                <span className="goat-lockup__word">
-                <span className="goat-lockup__name">Goatproject</span>
-                <span className="goat-lockup__tag">The People&rsquo;s Compute Commons</span>
-                </span>
-                </span>
+            <span className="goat-lockup" data-goat-mark>
+            <span className="goat-lockup__meteors" aria-hidden="true">
+            <i>
+            </i>
+            <i>
+            </i>
+            <i>
+            </i>
+            <i>
+            </i>
+            <i>
+            </i>
+            <i>
+            </i>
+            <i>
+            </i>
+            <i>
+            </i>
+            <i>
+            </i>
+            </span>
+            <span className="goat-lockup__mark" aria-hidden="true">
+            <svg className="goat-lockup__svg" viewBox="46 -16 220 250" xmlns="http://www.w3.org/2000/svg" focusable="false">
+            <g className="gl-head">
+            <path d="M62 210 C74 148 120 98 190 80 C152 106 106 150 82 216 Z"/>
+            <path d="M186 84 C214 62 226 32 210 8 C216 36 200 62 174 80 Z"/>
+            <path d="M170 82 C190 60 194 34 180 16 C186 40 172 62 156 78 Z"/>
+            <path d="M188 82 C206 90 218 104 222 122 C212 106 200 94 182 90 Z"/>
+            <path d="M206 122 C215 134 217 149 209 160 C212 147 208 133 200 127 Z"/>
+            <circle cx="197" cy="99" r="3.6"/>
+            </g>
+            <g className="gl-seal">
+            <rect className="gl-seal-glow" x="214" y="182" width="36" height="36" rx="4"/>
+            <rect className="gl-seal-face" x="214" y="182" width="36" height="36" rx="4"/>
+            <svg className="gl-glyph" x="214" y="182" width="36" height="36" viewBox="0 0 100 100">
+            <path className="gl-thumb" d="M30 50 C26 50 24 52 24 56 L24 87 C24 91 26 93 30 93 L73 93 C79 93 84 90 85 84 L89 55 C90 49 86 44 80 44 L63 44 C65 38 67 25 65 18 C63 12 55 12 53 18 C51 24 53 33 51 42 C50 47 47 50 42 50 Z" transform="translate(-5 -3)"/>
+            <path className="gl-char" d="M33.5 18.12Q39.14 21.51 41.54 23.62Q43.93 25.74 43.65 27.85Q43.37 29.97 42.24 30.96Q41.11 31.94 40.55 31.94Q39.42 31.94 38.57 29.12Q37.45 25.17 32.93 18.97ZM20.52 33.07H52.68Q58.89 23.76 60.86 16.99L66.79 20.66Q63.96 22.07 61.14 25.74Q58.04 29.41 54.37 33.07H68.2L72.43 28.84L77.79 34.77H51.55V47.46H63.96L68.2 43.79L72.99 49.15H51.55V62.13H71.58L76.1 57.9L81.46 63.82H51.55V73.7Q51.55 76.8 51.83 81.32L47.04 83.01Q47.32 78.78 47.32 63.82H27.85Q24.19 63.82 21.08 64.67L18.54 62.13H47.32V49.15H35.47Q31.8 49.15 28.7 50L26.16 47.46H47.32V34.77H29.83Q26.16 34.77 23.06 35.61Z"/>
+            <g className="gl-burst" transform="translate(53 0)" fill="none">
+            <circle className="gl-ring" cx="0" cy="0" r="12"/>
+            <line className="gl-ray gl-ray--1" transform="rotate(-168)" x1="10" y1="0" x2="40" y2="0"/>
+            <line className="gl-ray gl-ray--2" transform="rotate(-138)" x1="10" y1="0" x2="40" y2="0"/>
+            <line className="gl-ray gl-ray--3" transform="rotate(-108)" x1="10" y1="0" x2="40" y2="0"/>
+            <line className="gl-ray gl-ray--4" transform="rotate(-76)" x1="10" y1="0" x2="40" y2="0"/>
+            <line className="gl-ray gl-ray--5" transform="rotate(-44)" x1="10" y1="0" x2="40" y2="0"/>
+            <line className="gl-ray gl-ray--6" transform="rotate(-14)" x1="10" y1="0" x2="40" y2="0"/>
+            <circle className="gl-ember gl-ember--a" cx="-7" cy="-2" r="2.2"/>
+            <circle className="gl-ember gl-ember--b" cx="8" cy="-5" r="1.9"/>
+            <circle className="gl-ember gl-ember--c" cx="0" cy="-9" r="1.6"/>
+            </g>
+            </svg>
+            </g>
+            </svg>
+            </span>
+            <span className="goat-lockup__word">
+            <span className="goat-lockup__name">Goatproject</span>
+            <span className="goat-lockup__tag">The People&rsquo;s Compute Commons</span>
+            </span>
+            </span>
         </a>
     );
 }

@@ -189,7 +189,7 @@ function EquicordSettings() {
             {/* Light DOM: GoatBanner injects its own stylesheet into document.head,
                 so nothing has to be wired up here beyond the spacing. */}
             <div className={Margins.top16}>
-                <GoatBanner />
+                <GoatBanner variant="settings" />
             </div>
 
             <Divider className={Margins.top20} />
