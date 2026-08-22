@@ -35,3 +35,10 @@ ExtensionCache/
 
 # wakatime related stuff
 .wakatime-project
+
+# Internal engineering record — turn reports, plans, review records.
+# This repository is PUBLIC. These describe unfixed hazards, review findings and
+# development history, and must not be published with the code. They live outside
+# the repository; see the operator's local copy.
+docs/
+consultant/
