@@ -157,7 +157,11 @@ async function buildExtension(target, files) {
     const entries = {
         "dist/DiscordTranslator.js": await readFile("dist/browser/extension.js"),
         "dist/DiscordTranslator.css": await readFile("dist/browser/extension.css"),
-        ...await loadDir("dist/browser/vendor/monaco", "dist/browser/"),
+        // The vendored Monaco tree is deliberately NOT packaged. browser/monacoWin.html
+        // loads Monaco from cdn.jsdelivr.net, so nothing in the extension ever requested
+        // these files - grep the built bundle for "vendor/monaco" and it returns zero.
+        // Shipping it anyway made up 86% of the package (1.52 MB of 1.77 MB compressed).
+        // Restore this line together with a monacoWin.html that actually loads it.
         ...Object.fromEntries(await Promise.all(files.map(async f => {
             let content = await readFile(join("browser", f));
             if (f.startsWith("manifest")) {
@@ -173,7 +177,11 @@ async function buildExtension(target, files) {
         })))
     };
 
-    await rm(target, { recursive: true, force: true });
+    // join() matters: the files below are written to dist/browser/<target>, and this
+    // line used to remove a bare "<target>" at the repo root, which never existed. The
+    // output directory was therefore never cleaned, so any file dropped from the package
+    // above kept shipping from the previous build until dist/ was deleted by hand.
+    await rm(join("dist/browser", target), { recursive: true, force: true });
     await Promise.all(Object.entries(entries).map(async ([file, content]) => {
         const dest = join("dist/browser", target, file);
         const parentDirectory = join(dest, "..");
@@ -193,18 +201,23 @@ const appendCssRuntime = readFile("dist/DiscordTranslator.user.css", "utf-8").th
 if (!process.argv.includes("--skip-extension")) {
     await Promise.all([
         appendCssRuntime,
-        buildExtension("chromium-unpacked", ["modifyResponseHeaders.json", "content.js", "manifest.json", "icon.png", "service-worker.js"]),
-        buildExtension("firefox-unpacked", ["background.js", "content.js", "manifestv2.json", "icon.png"]),
+        buildExtension("chromium-unpacked", ["modifyResponseHeaders.json", "content.js", "manifest.json", "icon.png", "icon16.png", "icon32.png", "icon48.png", "icon96.png", "icon128.png", "service-worker.js", "translationHost.js"]),
+        buildExtension("firefox-unpacked", ["background.js", "content.js", "manifestv2.json", "icon.png", "icon16.png", "icon32.png", "icon48.png", "icon96.png", "icon128.png", "translationHost.js"]),
     ]);
 
-    Zip.zip("dist/browser/chromium-unpacked", (_err, zip) => {
-        zip.compress().save("dist/extension-chrome.zip");
-        console.info("Packed Chromium Extension written to dist/extension-chrome.zip");
-    });
-    Zip.zip("dist/browser/firefox-unpacked", (_err, zip) => {
-        zip.compress().save("dist/extension-firefox.zip");
-        console.info("Packed Firefox Extension written to dist/extension-firefox.zip");
-    });
+    // Synchronous on purpose. The callback form is fire-and-forget: nothing awaited
+    // it, so the process could exit before the archive was written and leave the
+    // PREVIOUS build's zip in place. That is not theoretical - it shipped a
+    // dist/extension-firefox.zip containing a vendor/monaco tree that had already been
+    // removed from the package. A release built that way publishes stale bytes.
+    for (const [target, out] of [
+        ["chromium-unpacked", "dist/extension-chrome.zip"],
+        ["firefox-unpacked", "dist/extension-firefox.zip"]
+    ]) {
+        await rm(out, { force: true });
+        Zip.sync.zip(join("dist/browser", target)).compress().save(out);
+        console.info(`Packed extension written to ${out}`);
+    }
 } else {
     await appendCssRuntime;
 }

@@ -216,7 +216,15 @@ export default definePlugin({
                 Component: UpdaterTab,
                 Icon: UpdaterIcon
             }),
-            buildEntry({
+            // Gated exactly like the Updater tab above, and for the same reason: the
+            // changelog exists to describe what changed between the version you had and
+            // this one, and it answers that by fetching a commit range from
+            // api.github.com. The web build ships no updater, so the tab has nothing to
+            // report there — and leaving it in made PRIVACY.md's statement that the
+            // extension contacts nothing at api.github.com false. It fires only once a
+            // lastSeenHash exists, i.e. on the SECOND version a user runs, which is why
+            // recording a fresh session could never have caught it.
+            !IS_UPDATER_DISABLED && buildEntry({
                 key: "equicord_changelog",
                 title: "Changelog",
                 Component: ChangelogTab,

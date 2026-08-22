@@ -1,5 +1,9 @@
 # Privacy
 
+Everything below describes the **desktop app** unless it says otherwise. The browser extension runs
+the same translator but sits in a different place, and the differences are set out under
+[The Browser Extension](#the-browser-extension).
+
 ## Data Transmission
 
 When you enable channel translation, the text of messages is sent to the translation service you have selected, via the app's Electron main process. This transmission is necessary for translation to occur.
@@ -36,8 +40,9 @@ timer only if you turn auto-update on *and* update notifications off — with th
 defaults there is no timer. Nothing else in the table above is contacted unless you do the
 thing listed beside it.
 
-The QuickCSS editor no longer fetches anything: Monaco is bundled inside the archive, so
-opening it contacts nothing. Earlier versions loaded it from `cdn.jsdelivr.net`.
+The QuickCSS editor no longer fetches anything **in the desktop app**: Monaco is bundled inside the
+archive, so opening it contacts nothing. Earlier versions loaded it from `cdn.jsdelivr.net`, and the
+browser extension still does — see the browser section below.
 
 ## What Enforces That
 
@@ -65,9 +70,12 @@ Imgur, ImgBB, Pinterest, Catbox and Google Fonts.
 CSP entry is a permission, not a request. The full list is `CspPolicies` in
 `src/main/csp/index.ts`.
 
-`scripts/checkHosts.mjs` enumerates every host present in the packed release archives and
-fails CI on anything not declared in `scripts/allowed-hosts.txt`, so this document cannot
-quietly drift away from what ships.
+`scripts/checkHosts.mjs` enumerates every host present in `dist/desktop.asar` and
+`dist/equibop.asar` and fails CI on anything not declared in `scripts/allowed-hosts.txt`. **It does
+not cover the browser extension packages** — those are checked by
+`scripts/checkExtensionPackages.mjs`, which verifies the transport, its allow-list, the manifests and
+the archives, but does not yet enumerate every host inside them. Extending the host gate to the
+extension is an open item.
 
 Some settings screens link out to third-party sites — BetterDiscord's theme directory,
 for instance. Those are ordinary links: nothing is requested until you click one.
@@ -76,6 +84,58 @@ Upstream Equicord additionally fetched donor badges from `badges.vencord.dev`
 and `badge.equicord.org` on every start, keyed by your Discord user ID, and
 loaded images from `equicord.org` inside the settings screens. **All of that has
 been removed from this fork.**
+
+## The Browser Extension
+
+The Chrome, Edge and Firefox extension runs the same translator from the same source, but the
+surroundings differ from the desktop app in ways worth stating plainly.
+
+**Message text goes to the same three hosts, and the same kind of guard decides that.** There is no
+Electron main process in a browser, so the transport runs in the extension's background context —
+the only part of an extension that may fetch across origins. It carries the same allow-list, matched
+the same way, in `browser/translationHost.js`: full hostname, `Set.has`, no suffix and no wildcard.
+It additionally re-checks the host **after** any redirect, so an allowed host answering with a 302
+cannot carry your text somewhere else. `test/allowedHosts.test.ts` holds that list identical to the
+desktop one and fails the build if they diverge.
+
+**The relay is reachable from the Discord page.** The translator itself runs in the page's own world,
+so it asks for a translation by posting a message that a content script forwards to the background.
+Any other script running on Discord could post the same message. What that buys an attacker is
+bounded entirely by the allow-list above: it can cause a request to one of three translation
+endpoints and read the reply. It cannot reach anywhere else, and it cannot read your Discord
+credentials through this path.
+
+**The extension removes Discord's Content-Security-Policy header.** This is inherited from the
+upstream project and is what allows user themes and custom CSS to load images and fonts at all. It is
+a real reduction in one of the page's defences, applied to every Discord tab for as long as the
+extension is installed, and it is not specific to translation. It is done by
+`browser/modifyResponseHeaders.json` on Chrome and `browser/background.js` on Firefox.
+
+**Your settings live in the page's own storage.** On the desktop they are a file in the app's data
+directory. In the browser they are `localStorage` on `discord.com`, under the key
+`DiscordTranslatorSettings`. Anything else running on that page can read them — including a DeepL API
+key, if you configure one. If that matters to you, use the desktop build for DeepL.
+
+**No update check runs, and no changelog check either.** The web build ships no updater, and the
+Changelog tab is compiled out of it for the same reason — that tab asks `api.github.com` for the
+commits between the version you had and this one. It was originally left in, and this document
+originally claimed the extension contacts nothing at `api.github.com` on the strength of a recorded
+session showing only `discord.com` and `translate.googleapis.com`. **That evidence could not have
+found it:** the request fires only once a previous version has been seen, so a fresh install is
+exactly the case where it stays silent.
+
+What is true now is checked against the built file rather than the source: the compare-URL
+construction and the `vnd.github+json` header are both absent from the shipped browser bundle and
+both present in the desktop one, so the removal is real and specific to this build. A single unused
+string constant remains in the bundle with nothing referencing it.
+
+**The QuickCSS editor still loads Monaco from `cdn.jsdelivr.net`.** The desktop build bundles it and
+contacts nothing; the browser build does not, so opening that editor requests the editor from a CDN.
+Nothing about your messages or settings is sent with it. This is a known difference and not yet fixed.
+
+**Permissions the extension asks for, and why:** `*://*.discord.com/*` to run at all;
+`translate.googleapis.com`, `api-free.deepl.com` and `api.deepl.com` for the translation transport;
+`raw.githubusercontent.com` because that is where most people host the themes they install.
 
 ## What is Not Transmitted
 

@@ -2,14 +2,21 @@
     "manifest_version": 3,
     "minimum_chrome_version": "111",
     "name": "Discord Translator Web",
-    "description": "The other cutest Discord mod now in your browser",
+    "description": "Translate a whole Discord channel, including scrollback, with one toggle.",
     "author": "IRP_HongKong",
     "homepage_url": "https://github.com/charlie754/Discord-Translator-Client",
     "icons": {
-        "128": "icon.png"
+        "16": "icon16.png",
+        "32": "icon32.png",
+        "48": "icon48.png",
+        "96": "icon96.png",
+        "128": "icon128.png"
     },
     "host_permissions": [
         "*://*.discord.com/*",
+        "https://translate.googleapis.com/*",
+        "https://api-free.deepl.com/*",
+        "https://api.deepl.com/*",
         "https://raw.githubusercontent.com/*"
     ],
     "permissions": [
@@ -42,8 +49,7 @@
     "web_accessible_resources": [
         {
             "resources": [
-                "dist/*",
-                "vendor/*"
+                "dist/*"
             ],
             "matches": [
                 "*://*.discord.com/*"
@@ -62,32 +68,5 @@
 
     "background": {
         "service_worker": "service-worker.js"
-    },
-
-    "commands": {
-        "TOGGLE_MUTE": {
-            "description": "Toggle Mute — Toggle your microphone's transmission on and off."
-        },
-        "TOGGLE_DEAFEN": {
-            "description": "Toggle Deafen — Toggle your speaker's playback on and off. Also disables your microphone while deafened."
-        },
-        "TOGGLE_VOICE_MODE": {
-            "description": "Toggle VAD — Toggle to switch between Push-to-talk and Voice Activity mode."
-        },
-        "TOGGLE_STREAMER_MODE": {
-            "description": "Toggle Streamer Mode — Toggle to enable/disable Streamer Mode."
-        },
-        "TOGGLE_GO_LIVE_STREAMING": {
-            "description": "Toggle Screen Share — Toggle to start/stop streaming in your current voice channel. Streams can only be started with this keybind if Discord recognises the game you are currently playing."
-        },
-        "NAVIGATE_BACK": {
-            "description": "Navigate Back — Might conflict with your browsers native keybinds"
-        },
-        "NAVIGATE_FORWARD": {
-            "description": "Navigate Forward — Might conflict with your browsers native keybinds"
-        },
-        "SAVE_CLIP": {
-            "description": "Save Clip — Clips the last 30 seconds to 2 minutes of your stream, depending on your settings."
-        }
     }
 }

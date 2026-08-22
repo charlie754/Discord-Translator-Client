@@ -14,23 +14,65 @@ A Discord client mod that translates a whole channel, including scrollback, into
 
 ## Install
 
-Prebuilt releases will be available on the [Releases](https://github.com/charlie754/Discord-Translator-Client/releases) page.
+Two builds, from the same source and with the same translator.
 
-To build from source:
+### Desktop app
+
+Use the [Discord Translator Installer](https://github.com/charlie754/Discord-Translator-Installer/releases/latest).
+It downloads `desktop.asar` from the latest release here and patches your existing Discord — you do not
+install a second app. **Close Discord completely first**, including the tray icon.
+
+### Browser extension (Chrome, Edge, Firefox)
+
+For Discord in a browser tab. Download from the
+[latest release](https://github.com/charlie754/Discord-Translator-Client/releases/latest):
+
+**Chrome and Edge** — `extension-chrome.zip`
+
+1. Unzip it somewhere you will not delete
+2. Open `chrome://extensions` (Edge: `edge://extensions`)
+3. Turn on **Developer mode**
+4. **Load unpacked** → select the unzipped folder
+5. Reload any Discord tab that was already open, then open a **server channel**
+
+**Firefox** — `extension-firefox.zip`
+
+1. Open `about:debugging#/runtime/this-firefox`
+2. **Load Temporary Add-on…** → select the zip (it takes the archive directly; no need to unpack)
+3. Reload any Discord tab that was already open — the add-on cannot alter a page that finished
+   loading before it started
+4. Open a **server channel**
+
+**On Firefox this lasts until you close the browser.** A permanent install needs the add-on to be
+signed by Mozilla, and it is not signed yet — so on release Firefox there is currently no way to keep
+it installed across restarts. Firefox Developer Edition and Nightly can keep it by setting
+`xpinstall.signatures.required` to `false` in `about:config`, which lowers a real security protection
+for every add-on you install, not just this one.
+
+**There is no toolbar button, and the panel is hidden in DMs by design.** Open a server channel and
+look at the top-right of the chat area for the translator panel. On the Friends or DM screen there is
+nothing to see, which is expected rather than a failure.
+
+Neither extension is in the Chrome Web Store or on addons.mozilla.org.
+
+### Build from source
 
 ```shell
 pnpm install
-pnpm build
-pnpm inject
+
+pnpm build      # desktop
+pnpm inject     # patch Discord; Discord must be fully closed
+
+pnpm buildWeb   # browser; writes dist/extension-chrome.zip and dist/extension-firefox.zip
 ```
 
-To uninstall:
+To uninstall the desktop patch:
 
 ```shell
 pnpm uninject
 ```
 
-To repair after a Discord update:
+To repair it after a Discord update:
 
 ```shell
 pnpm repair

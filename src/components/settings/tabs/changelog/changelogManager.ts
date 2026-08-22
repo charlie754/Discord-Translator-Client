@@ -58,6 +58,15 @@ async function fetchCommitsBetween(
     fromHash: string,
     toHash: string,
 ): Promise<ChangelogEntry[]> {
+    // The web build ships no updater and, since the tab is gated the same way, no
+    // changelog either. Refusing here rather than relying on the tab being unreachable
+    // lets esbuild fold the whole body away, so "the extension never contacts
+    // api.github.com" becomes provable from the built artifact instead of by reading
+    // call sites. That distinction matters: this request fires only once a
+    // lastSeenHash exists — the SECOND version a user runs — so recording a fresh
+    // session cannot detect it, which is exactly how it was missed.
+    if (IS_UPDATER_DISABLED) return [];
+
     if (!repoSlug || typeof fetch !== "function") return [];
     try {
         const res = await fetch(

@@ -2,16 +2,23 @@
     "manifest_version": 2,
     "minimum_chrome_version": "91",
     "name": "Discord Translator Web",
-    "description": "The other cutest Discord mod now in your browser",
+    "description": "Translate a whole Discord channel, including scrollback, with one toggle.",
     "author": "IRP_HongKong",
     "homepage_url": "https://github.com/charlie754/Discord-Translator-Client",
     "icons": {
-        "128": "icon.png"
+        "16": "icon16.png",
+        "32": "icon32.png",
+        "48": "icon48.png",
+        "96": "icon96.png",
+        "128": "icon128.png"
     },
     "permissions": [
         "webRequest",
         "webRequestBlocking",
         "*://*.discord.com/*",
+        "https://translate.googleapis.com/*",
+        "https://api-free.deepl.com/*",
+        "https://api.deepl.com/*",
         "https://raw.githubusercontent.com/*"
     ],
     "content_scripts": [
@@ -40,6 +47,7 @@
     ],
     "background": {
         "scripts": [
+            "translationHost.js",
             "background.js"
         ]
     },
@@ -49,15 +57,11 @@
     ],
     "browser_specific_settings": {
         "gecko": {
-            "id": "firefox@equicord.org",
+            "id": "discord-translator@charlie754.github.io",
             "strict_min_version": "128.0",
             "data_collection_permissions": {
                 "required": [
                     "none"
-                ],
-                "optional": [
-                    "authenticationInfo",
-                    "locationInfo"
                 ]
             }
         }

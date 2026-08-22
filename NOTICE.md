@@ -35,6 +35,25 @@ released as v0.2.0:
   installs upgraded from an earlier version
 - Added a Goat Project campaign banner to the translator panel and the settings tab
 
+The following further modifications were made on August 21, 2026:
+
+- Gave the browser extension a working translation transport. Upstream's web build stubs
+  `pluginHelpers` as an empty object, so the translator rendered its panel and then failed
+  every translation with "native bridge unavailable". Added `browser/translationHost.js`
+  (extension background), the relay in `browser/content.js`, and
+  `browser/translationBridge.ts` (page world)
+- Carried the main-process hostname allow-list across to both browser transports, matched
+  the same way, and made it additionally re-check the host after a redirect
+- Added `test/allowedHosts.test.ts`, which holds all three copies of that allow-list to the
+  same set and exercises each one
+- Declared the translation providers in both manifests, which previously granted no
+  permission to reach them
+- Replaced upstream's extension description and the `firefox@equicord.org` Gecko add-on ID
+- Replaced the extension icon, which was still upstream's Vencord/Equicord mark, with this
+  project's own artwork at every size both browsers ask for, and pinned its absence in CI
+- Made the release workflow run the unit tests, and build, verify and publish the Chrome and
+  Firefox extension packages
+
 ### Source Attribution
 
 All upstream copyright notices are preserved in the source code. The message-interception technique, patch anchor, and translation regexes used by the ChannelTranslator feature are derived from Equicord's own `MessageTranslate` plugin.

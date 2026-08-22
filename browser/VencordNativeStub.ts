@@ -30,6 +30,8 @@ import { localStorage } from "@utils/localStorage";
 import { getStylusWebStoreUrl } from "@utils/web";
 import { EXTENSION_BASE_URL, metaReady, RENDERER_CSS_URL } from "@utils/web-metadata";
 
+import { ChannelTranslatorHelper } from "./translationBridge";
+
 // listeners for ipc.on
 const cssListeners = new Set<(css: string) => void>();
 const NOOP = () => { };
@@ -134,7 +136,14 @@ window.VencordNative = {
         openFolder: async () => Promise.reject("settings:openFolder is not supported on web"),
     },
 
-    pluginHelpers: {} as any,
+    // On the desktop this is generated from every plugin's native.ts and exposed over
+    // IPC. There is no main process here, so the one helper this fork actually ships
+    // is provided directly — see browser/translationBridge.ts. Left empty, the
+    // translator would load, render its panel, and fail every translation with
+    // "native bridge unavailable".
+    pluginHelpers: {
+        ChannelTranslator: ChannelTranslatorHelper
+    } as any,
     csp: {} as any,
     tray: {
         setUpdateState: NOOP,

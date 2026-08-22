@@ -40,6 +40,20 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
 
+      # test.yml runs these too, but it is filtered to pushes and PRs against
+      # main and never fires on a tag ref — so before this step nothing tested
+      # the commit that actually became a release. test/allowedHosts.test.ts in
+      # particular is what holds the three transports' hostname allow-lists to
+      # the same set, which is the control PRIVACY.md describes.
+      - name: Unit tests
+        run: |
+          npx --yes pnpm@10 test:unit
+          # vitest.config.ts globs test/**/*.test.ts, so DELETING a test file makes the
+          # suite smaller and still green — the control PRIVACY.md describes could
+          # disappear without anything saying so. Naming it explicitly turns that into a
+          # hard failure: vitest exits non-zero with "No test files found" if it is gone.
+          npx vitest run test/allowedHosts.test.ts
+
       # --standalone is not optional for a published build. Without it,
       # scripts/build/build.mjs replaces every `process.platform` with the
       # runner's own platform ("linux") and esbuild then deletes the branches
@@ -99,6 +113,22 @@ jobs:
       - name: Check third-party hosts
         run: node scripts/checkHosts.mjs
 
+      # Neither build clears the other's output: build.mjs removes only
+      # dist/desktop and dist/equibop, buildWeb.mjs only its own unpacked dirs.
+      - name: Build browser extension
+        run: npx --yes pnpm@10 buildWeb
+
+      # Reads the packaged extension, not browser/ — buildExtension() copies an
+      # explicit file list, so a source file that was never added to that list is
+      # invisible here exactly as it would be to a user.
+      # Reads the packaged artifacts, never the sources that are supposed to produce
+      # them. Every check in that script exists because the thing it checks actually
+      # went wrong once: upstream's icon shipped for several releases, a fire-and-forget
+      # zip step published a PREVIOUS build's archive, and 86% of the download was a
+      # vendored Monaco tree nothing loads.
+      - name: Verify the extension packages
+        run: node scripts/checkExtensionPackages.mjs
+
       - uses: softprops/action-gh-release@v2
         with:
           # The release name must END with the commit hash stamped into the
@@ -110,9 +140,15 @@ jobs:
           files: |
             dist/desktop.asar
             dist/equibop.asar
+            dist/extension-chrome.zip
+            dist/extension-firefox.zip
           generate_release_notes: true
           body: |
             Install with the [Discord Translator Installer](https://github.com/charlie754/Discord-Translator-Installer/releases/latest),
             which downloads `desktop.asar` from this release and patches your Discord desktop app.
+
+            **Browser extension** — `extension-chrome.zip` (Chrome, Edge) and
+            `extension-firefox.zip` (Firefox). Neither store hosts these yet, so
+            they install unpacked; the README has the steps.
 
             To build from source instead, see the README.
