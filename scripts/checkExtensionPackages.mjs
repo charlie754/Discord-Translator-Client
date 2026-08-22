@@ -166,6 +166,25 @@ for (const target of TARGETS) {
         pass(`archive matches the built directory (${dirNames.size} files)`);
     }
 
+    // --- no remotely hosted code, anywhere in the package ---
+    // Chrome MV3 names a script tag pointing outside the package, or a string fetched
+    // remotely and executed, as a policy violation. It matters more here than usual:
+    // this extension removes Discord's CSP, so a compromised CDN would run in the
+    // logged-in discord.com origin with nothing left to constrain it.
+    for (const f of walk(dir)) {
+        if (!/\.(js|html|css|json)$/.test(f)) continue;
+        const body = readFileSync(join(dir, f), "utf8");
+        for (const [needle, what] of [
+            ["jsdelivr", "a jsDelivr URL"],
+            ["cdn.", "a CDN reference"],
+            ['import("http', "a dynamic import of remote code"],
+            ["import('http", "a dynamic import of remote code"]
+        ]) {
+            if (body.includes(needle)) fail(`${what} in ${f} (found ${JSON.stringify(needle)})`);
+        }
+    }
+    pass("no remotely hosted code in the package");
+
     // --- developer-only surfaces must not reach users ---
     // The Patch Helper tab compiles pasted text with Function(). It is gated on
     // !IS_STANDALONE, so a build that forgets --standalone ships it, and it only

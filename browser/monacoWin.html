@@ -100,37 +100,44 @@
         }
 
         /*
-         * Two ways Monaco arrives here, and the first is strongly preferred.
+         * Monaco is loaded from inside the extension package. There is deliberately no
+         * remote fallback.
          *
-         * BUNDLED (extension builds). openEditor in browser/VencordNativeStub.ts sets
-         * __monacoLocal before writing this document, then injects the stylesheet and
-         * the script it fetched from the extension. It has to be the opener that
-         * fetches: this window is an about:blank popup carrying the discord.com origin,
-         * and loading an extension URL from inside it silently does nothing. So nothing
-         * is requested here — this side only waits for the injection to land and
-         * publish an editor.
+         * A CDN fallback used to live here for the plain-web build. It was removed
+         * because a <script src> pointing outside the package is what Chrome's
+         * Manifest V3 policy names as remotely hosted code, and because this extension
+         * removes Discord's Content-Security-Policy - so a compromised CDN would have
+         * executed in the logged-in discord.com origin with nothing left to stop it.
+         * A niche build losing an optional editor is the cheaper side of that trade.
          *
-         * CDN (userscript and plain web builds). There is no extension to read files
-         * from, so Monaco comes from cdn.jsdelivr.net. The loader and stylesheet are
-         * pinned with subresource integrity; the modules the loader then fetches are
-         * not, which is a real residual and the reason the bundled path exists.
+         * openEditor in browser/VencordNativeStub.ts sets __monacoLocal before writing
+         * this document, then injects the stylesheet and script it fetched from the
+         * extension. It has to be the opener that fetches: this window is an
+         * about:blank popup carrying the discord.com origin, and loading an extension
+         * URL from inside it silently does nothing.
          */
         (function () {
-            if (window.__monacoLocal) {
-                waitForInjectedEditor();
+            if (!window.__monacoLocal) {
+                showUnavailable("The QuickCSS editor needs the browser extension build.");
                 return;
             }
-            loadFromCdn();
+            waitForInjectedEditor();
         })();
+
+        function showUnavailable(reason) {
+            const box = document.getElementById("container");
+            box.style.color = "#dbdee1";
+            box.style.font = "14px/1.6 system-ui, sans-serif";
+            box.style.padding = "24px";
+            box.textContent = reason + " You can still edit custom CSS by installing the extension, or edit it as a file in the desktop build.";
+        }
 
         function waitForInjectedEditor() {
             const deadline = Date.now() + 30000;
 
             (function poll() {
                 if (window.__monacoLocalFailed) {
-                    // The opener could not read the bundled copy. Rather than leave an
-                    // empty window, fall back rather than fail.
-                    loadFromCdn();
+                    showUnavailable("The editor could not be loaded from the extension.");
                     return;
                 }
 
@@ -140,54 +147,12 @@
                 }
 
                 if (Date.now() > deadline) {
-                    loadFromCdn();
+                    showUnavailable("The editor did not finish loading.");
                     return;
                 }
 
                 setTimeout(poll, 50);
             })();
-        }
-
-        function loadFromCdn() {
-            if (window.__cdnStarted) return;
-            window.__cdnStarted = true;
-
-            const css = document.createElement("link");
-            css.rel = "stylesheet";
-            css.href = "https://cdn.jsdelivr.net/npm/monaco-editor@0.50.0/min/vs/editor/editor.main.css";
-            css.integrity = "sha256-tiJPQ2O04z/pZ/AwdyIghrOMzewf+PIvEl1YKbQvsZk=";
-            css.crossOrigin = "anonymous";
-            css.referrerPolicy = "no-referrer";
-            document.head.append(css);
-
-            const loader = document.createElement("script");
-            loader.src = "https://cdn.jsdelivr.net/npm/monaco-editor@0.50.0/min/vs/loader.js";
-            loader.integrity = "sha256-KcU48TGr84r7unF7J5IgBo95aeVrEbrGe04S7TcFUjs=";
-            loader.crossOrigin = "anonymous";
-            loader.referrerPolicy = "no-referrer";
-            loader.onload = () => {
-                require.config({
-                    paths: {
-                        vs: "https://cdn.jsdelivr.net/npm/monaco-editor@0.50.0/min/vs"
-                    }
-                });
-
-                require(["vs/editor/editor.main"], () => {
-                    getCurrentCss().then(css => {
-                        const editor = monaco.editor.create(document.getElementById("container"), {
-                            value: css,
-                            language: "css",
-                            theme: getTheme()
-                        });
-
-                        editor.onDidChangeModelContent(() => setCss(editor.getValue()));
-                        window.addEventListener("resize", () => editor.layout());
-
-                        wireToolbar(editor);
-                    });
-                });
-            };
-            document.head.append(loader);
         }
     </script>
 </body>

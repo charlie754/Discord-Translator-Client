@@ -57,12 +57,20 @@
         "vendor/*"
     ],
     "browser_specific_settings": {
+        "_comment": "gecko_android carries its own minimum because data_collection_permissions landed later on Android (142) than on desktop (140). Without it the Android minimum inherits 140 and the declaration is silently ignored on 140 and 141.",
+        "gecko_android": {
+            "strict_min_version": "142.0"
+        },
         "gecko": {
             "id": "discord-translator@charlie754.github.io",
-            "strict_min_version": "128.0",
+            "_comment_min_version": "140.0 because data_collection_permissions below is honoured only from Firefox 140 (142 on Android). At 128 the key was silently ignored, so the declaration users saw at install time was whatever Mozilla defaulted to rather than what we declared.",
+            "strict_min_version": "140.0",
             "data_collection_permissions": {
+                "_comment": "This extension exists to send Discord message text to a translation provider. Declaring none was simply false. personalCommunications covers the chat messages; websiteContent covers the same text as page content; authenticationInfo covers the user's own DeepL API key, which is stored locally and sent only to DeepL, and only if they configure one.",
                 "required": [
-                    "none"
+                    "personalCommunications",
+                    "websiteContent",
+                    "authenticationInfo"
                 ]
             }
         }
