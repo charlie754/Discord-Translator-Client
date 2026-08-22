@@ -54,6 +54,18 @@ The following further modifications were made on August 21, 2026:
 - Made the release workflow run the unit tests, and build, verify and publish the Chrome and
   Firefox extension packages
 
+The following further modifications were made on August 22, 2026:
+
+- Made the browser QuickCSS editor load Monaco from inside the extension instead of from
+  `cdn.jsdelivr.net`. The extension removes Discord's Content-Security-Policy, so a CDN
+  script would have executed in the logged-in Discord origin unconstrained. The fetch is
+  performed by the opening page rather than by the editor popup, because a popup carrying
+  the page origin cannot load extension resources; its language workers are started from
+  same-origin blob URLs for the same reason
+- Removed the Changelog settings tab from the web build, which reached `api.github.com`
+  and made this project's privacy notice inaccurate for the browser extension
+- Added `scripts/checkExtensionPackages.mjs` and wired it into the release workflow
+
 ### Source Attribution
 
 All upstream copyright notices are preserved in the source code. The message-interception technique, patch anchor, and translation regexes used by the ChannelTranslator feature are derived from Equicord's own `MessageTranslate` plugin.

@@ -166,10 +166,16 @@ for (const target of TARGETS) {
         pass(`archive matches the built directory (${dirNames.size} files)`);
     }
 
-    // --- nothing loads the vendored Monaco tree in the browser build ---
-    if ([...zipNames].some(n => n.startsWith("vendor/"))) {
-        fail("the unused vendor/ tree is in the archive");
-    } else pass("no unused vendor tree");
+    // --- the QuickCSS editor loads Monaco from here, so it must be present ---
+    // It was briefly dropped as dead weight, correctly at the time: nothing loaded it
+    // and it was 86% of the download. openEditor now fetches it, and a CDN script in a
+    // page whose CSP this extension strips is the thing that must not come back.
+    const monaco = ["vendor/monaco/index.js", "vendor/monaco/index.css",
+        "vendor/monaco/vs/language/css/css.worker.js", "vendor/monaco/vs/editor/editor.worker.js"];
+    const missingMonaco = monaco.filter(f => !zipNames.has(f));
+    if (missingMonaco.length) {
+        fail(`bundled Monaco incomplete, missing: ${missingMonaco.join(", ")}`);
+    } else pass("bundled Monaco present, including both language workers");
 
     console.log(`        ${(statSync(zipPath).size / 1024).toFixed(0)} KB packaged`);
 }

@@ -157,11 +157,11 @@ async function buildExtension(target, files) {
     const entries = {
         "dist/DiscordTranslator.js": await readFile("dist/browser/extension.js"),
         "dist/DiscordTranslator.css": await readFile("dist/browser/extension.css"),
-        // The vendored Monaco tree is deliberately NOT packaged. browser/monacoWin.html
-        // loads Monaco from cdn.jsdelivr.net, so nothing in the extension ever requested
-        // these files - grep the built bundle for "vendor/monaco" and it returns zero.
-        // Shipping it anyway made up 86% of the package (1.52 MB of 1.77 MB compressed).
-        // Restore this line together with a monacoWin.html that actually loads it.
+        // The QuickCSS editor loads Monaco from here rather than from cdn.jsdelivr.net.
+        // That matters more for this extension than for most: it strips Discord's CSP,
+        // so a CDN script would run in the logged-in discord.com origin with nothing
+        // left to constrain it. It is ~1.5 MB of the package; that is the price.
+        ...await loadDir("dist/browser/vendor/monaco", "dist/browser/"),
         ...Object.fromEntries(await Promise.all(files.map(async f => {
             let content = await readFile(join("browser", f));
             if (f.startsWith("manifest")) {

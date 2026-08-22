@@ -4,9 +4,6 @@
 <head>
     <meta charset="utf-8">
     <title>Discord Translator QuickCSS Editor</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/monaco-editor@0.50.0/min/vs/editor/editor.main.css"
-        integrity="sha256-tiJPQ2O04z/pZ/AwdyIghrOMzewf+PIvEl1YKbQvsZk=" crossorigin="anonymous"
-        referrerpolicy="no-referrer">
     <style>
         html,
         body,
@@ -64,65 +61,134 @@
     </header>
     <div id="container"></div>
 
-    <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.50.0/min/vs/loader.js"
-        integrity="sha256-KcU48TGr84r7unF7J5IgBo95aeVrEbrGe04S7TcFUjs=" crossorigin="anonymous"
-        referrerpolicy="no-referrer"></script>
-
     <script>
-        require.config({
-            paths: {
-                vs: "https://cdn.jsdelivr.net/npm/monaco-editor@0.50.0/min/vs"
+        // Shared by both load paths, so the toolbar behaves identically whichever copy
+        // of Monaco ended up being used.
+        function wireToolbar(editor) {
+            document.getElementById('selectAllButton').onclick = () => {
+                editor.setSelection(editor.getModel().getFullModelRange());
+                editor.focus();
+            };
+
+            document.getElementById('saveButton').onclick = () => {
+                const css = editor.getValue();
+                const blob = new Blob([css], { type: 'text/css' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = 'style.css';
+                document.body.append(link);
+                link.click();
+                link.remove();
+                URL.revokeObjectURL(url);
+            };
+
+            document.getElementById('copyButton').onclick = () => {
+                editor.focus();
+                const selection = editor.getSelection();
+                editor.setSelection(selection);
+                document.execCommand('copy');
+            };
+
+            document.getElementById('undoButton').onclick = () => {
+                editor.trigger('keyboard', 'undo');
+            };
+
+            document.getElementById('redoButton').onclick = () => {
+                editor.trigger('keyboard', 'redo');
+            };
+        }
+
+        /*
+         * Two ways Monaco arrives here, and the first is strongly preferred.
+         *
+         * BUNDLED (extension builds). openEditor in browser/VencordNativeStub.ts sets
+         * __monacoLocal before writing this document, then injects the stylesheet and
+         * the script it fetched from the extension. It has to be the opener that
+         * fetches: this window is an about:blank popup carrying the discord.com origin,
+         * and loading an extension URL from inside it silently does nothing. So nothing
+         * is requested here — this side only waits for the injection to land and
+         * publish an editor.
+         *
+         * CDN (userscript and plain web builds). There is no extension to read files
+         * from, so Monaco comes from cdn.jsdelivr.net. The loader and stylesheet are
+         * pinned with subresource integrity; the modules the loader then fetches are
+         * not, which is a real residual and the reason the bundled path exists.
+         */
+        (function () {
+            if (window.__monacoLocal) {
+                waitForInjectedEditor();
+                return;
             }
-        });
+            loadFromCdn();
+        })();
 
-        require(["vs/editor/editor.main"], () => {
-            getCurrentCss().then((css) => {
-                const editor = monaco.editor.create(document.getElementById("container"), {
-                    value: css,
-                    language: "css",
-                    theme: getTheme()
+        function waitForInjectedEditor() {
+            const deadline = Date.now() + 30000;
+
+            (function poll() {
+                if (window.__monacoLocalFailed) {
+                    // The opener could not read the bundled copy. Rather than leave an
+                    // empty window, fall back rather than fail.
+                    loadFromCdn();
+                    return;
+                }
+
+                if (self.quickCssEditorReady) {
+                    self.quickCssEditorReady.then(wireToolbar);
+                    return;
+                }
+
+                if (Date.now() > deadline) {
+                    loadFromCdn();
+                    return;
+                }
+
+                setTimeout(poll, 50);
+            })();
+        }
+
+        function loadFromCdn() {
+            if (window.__cdnStarted) return;
+            window.__cdnStarted = true;
+
+            const css = document.createElement("link");
+            css.rel = "stylesheet";
+            css.href = "https://cdn.jsdelivr.net/npm/monaco-editor@0.50.0/min/vs/editor/editor.main.css";
+            css.integrity = "sha256-tiJPQ2O04z/pZ/AwdyIghrOMzewf+PIvEl1YKbQvsZk=";
+            css.crossOrigin = "anonymous";
+            css.referrerPolicy = "no-referrer";
+            document.head.append(css);
+
+            const loader = document.createElement("script");
+            loader.src = "https://cdn.jsdelivr.net/npm/monaco-editor@0.50.0/min/vs/loader.js";
+            loader.integrity = "sha256-KcU48TGr84r7unF7J5IgBo95aeVrEbrGe04S7TcFUjs=";
+            loader.crossOrigin = "anonymous";
+            loader.referrerPolicy = "no-referrer";
+            loader.onload = () => {
+                require.config({
+                    paths: {
+                        vs: "https://cdn.jsdelivr.net/npm/monaco-editor@0.50.0/min/vs"
+                    }
                 });
 
-                editor.onDidChangeModelContent(() => setCss(editor.getValue()));
+                require(["vs/editor/editor.main"], () => {
+                    getCurrentCss().then(css => {
+                        const editor = monaco.editor.create(document.getElementById("container"), {
+                            value: css,
+                            language: "css",
+                            theme: getTheme()
+                        });
 
-                document.getElementById('selectAllButton').onclick = () => {
-                    editor.setSelection(editor.getModel().getFullModelRange());
-                    editor.focus();
-                };
+                        editor.onDidChangeModelContent(() => setCss(editor.getValue()));
+                        window.addEventListener("resize", () => editor.layout());
 
-                document.getElementById('saveButton').onclick = () => {
-                    const css = editor.getValue();
-                    const blob = new Blob([css], { type: 'text/css' });
-                    const url = URL.createObjectURL(blob);
-                    const link = document.createElement('a');
-                    link.href = url;
-                    link.download = 'style.css';
-                    document.body.append(link);
-                    link.click();
-                    link.remove();
-                    URL.revokeObjectURL(url);
-                };
-
-                document.getElementById('copyButton').onclick = () => {
-                    editor.focus();
-                    const selection = editor.getSelection();
-                    editor.setSelection(selection);
-                    document.execCommand('copy');
-                };
-
-                document.getElementById('undoButton').onclick = () => {
-                    editor.trigger('keyboard', 'undo');
-                };
-
-                document.getElementById('redoButton').onclick = () => {
-                    editor.trigger('keyboard', 'redo');
-                };
-
-                window.addEventListener("resize", () => {
-                    editor.layout();
+                        wireToolbar(editor);
+                    });
                 });
-            });
-        });
+            };
+            document.head.append(loader);
+        }
     </script>
 </body>
 

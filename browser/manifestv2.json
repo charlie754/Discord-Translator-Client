@@ -53,7 +53,8 @@
     },
     "web_accessible_resources": [
         "dist/DiscordTranslator.js",
-        "dist/DiscordTranslator.css"
+        "dist/DiscordTranslator.css",
+        "vendor/*"
     ],
     "browser_specific_settings": {
         "gecko": {

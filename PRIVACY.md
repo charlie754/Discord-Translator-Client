@@ -40,9 +40,9 @@ timer only if you turn auto-update on *and* update notifications off — with th
 defaults there is no timer. Nothing else in the table above is contacted unless you do the
 thing listed beside it.
 
-The QuickCSS editor no longer fetches anything **in the desktop app**: Monaco is bundled inside the
-archive, so opening it contacts nothing. Earlier versions loaded it from `cdn.jsdelivr.net`, and the
-browser extension still does — see the browser section below.
+The QuickCSS editor no longer fetches anything: Monaco is bundled inside the archive, so opening it
+contacts nothing. Earlier versions loaded it from `cdn.jsdelivr.net`. The browser extension bundles
+it too, as described in the browser section below.
 
 ## What Enforces That
 
@@ -129,9 +129,12 @@ construction and the `vnd.github+json` header are both absent from the shipped b
 both present in the desktop one, so the removal is real and specific to this build. A single unused
 string constant remains in the bundle with nothing referencing it.
 
-**The QuickCSS editor still loads Monaco from `cdn.jsdelivr.net`.** The desktop build bundles it and
-contacts nothing; the browser build does not, so opening that editor requests the editor from a CDN.
-Nothing about your messages or settings is sent with it. This is a known difference and not yet fixed.
+**The QuickCSS editor no longer contacts a CDN either.** It loads Monaco from inside the extension,
+as the desktop build loads it from inside the archive, so opening that editor requests nothing from
+anyone. This mattered more here than it would elsewhere: because the extension removes Discord's CSP,
+a script fetched from `cdn.jsdelivr.net` would have run in your logged-in Discord tab with nothing
+left to constrain it. The editor and both of its language workers now come from the extension's own
+files.
 
 **Permissions the extension asks for, and why:** `*://*.discord.com/*` to run at all;
 `translate.googleapis.com`, `api-free.deepl.com` and `api.deepl.com` for the translation transport;

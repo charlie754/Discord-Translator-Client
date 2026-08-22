@@ -111,7 +111,60 @@ window.VencordNative = {
             win.getCurrentCss = () => VencordNative.quickCss.get();
             win.getTheme = this.getEditorTheme;
 
+            /*
+             * Load Monaco out of the extension rather than off a CDN.
+             *
+             * This matters more here than it would in most extensions: this one removes
+             * Discord's Content-Security-Policy from every tab, so a script fetched from
+             * cdn.jsdelivr.net would execute in the logged-in discord.com origin with
+             * nothing left to constrain it. One bad publish upstream would be enough.
+             *
+             * The fetch happens HERE, in the opener, not in the popup. The popup is an
+             * about:blank window carrying the discord.com origin, and loading the
+             * extension URL from inside it does not work — an appended <script src> there
+             * produces no error, no request and no execution. The opener is a real
+             * discord.com document, so web_accessible_resources applies to it normally
+             * and it can read the files, then inject them into the popup it owns.
+             *
+             * __monacoLocal is set BEFORE document.write, because the page's bootstrap
+             * reads it while parsing to decide whether to wait for an injection or fall
+             * back to the CDN.
+             */
+            const localMonaco = IS_EXTENSION && !!EXTENSION_BASE_URL;
+            (win as any).__monacoLocal = localMonaco;
+
             win.document.write(monacoHtmlLocal);
+
+            if (!localMonaco) return;
+
+            try {
+                const at = (file: string) => new URL(file, EXTENSION_BASE_URL).toString();
+                const text = (file: string) => fetch(at(file)).then(r => r.text());
+
+                const [css, js, cssWorker, editorWorker] = await Promise.all([
+                    text("vendor/monaco/index.css"),
+                    text("vendor/monaco/index.js"),
+                    text("vendor/monaco/vs/language/css/css.worker.js"),
+                    text("vendor/monaco/vs/editor/editor.worker.js")
+                ]);
+
+                // Workers must be same-origin with the document that starts them, and a
+                // chrome-extension:// URL is not. Blob URLs minted here are.
+                const blob = (code: string) =>
+                    URL.createObjectURL(new Blob([code], { type: "text/javascript" }));
+                (win as any).quickCssWorkerUrls = { css: blob(cssWorker), editor: blob(editorWorker) };
+
+                const style = win.document.createElement("style");
+                style.textContent = css;
+                win.document.head.append(style);
+
+                const script = win.document.createElement("script");
+                script.textContent = js;
+                win.document.head.append(script);
+            } catch (err) {
+                console.error("[Discord Translator] Could not load the bundled QuickCSS editor", err);
+                (win as any).__monacoLocalFailed = true;
+            }
         },
         getEditorTheme: () => {
             const { getTheme, Theme } = require("@utils/discord");
