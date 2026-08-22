@@ -115,8 +115,24 @@ jobs:
 
       # Neither build clears the other's output: build.mjs removes only
       # dist/desktop and dist/equibop, buildWeb.mjs only its own unpacked dirs.
+      # --standalone matters here for the same reason it does for the desktop build.
+      # Without it common.mjs stamps the runner's own platform into the banner
+      # ("Platform: linux" in a cross-platform extension), and IS_STANDALONE stays
+      # false, which leaves the Patch Helper developer tab in the shipped bundle -
+      # a tab that runs Function() on text the user pastes, in a page whose CSP this
+      # extension strips.
       - name: Build browser extension
-        run: npx --yes pnpm@10 buildWeb
+        run: npx --yes pnpm@10 buildWeb --standalone
+
+      # Reads the built bundle's banner, not the flag that was meant to produce it.
+      - name: Verify the extension build is standalone and platform-universal
+        run: |
+          for d in dist/browser/chromium-unpacked dist/browser/firefox-unpacked; do
+            head -c 200 "$d/dist/DiscordTranslator.js"
+            echo
+            head -c 200 "$d/dist/DiscordTranslator.js" | grep -q "Standalone: true"
+            head -c 200 "$d/dist/DiscordTranslator.js" | grep -q "Platform: Universal"
+          done
 
       # Reads the packaged extension, not browser/ — buildExtension() copies an
       # explicit file list, so a source file that was never added to that list is

@@ -17,6 +17,38 @@ const realHttp: HttpTransport = async url => {
 const provider = createGoogleProvider(realHttp);
 
 describe("live gtx endpoint contract", () => {
+    it("translates a message longer than one request URL can carry", async () => {
+        // Discord allows 2000 characters, 4000 with Nitro. The endpoint carries the
+        // text in the query string and gives up around 16 KiB of URL, which CJK
+        // reaches at roughly 1810 characters. Before the chunker this 400ed, was
+        // retried three times, and five such messages latched the circuit breaker for
+        // the rest of the session.
+        const long = "这是一个测试。".repeat(330);
+        expect(long.length).toBeGreaterThan(2000);
+
+        const [r] = await provider.translate([long], "auto", "en");
+
+        expect(r.sourceLang).toBe("zh-CN");
+        expect(r.text.length).toBeGreaterThan(0);
+        // Every chunk came back, so the translation is proportional to the input
+        // rather than a single truncated first piece.
+        expect(r.text.toLowerCase()).toContain("test");
+        expect(r.text.length).toBeGreaterThan(1000);
+    }, 90_000);
+
+    it("keeps mentions intact across a chunk boundary", async () => {
+        const source = Array.from({ length: 200 }, (_, i) =>
+            `这是第${i}句话 <@12345678901234567> 结束。`).join("");
+        const { masked, tokens } = protect(source);
+
+        const [r] = await provider.translate([masked], "auto", "en");
+        const restored = restore(r.text, tokens);
+
+        // A sentinel cut in half restores as mojibake rather than a mention.
+        expect(restored).toContain("<@12345678901234567>");
+        expect(restored).not.toMatch(/|/);
+    }, 90_000);
+
     it("returns the sentences/src/confidence shape we parse", async () => {
         const [r] = await provider.translate(["こんにちは"], "auto", "en");
         expect(r.text.length).toBeGreaterThan(0);

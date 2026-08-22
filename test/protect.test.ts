@@ -82,3 +82,35 @@ describe("protect / restore", () => {
         expect(tokens).toEqual([]);
     });
 });
+
+describe("restore tolerates what the endpoint actually returns", () => {
+    const OPEN = "\uE000";
+    const CLOSE = "\uE001";
+
+    it("restores a token whose closing delimiter came back as the opening one", () => {
+        // Measured against the live gtx endpoint: for Chinese source text it returns
+        // OPEN 0 OPEN instead of OPEN 0 CLOSE. A strict pattern missed it, and every
+        // mention, emoji, code span and URL in a translated Chinese message was left
+        // on screen as raw private-use characters.
+        const mangled = `Hello ${OPEN}0${OPEN} goodbye`;
+        expect(restore(mangled, ["<@123>"])).toBe("Hello <@123> goodbye");
+    });
+
+    it("restores the well-formed case unchanged", () => {
+        expect(restore(`Hello ${OPEN}0${CLOSE} goodbye`, ["<@123>"])).toBe("Hello <@123> goodbye");
+    });
+
+    it("restores a closing-only pair, the mirror of the observed corruption", () => {
+        expect(restore(`Hello ${CLOSE}0${CLOSE} goodbye`, ["<@123>"])).toBe("Hello <@123> goodbye");
+    });
+
+    it("shows the bare index for an unknown token, never a raw delimiter", () => {
+        // The token is unrecoverable, but a private-use character rendered in a
+        // Discord message is worse than a digit: it shows as a blank box.
+        expect(restore(`Hello ${OPEN}9${OPEN} goodbye`, ["<@123>"])).toBe("Hello 9 goodbye");
+    });
+
+    it("sweeps a delimiter left unpaired by the endpoint", () => {
+        expect(restore(`Hello ${OPEN} goodbye`, [])).toBe("Hello  goodbye");
+    });
+});

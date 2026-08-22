@@ -166,6 +166,20 @@ for (const target of TARGETS) {
         pass(`archive matches the built directory (${dirNames.size} files)`);
     }
 
+    // --- developer-only surfaces must not reach users ---
+    // The Patch Helper tab compiles pasted text with Function(). It is gated on
+    // !IS_STANDALONE, so a build that forgets --standalone ships it, and it only
+    // works at all because this extension strips the page CSP.
+    for (const [needle, what] of [
+        ["equicord_patch_helper", "the Patch Helper developer tab"],
+        ["Standalone: false", "a non-standalone build banner"]
+    ]) {
+        if (bundle.includes(needle)) fail(`${what} is in the shipped bundle (found ${JSON.stringify(needle)})`);
+    }
+    if (!bundle.includes("equicord_patch_helper") && !bundle.includes("Standalone: false")) {
+        pass("no developer-only surfaces in the bundle");
+    }
+
     // --- the QuickCSS editor loads Monaco from here, so it must be present ---
     // It was briefly dropped as dead weight, correctly at the time: nothing loaded it
     // and it was 86% of the download. openEditor now fetches it, and a CDN script in a
