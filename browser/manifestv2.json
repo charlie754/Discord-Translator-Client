@@ -62,7 +62,8 @@
             "strict_min_version": "142.0"
         },
         "gecko": {
-            "id": "discord-translator@charlie754.github.io",
+            "_comment_id": "Changed from discord-translator@charlie754.github.io in v0.2.8. AMO permanently blocks the GUID of a deleted add-on to stop someone taking over an id users previously installed, so once that submission was deleted the id could not be reused. Releasing it requires emailing amo-admins@mozilla.org; changing it costs nothing here because the add-on was never published and has no installs. Do not change it again after publication - it is how Firefox recognises an update.",
+            "id": "discord-translator-web@charlie754.github.io",
             "_comment_min_version": "140.0 because data_collection_permissions below is honoured only from Firefox 140 (142 on Android). At 128 the key was silently ignored, so the declaration users saw at install time was whatever Mozilla defaulted to rather than what we declared.",
             "strict_min_version": "140.0",
             "data_collection_permissions": {
