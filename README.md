@@ -96,6 +96,16 @@ The key is yours: this project ships none and shares none. It is stored locally 
 
 Select DeepL without entering a key and the app says so and translates nothing. It will not fail silently.
 
+## Disclosure
+
+Discord Translator shows a banner linking to [Goat Project](https://dagoat.io) in the translator
+panel and in its settings tab. **Goat Project is the author's own project**, so this is
+self-promotion rather than paid advertising.
+
+The banner is a link and some text. It makes no network request, runs no code, mines nothing and
+sends nothing — `dagoat.io` is contacted only if you click it. Nothing about you or your messages
+reaches it either way.
+
 ## Privacy
 
 Message text is sent to a third-party translation service for processing. This includes other people’s messages. See [PRIVACY.md](./PRIVACY.md) for details, including every host contacted and what each one receives.

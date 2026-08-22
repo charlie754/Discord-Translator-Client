@@ -140,6 +140,16 @@ files.
 `translate.googleapis.com`, `api-free.deepl.com` and `api.deepl.com` for the translation transport;
 `raw.githubusercontent.com` because that is where most people host the themes they install.
 
+## The Goat Project Banner
+
+The translator panel and the settings tab show a banner linking to `dagoat.io`, which is the
+author's own separate project. It is static text, an inline SVG and one hyperlink.
+
+**It makes no request of any kind.** No fetch, no image load, no analytics, no tracking parameter on
+the link. `dagoat.io` does not appear in the request log of a full session — the only hosts contacted
+were `discord.com` and your translation provider. Nothing is sent to it unless you click it, and
+clicking it sends only what any link click sends: that you arrived from this app.
+
 ## What is Not Transmitted
 
 No data is sent to Discord Translator's author. No telemetry, no analytics, no

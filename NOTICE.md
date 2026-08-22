@@ -65,6 +65,8 @@ The following further modifications were made on August 22, 2026:
 - Removed the Changelog settings tab from the web build, which reached `api.github.com`
   and made this project's privacy notice inaccurate for the browser extension
 - Added `scripts/checkExtensionPackages.mjs` and wired it into the release workflow
+- Labelled the Goat Project banner with the product it belongs to, and disclosed the
+  promotion in README.md and PRIVACY.md rather than only in this changelog
 
 ### Source Attribution
 
