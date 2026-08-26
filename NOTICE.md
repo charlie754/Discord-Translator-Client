@@ -43,7 +43,16 @@ The following further modifications were made on August 21, 2026:
   (extension background), the relay in `browser/content.js`, and
   `browser/translationBridge.ts` (page world)
 - Carried the main-process hostname allow-list across to both browser transports, matched
-  the same way, and made it additionally re-check the host after a redirect
+  the same way. That change also added a re-check of the host *after* following a redirect;
+  it has since been replaced, because it named a protection it did not provide. All three
+  transports now refuse to follow redirects at all — every request is issued with
+  `redirect: "manual"` and a 3xx answer is rejected without being followed — because by the
+  time a followed redirect can be inspected the request has already been delivered to the
+  new origin: a 307 replays the POST body verbatim, and the free Google endpoint carries the
+  message text in the query string, which the redirecting host is free to repeat in the
+  `Location` it sends. Inspecting where the response came from could only stop the reply
+  reaching the page; it never stopped the exfiltration. That origin check is kept, as a
+  backstop rather than as the control
 - Added `test/allowedHosts.test.ts`, which holds all three copies of that allow-list to the
   same set and exercises each one
 - Declared the translation providers in both manifests, which previously granted no

@@ -393,13 +393,56 @@ select option { background: #1c1a26; color: var(--ink-cream); text-align: center
 
 .gh { margin-bottom: 2px; }
 
+/* ---- Rate-limited escape hatch ----
+
+   Rendered only while the panel is degraded, which is exactly when the user has
+   been told what broke and nothing about what to do. It is deliberately the
+   quietest interactive element in the body: an outline in the same amber the
+   globe already turns at .shell[data-state="degraded"], rather than a third
+   filled colour block competing with Ko-fi's red and the GitHub gradient. The
+   geometry — 100% width, 11px radius, the same fade-and-rise entrance — is
+   borrowed from .kofi so it reads as part of the same set. */
+.escape {
+  all: unset;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 2px 0 8px;
+  padding: 8px 11px;
+  border-radius: 11px;
+  border: 1px solid rgba(224, 162, 60, 0.38);
+  background: rgba(224, 162, 60, 0.09);
+  color: var(--ink-cream);
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity var(--dur-fast) var(--ease), transform var(--dur-base) var(--ease),
+              background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+
+/* First in the body, so it leads the stagger rather than trailing it. */
+.shell:hover .escape { opacity: 1; transform: none; transition-delay: 60ms; }
+.escape:hover { background: rgba(224, 162, 60, 0.16); border-color: rgba(224, 162, 60, 0.62); }
+.shell:hover .escape:hover { transform: scale(1.03); transition-delay: 0s; }
+.shell:hover .escape:active { transform: scale(0.96); transition-delay: 0s; }
+.escape:focus-visible { outline: 2px solid var(--warn); outline-offset: 2px; }
+
+.escape__icon { flex: 0 0 16px; width: 16px; height: 16px; color: var(--warn); }
+.escape__label { display: flex; flex-direction: column; align-items: flex-start;
+  line-height: 1.25; min-width: 0; }
+.escape__title { font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+.escape__sub { font-size: 11px; font-weight: 500; color: var(--ink-muted); white-space: nowrap; }
+
 @media (prefers-reduced-motion: reduce) {
-  .shell, .body, .row, .kofi, .gh, .track, .thumb, .modeswitch__thumb, .modeswitch__ring { transition: none !important; }
+  .shell, .body, .row, .kofi, .gh, .escape, .track, .thumb, .modeswitch__thumb, .modeswitch__ring { transition: none !important; }
   .track:hover, .modeswitch:hover, select:hover,
   .track:active, .modeswitch:active { transform: none !important; }
+  .shell:hover .escape:hover, .shell:hover .escape:active { transform: none !important; }
   .kofi:hover .steam, .kofi:focus-visible .steam, .kofi:hover .cup__body { animation: none !important; }
   .gh__sweep, .gh__bar, .gh__star svg, .gh__glow { animation: none !important; }
   .gh:hover .gh__star, .gh:hover .gh__label { transform: none !important; }
-  .shell:hover .row, .shell:hover .kofi, .shell:hover .gh { opacity: 1; }
+  .shell:hover .row, .shell:hover .kofi, .shell:hover .gh, .shell:hover .escape { opacity: 1; }
 }
 ` + GOAT_BANNER_CSS;

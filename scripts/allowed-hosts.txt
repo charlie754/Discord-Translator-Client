@@ -44,6 +44,15 @@ i.pinimg.com
 jsdelivr.net
 raw.githubusercontent.com
 translate.googleapis.com
+# The paid Google Cloud Translation v2 API, reached only by
+# src/plugins/channelTranslator/core/providers/googleCloud.ts. A DIFFERENT HOST from
+# translate.googleapis.com above - note "translation", not "translate" - and it is not a
+# subdomain relationship either, so the exact-match guards need it listed separately or the
+# provider is simply blocked. Not contacted with the shipped defaults: the provider setting is
+# "google", and the registry refuses to construct this provider at all until the user pastes a
+# Google Cloud key of their own (resolveProvider() in core/providers/registry.ts). Added after
+# the enumeration stamped in the header above, so that run's count predates this line.
+translation.googleapis.com
 codeberg.page
 # The two DeepL API hosts, reached only by
 # src/plugins/channelTranslator/core/providers/deepl.ts. Neither is contacted with the
@@ -56,6 +65,54 @@ codeberg.page
 # not the other is either a dead provider or an undeclared third party.
 api-free.deepl.com
 api.deepl.com
+# Google Apps Script, reached only by
+# src/plugins/channelTranslator/core/providers/appsScript.ts. NOT a third party in the sense the
+# four hosts above are: what is contacted is a Web App the USER deployed into their OWN Google
+# account, at a URL only they hold, running a script they pasted. There is no API key and no
+# billing - Apps Script has none - so the ceiling (about 5,000 calls a day on a consumer account)
+# refuses rather than charges. Not contacted with the shipped defaults: the provider setting is
+# "google", and the registry refuses to construct this provider at all until the user pastes their
+# own deployment URL (resolveProvider() in core/providers/registry.ts).
+#
+# What this line grants that the DeepL lines do not: script.google.com hosts EVERY Apps Script
+# deployment on the internet, so an exact-host match cannot distinguish the user's own proxy from
+# anyone else's. The path is what does that, and the path is not enforced here - it is enforced by
+# checkDeploymentUrl() in appsScript.ts, which accepts only /macros/s/<id>/exec (or the Workspace
+# /a/macros/<domain>/s/<id>/exec) and REBUILDS the URL from the parsed host and path, dropping any
+# query, fragment or embedded credentials the paste carried. Added after the enumeration stamped in
+# the header above, so that run's count predates this line.
+#
+# Also in the ALLOWED_HOSTS set of all three transports (native.ts, browser/translationHost.js,
+# browser/translationBridge.ts) and in the host permissions of both browser manifests; a host
+# declared in one place and not the other is either a dead provider or an undeclared third party.
+# It was a dead provider until this line existed: apps-script shipped selectable and unreachable.
+script.google.com
+# Where Apps Script SERVES THE RESULT of a Web App call, and the only reason this line exists.
+#
+# A POST to https://script.google.com/macros/s/<id>/exec does not answer with the translation. It
+# answers 302, and the JSON is served from this host - measured against a live deployment: with
+# redirect following on, the request lands on script.googleusercontent.com and returns
+# {"translations":[...]}; with redirect: "manual" the same call returns 302 and nothing else. So
+# script.google.com alone is a provider that cannot complete a single request.
+#
+# It is only ever reached as the TARGET OF THAT 302 from script.google.com. Nothing in the plugin
+# builds a URL on this host: checkDeploymentUrl() in core/providers/appsScript.ts accepts only a
+# script.google.com deployment URL, so the sole way a request arrives here is the redirect branch
+# in the three transports - which reads the Location, puts it through the same checkUrl() the
+# original URL went through, and reissues ONE bodiless GET. A 307 or 308 is still refused outright,
+# because those replay the POST body and this host would then receive the user's message text.
+#
+# What the line grants that script.google.com does not: this host serves USER CONTENT for every
+# Apps Script deployment on the internet, on a sandbox domain shared with other Google user
+# content. As with script.google.com the exact-host match cannot distinguish the user's own
+# deployment from anyone else's, and here not even the path helps - the /macros/echo path carries
+# an opaque user_content_key. What limits the exposure is that the response is only ever read
+# after a 302 from an allow-listed host, and that nothing is ever POSTed here.
+#
+# Also in the ALLOWED_HOSTS set of all three transports and in the host permissions of both
+# browser manifests. Added after the enumeration stamped in the header above, so that run's count
+# predates this line.
+script.googleusercontent.com
 
 # --- Link targets shown to the user; navigated only on an explicit click ---
 betterdiscord.app
@@ -86,8 +143,20 @@ www.apache.org
 www.gnu.org
 www.w3.org
 
-# --- Documentation placeholder ---
+# --- Documentation placeholders. NOTHING CONTACTS THESE. ---
+# example.com arrived with upstream. example.net and example.org appeared when the
+# setup-guide link gained a guard: settings.ts keeps RFC 2606's reserved
+# documentation domains in a REJECT list, so a placeholder left in the
+# HOSTED_GUIDE_URL constant refuses to open rather than shipping a dead button.
+#
+# They are declared here because they appear as string literals in the built
+# bundle, NOT because anything may be pointed at them. That inversion is the part
+# worth noticing: the only reason these names exist in our code is to be refused,
+# and a scanner reading the built artifact cannot tell a denylist from a
+# destination. If that guard is ever removed, remove these three lines with it.
 example.com
+example.net
+example.org
 
 # --- NOT hosts. These share the hostname shape but are filenames, contributor
 # handles, settings keys and Symbol.for() ids. Listed rather than filtered out

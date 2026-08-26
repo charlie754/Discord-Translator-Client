@@ -15,8 +15,11 @@
     "host_permissions": [
         "*://*.discord.com/*",
         "https://translate.googleapis.com/*",
+        "https://translation.googleapis.com/*",
         "https://api-free.deepl.com/*",
         "https://api.deepl.com/*",
+        "https://script.google.com/*",
+        "https://script.googleusercontent.com/*",
         "https://raw.githubusercontent.com/*"
     ],
     "permissions": [
@@ -50,7 +53,8 @@
         {
             "resources": [
                 "dist/*",
-                "vendor/*"
+                "vendor/*",
+                "guide.html"
             ],
             "matches": [
                 "*://*.discord.com/*"

@@ -13,6 +13,7 @@ import { PANEL_CSS } from "./styles";
 const HOST_ID = "channel-translator-host";
 let root: any = null;
 let reposition: (() => void) | null = null;
+let visibilityTimer: ReturnType<typeof setInterval> | null = null;
 let chatObserver: ResizeObserver | null = null;
 let ariaObserver: MutationObserver | null = null;
 let observedAnchor: Element | null = null;
@@ -47,13 +48,27 @@ export function mountPanel(): void {
     // name, because it is semantically correct and Discord's generated class
     // names churn between builds.
     const applyLayerVisibility = () => {
-        // Nearest ancestor of the anchor that carries the attribute at all;
-        // closest() includes the anchor itself, which is correct.
-        const layer = observedAnchor?.closest("[aria-hidden]");
-        // Fail toward SHOWING. No anchor (settings opened before any channel was
-        // ever rendered), or no ancestor carrying the attribute, must not hide
-        // the panel — a wrong guess in that direction hides it permanently,
-        // because nothing would be left to observe that could bring it back.
+        // Rule one, and the reason this was reported twice: if the chat area is
+        // not in the document there is nothing for the panel to sit on, so hide.
+        // Opening Discord's settings replaces the message column, which leaves
+        // observedAnchor detached — and a detached node has no ancestor that
+        // will ever gain aria-hidden, so rule two below can never fire for it.
+        //
+        // The previous version failed toward SHOWING here, reasoning that a
+        // wrong guess would hide the panel permanently because nothing was left
+        // to bring it back. That reasoning was sound and the conclusion was
+        // still wrong: the case it protected against is exactly the settings
+        // screen, so the panel sat on top of it. What makes the safer rule safe
+        // is the interval below, which keeps re-checking and shows the panel
+        // again the moment a chat area exists.
+        if (!observedAnchor?.isConnected) {
+            host.style.display = "none";
+            return;
+        }
+
+        // Rule two: the chat is present but a layer above it has been marked
+        // aria-hidden. closest() includes the anchor itself, which is correct.
+        const layer = observedAnchor.closest("[aria-hidden]");
         const hidden = layer?.getAttribute("aria-hidden") === "true";
         host.style.display = hidden ? "none" : "";
     };
@@ -74,7 +89,14 @@ export function mountPanel(): void {
         // observer bound at mount time silently stops firing. Re-bind whenever
         // the node identity changes; comparing identity keeps this from
         // looping when the observer's own callback lands here.
-        if (chat && chat !== observedAnchor) {
+        // No chat area anywhere in the document: settings, a full-screen modal,
+        // or a still-loading client. Hide and stop measuring against nothing.
+        if (!chat) {
+            host.style.display = "none";
+            return;
+        }
+
+        if (chat !== observedAnchor) {
             chatObserver?.disconnect();
             observedAnchor = chat;
             chatObserver = new ResizeObserver(() => reposition?.());
@@ -131,10 +153,20 @@ export function mountPanel(): void {
     requestAnimationFrame(reposition);
     setTimeout(reposition, 500);
     window.addEventListener("resize", reposition);
+
+    // Every other trigger here is bound to a node Discord may replace: the
+    // ResizeObserver dies with the message column, and the MutationObserver
+    // watches an ancestor chain that goes with it. When the settings screen
+    // opens, both go quiet and nothing re-evaluates. This is the one trigger
+    // that survives that, and it is what lets the visibility rule above hide by
+    // default without the panel getting stuck hidden.
+    visibilityTimer = setInterval(() => reposition?.(), 500);
 }
 
 export function unmountPanel(): void {
     if (reposition) window.removeEventListener("resize", reposition);
+    if (visibilityTimer !== null) clearInterval(visibilityTimer);
+    visibilityTimer = null;
     reposition = null;
     chatObserver?.disconnect();
     chatObserver = null;

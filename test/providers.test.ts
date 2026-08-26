@@ -8,6 +8,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createGoogleProvider } from "../src/plugins/channelTranslator/core/providers/google";
 import { registry } from "../src/plugins/channelTranslator/core/providers/registry";
 import type { HttpTransport } from "../src/plugins/channelTranslator/core/providers/types";
+import { isPermanent, Scheduler } from "../src/plugins/channelTranslator/core/scheduler";
 
 /** Shape observed from the live gtx endpoint with dj=1. */
 const okBody = JSON.stringify({
@@ -76,6 +77,74 @@ describe("google provider", () => {
         });
         const [r] = await createGoogleProvider(http).translate(["x"], "auto", "en");
         expect(r.confidence).toBe(0);
+    });
+});
+
+/*
+ * The same classification as googleCloud.ts, and deliberately so. This endpoint
+ * is free, so a retried malformed 200 costs no money — but it still costs four
+ * requests, three backoff sleeps and four breaker strikes for a deterministic
+ * answer that will be exactly as unparseable the fourth time. Keeping the two
+ * providers the same shape means a reader comparing them does not have to work
+ * out whether the difference was meaningful.
+ */
+describe("google provider — a malformed 200 is not retried", () => {
+    const noSleep = () => Promise.resolve();
+    const schedOpts = {
+        concurrency: 2, maxRetries: 3, baseDelayMs: 1,
+        breakerThreshold: 3, sleep: noSleep
+    };
+
+    const noSentences: HttpTransport = async () => ({ status: 200, body: JSON.stringify({ src: "ja" }) });
+
+    it("marks a 200 with no sentences array permanent", async () => {
+        const err = await createGoogleProvider(noSentences).translate(["x"], "auto", "en").catch(e => e);
+        expect(err.message).toContain("no sentences array");
+        expect(isPermanent(err)).toBe(true);
+    });
+
+    it("marks a 200 whose body is not JSON permanent, with our own wording", async () => {
+        const http: HttpTransport = async () => ({ status: 200, body: "<html>nope" });
+        const err = await createGoogleProvider(http).translate(["x"], "auto", "en").catch(e => e);
+
+        expect(isPermanent(err)).toBe(true);
+        expect(err.message).toContain("google:");
+        // Not the raw SyntaxError, and not the body quoted back.
+        expect(err.message).not.toContain("<html>");
+    });
+
+    it("sends ONE request under the real scheduler, not four", async () => {
+        const http = vi.fn(noSentences);
+        const s = new Scheduler(schedOpts);
+        const provider = createGoogleProvider(http);
+
+        await s.run(() => provider.translate(["x"], "auto", "en")).catch(() => undefined);
+        expect(http).toHaveBeenCalledTimes(1);
+    });
+
+    it("sends FOUR for an unmarked transient failure (positive control)", async () => {
+        const http = vi.fn(async () => ({ status: 500, body: "" }));
+        const s = new Scheduler({ ...schedOpts, breakerThreshold: 99 });
+        const provider = createGoogleProvider(http);
+
+        await s.run(() => provider.translate(["x"], "auto", "en")).catch(() => undefined);
+        expect(http).toHaveBeenCalledTimes(4);
+    });
+
+    it("does not open the breaker on a run of malformed replies", async () => {
+        const s = new Scheduler({ ...schedOpts, maxRetries: 0, breakerThreshold: 3 });
+        const provider = createGoogleProvider(noSentences);
+
+        for (let i = 0; i < 6; i++) {
+            await s.run(() => provider.translate(["x"], "auto", "en")).catch(() => undefined);
+        }
+        expect(s.state).toBe("closed");
+    });
+
+    it("leaves a 429 retryable — the marker did not leak onto status errors", async () => {
+        const http: HttpTransport = async () => ({ status: 429, body: "", retryAfterMs: 5 });
+        const err = await createGoogleProvider(http).translate(["x"], "auto", "en").catch(e => e);
+        expect(isPermanent(err)).toBe(false);
     });
 });
 

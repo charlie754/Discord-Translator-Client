@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { permanentError } from "../scheduler";
 import type { TranslateResult } from "../types";
 import type { HttpTransport, TranslationProvider } from "./types";
 
@@ -134,13 +135,28 @@ export function createGoogleProvider(http: HttpTransport): TranslationProvider {
                     });
                 }
 
-                const parsed = JSON.parse(res.body) as {
+                // Permanent for the same reason as googleCloud.ts, minus the bill.
+                // This endpoint is free, so a retried malformed 200 costs the user
+                // nothing — but it still costs four requests, three backoff sleeps
+                // and four breaker strikes for an answer that is deterministic and
+                // will be exactly as unparseable the fourth time. The two providers
+                // are kept the same shape deliberately: a reader comparing them
+                // should not have to work out whether the difference is meaningful.
+                let parsed: {
                     sentences?: Array<{ trans?: string }>;
                     src?: string;
                     confidence?: number;
                 };
+                try {
+                    parsed = JSON.parse(res.body);
+                } catch {
+                    // The body is not quoted: it is unparsed third-party text of
+                    // unknown length and this message reaches the user.
+                    throw permanentError("google: HTTP 200 whose body was not JSON");
+                }
+
                 if (!Array.isArray(parsed.sentences)) {
-                    throw new Error("google: response had no sentences array");
+                    throw permanentError("google: response had no sentences array");
                 }
 
                 pieces.push(parsed.sentences.map(s => s.trans ?? "").join(""));

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { permanentError } from "../scheduler";
 import type { TranslateResult } from "../types";
 import type { HttpTransport, ProviderConfig, TranslationProvider } from "./types";
 
@@ -88,8 +89,14 @@ export function createDeeplProvider(http: HttpTransport, config: ProviderConfig 
         needsKey: true,
 
         async translate(texts: string[], from: string, to: string): Promise<TranslateResult[]> {
+            // Permanent for the same reason as googleCloud.ts: no amount of
+            // retrying conjures a key, and four attempts at a request that was
+            // never sent still counted four times toward opening the breaker,
+            // taking down whichever provider the user switched to next.
             if (!apiKey) {
-                throw new Error("deepl: no API key configured — set your DeepL key in the plugin settings");
+                throw permanentError(
+                    "deepl: no API key configured — set your DeepL key in the plugin settings"
+                );
             }
 
             const endpoint = endpointForKey(apiKey);
@@ -113,11 +120,38 @@ export function createDeeplProvider(http: HttpTransport, config: ProviderConfig 
                     );
                 }
 
-                const parsed = JSON.parse(res.body) as {
+                // BOTH failures below are marked permanent, and on this provider —
+                // as on googleCloud.ts — that is a money question rather than a
+                // tidiness one.
+                //
+                // The HTTP request has already returned 200. DeepL counts the
+                // characters in the request, not the usefulness of the answer, so
+                // the charge against a Pro key (or against a Free key's monthly
+                // allowance) is incurred the moment the response arrives, whether
+                // or not we can parse it. A status-less plain Error is classed
+                // transient by isPermanent(), so the scheduler used to send the
+                // identical text to the identical deterministic endpoint up to four
+                // times, pay four times, and discard all four replies. Then it
+                // counted every one of them as a breaker failure.
+                //
+                // Nothing about a malformed 200 improves on the second attempt.
+                let parsed: {
                     translations?: Array<{ text?: string; detected_source_language?: string; }>;
                 };
+                try {
+                    parsed = JSON.parse(res.body);
+                } catch {
+                    // The body is quoted nowhere: it is unparsed third-party text
+                    // of unknown length, and this message is shown to the user.
+                    throw permanentError(
+                        "deepl: HTTP 200 whose body was not JSON — the characters were " +
+                        "already counted against your DeepL quota but the reply cannot be " +
+                        "read, so it is not retried"
+                    );
+                }
+
                 if (!Array.isArray(parsed.translations) || parsed.translations.length === 0) {
-                    throw new Error("deepl: response had no translations array");
+                    throw permanentError("deepl: response had no translations array");
                 }
 
                 const [first] = parsed.translations;

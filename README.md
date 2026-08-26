@@ -11,6 +11,7 @@ A Discord client mod that translates a whole channel, including scrollback, into
 - **Selection translation**: double-click a word or triple-click a sentence to translate a selection; shows the original when already translated
 - **Floating panel** at the top-right of the chat area
 - **15 target languages** supported
+- **Spend meter and optional monthly character cap** for the paid providers — the cap is off by default
 
 ## Install
 
@@ -96,15 +97,36 @@ The key is yours: this project ships none and shares none. It is stored locally 
 
 Select DeepL without entering a key and the app says so and translates nothing. It will not fail silently.
 
+**Google Cloud Translation is the third option**, and it is the official, quota-backed Google endpoint rather than the unofficial one above. It needs a Google Cloud account with **billing enabled** — required even to use the allowance, so a card has to be on file either way — and it charges **USD 20 per million characters**. It also sends your messages to `translation.googleapis.com`, which is a different host from the free endpoint above.
+
+**There is no free tier here, and calling it one sets the wrong expectation.** What Google gives is a **monthly credit of up to USD 10**, which covers roughly the first 500,000 characters at that price. It is shared with Cloud Translation - Advanced, it does not roll over, and it is not a stop: cross it and the next character is simply billed to your card.
+
+Setting it up is longer than pasting a DeepL key, so it has its own guide: [GOOGLE_CLOUD_SETUP.md](./GOOGLE_CLOUD_SETUP.md), which covers the project, the API, the key, and the restrictions and quota cap that keep a leaked key from running up a bill. **Read its first section before you start.** An alerts-only Cloud Billing budget — the kind you will be offered — does not cap spending, and a new project has no daily character limit at all. The guide gives the real worst-case number, the one control that actually stops a request, and what Google's newer *spend cap* budget does and does not cover.
+
+As with DeepL: **paste the key first, then switch the provider.** Selecting a key-requiring provider before its key is in place makes the plugin refuse to translate and say so — correctly, but on a configuration you were halfway through.
+
+### Watching what a paid provider costs
+
+If you use Google Cloud Translation or DeepL, the plugin’s own settings screen carries two things, directly under the API key field:
+
+- **A spend meter** showing how many characters have gone to each paid provider this month, with a dollar estimate for Google Cloud. It is an **estimate** and cannot match Google’s invoice: it counts only what this plugin sent, so anything else on the same billing account spending the same credit is invisible to it.
+- **A monthly character cap**, which is **switched off by default** (`monthlyCharacterCap` ships as `0`). Set a number and the plugin refuses to send a message once that month’s total would cross it. It guards against your own heavy month; it **cannot** stop a leaked key, because a leaked key is spent from somebody else’s machine. Only the Google-side quota can do that.
+
+The free **Google (free)** provider is not metered, because nothing bills it. Both controls are documented in [GOOGLE_CLOUD_SETUP.md](./GOOGLE_CLOUD_SETUP.md), and what the meter stores locally is in [PRIVACY.md](./PRIVACY.md).
+
 ## Disclosure
 
-Discord Translator shows a banner linking to [Goat Project](https://dagoat.io) in the translator
-panel and in its settings tab. **Goat Project is the author's own project**, so this is
-self-promotion rather than paid advertising.
+The translator panel carries three outbound destinations, and all three are the author's:
 
-The banner is a link and some text. It makes no network request, runs no code, mines nothing and
-sends nothing — `dagoat.io` is contacted only if you click it. Nothing about you or your messages
-reaches it either way.
+- A **banner linking to [Goat Project](https://dagoat.io)**, also shown in the settings tab.
+  **Goat Project is the author's own project**, so this is self-promotion rather than paid
+  advertising.
+- A **Ko-fi donation button** linking to the author's page at `ko-fi.com`.
+- A **Star Project on Github** button linking to this repository.
+
+Each is a link, an inline SVG and some text. **None of them makes a network request**, runs code,
+mines anything or sends anything — those hosts are contacted only if you click. Nothing about you or
+your messages reaches any of them either way. [PRIVACY.md](./PRIVACY.md) lists all three.
 
 ## Privacy
 

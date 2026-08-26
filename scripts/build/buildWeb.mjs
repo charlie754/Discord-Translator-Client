@@ -150,13 +150,120 @@ async function loadDir(dir, basePath = "") {
     );
 }
 
+/*
+ * The setup guide, shipped INSIDE the extension rather than fetched from a site.
+ *
+ * The guide is what turns "paste a deployment URL here" into something a
+ * non-developer can actually do, so it is the last thing that should depend on a
+ * domain still being paid for. site/free/index.html is one self-contained file —
+ * its images are already inlined as data URIs — so packaging it is a copy rather
+ * than a tree walk, and it has no sibling that can be left behind.
+ *
+ * GUIDE_PACKAGED_NAME is a contract with two other files and must not drift from
+ * either:
+ *   - src/plugins/channelTranslator/settings.ts opens
+ *     `new URL("guide.html", EXTENSION_BASE_URL)` when its button is clicked
+ *   - scripts/checkExtensionPackages.mjs fails a package that does not carry it
+ *
+ * THE GUIDE IS OPTIONAL AT BUILD TIME, AND THAT IS A CORRECTION, NOT A
+ * RELAXATION. This step used to throw when GUIDE_SOURCE could not be read, on the
+ * reasoning that a complete-looking extension with a 404 guide button is worse
+ * than a loud failure. The reasoning was sound and the premise was false: site/
+ * is NOT TRACKED — `git ls-files site` returns nothing — so no CI checkout has
+ * ever had it, and `pnpm buildWeb --standalone` threw before it built anything at
+ * all. A guard on a nice-to-have was taking the whole extension down.
+ *
+ * So an ABSENT source is a loud warning and the build continues without the
+ * guide; a PRESENT BUT UNDERSIZED source is still a hard failure, because that is
+ * a truncated or stubbed write rather than a machine that simply does not carry
+ * the file. Absence and corruption are different findings and get different
+ * answers.
+ *
+ * Downstream, scripts/checkExtensionPackages.mjs makes its guide assertions
+ * conditional on guide.html being packaged at all — but keeps every one of them
+ * when it IS packaged, including the byte-identity and size-floor checks. A
+ * package built without the guide is not reported as a failure; a package that
+ * carries a broken one still is.
+ */
+const GUIDE_SOURCE = "site/free/index.html";
+const GUIDE_PACKAGED_NAME = "guide.html";
+/**
+ * A floor, not a target. The real file is ~338 KB; this only has to be high
+ * enough that a truncated write, an empty placeholder or a stub committed by
+ * accident cannot pass for the guide. checkExtensionPackages.mjs applies the
+ * same floor to the PACKAGED copy, which is the one users get.
+ */
+const GUIDE_MIN_BYTES = 50_000;
+
+/**
+ * Read the guide, or null if this machine does not carry it.
+ *
+ * @type {() => Promise<Buffer | null>}
+ */
+async function loadGuide() {
+    let content;
+    try {
+        content = await readFile(GUIDE_SOURCE);
+    } catch (err) {
+        const why = err instanceof Error ? err.message : String(err);
+        // Loud on stderr and unmissable in a build log. Silence here would be the
+        // defect this replaced, wearing the opposite coat: an extension that is
+        // quietly one file short and nothing anywhere saying which file.
+        console.warn(
+            "\n!!!! ------------------------------------------------------------------------\n" +
+            `!!!! SETUP GUIDE NOT PACKAGED: ${GUIDE_SOURCE} could not be read (${why}).\n` +
+            `!!!! The extension is being built WITHOUT ${GUIDE_PACKAGED_NAME}. It will install,\n` +
+            "!!!! run and translate; the plugin's \"Open the setup guide\" button will not open\n" +
+            "!!!! anything. site/ is not tracked in git, so this is expected on any machine\n" +
+            "!!!! that did not author it — including CI. Restore the file to ship the guide.\n" +
+            "!!!! ------------------------------------------------------------------------\n"
+        );
+        return null;
+    }
+
+    if (content.length < GUIDE_MIN_BYTES) {
+        // Still a hard failure. A file that is PRESENT and too small is a truncated
+        // write or a stub, which is a corrupt input rather than a missing optional
+        // one, and shipping it would put a broken 0-byte page behind the button.
+        throw new Error(
+            `Refusing to package ${GUIDE_SOURCE}: ${content.length} bytes is below the ` +
+            `${GUIDE_MIN_BYTES}-byte floor. The guide is a single self-contained page of ` +
+            "roughly 338 KB with its images inlined, so something this small is a stub or a " +
+            "truncated write rather than the guide. Delete the file to build without the " +
+            "guide; do not ship a truncated one."
+        );
+    }
+
+    return content;
+}
+
+/**
+ * loadGuide(), memoised and lazy.
+ *
+ * Lazy for the reason the old call site gave: buildExtension() is the only thing
+ * that packages anything, so reading at module scope would make `--skip-extension`
+ * touch a file it was never going to use. Memoised because buildExtension() runs
+ * once per target, and a machine without site/ should say so once rather than
+ * once per package.
+ *
+ * @type {Promise<Buffer | null> | undefined}
+ */
+let guideOnce;
+const getGuide = () => (guideOnce ??= loadGuide());
+
 /**
   * @type {(target: string, files: string[]) => Promise<void>}
  */
 async function buildExtension(target, files) {
+    // Spread-or-nothing rather than a key holding null: writeFile(dest, null)
+    // throws, and an entries object carrying a null would turn "this machine has
+    // no guide" back into the hard build failure this stopped being.
+    const guide = await getGuide();
+
     const entries = {
         "dist/DiscordTranslator.js": await readFile("dist/browser/extension.js"),
         "dist/DiscordTranslator.css": await readFile("dist/browser/extension.css"),
+        ...(guide === null ? {} : { [GUIDE_PACKAGED_NAME]: guide }),
         // The QuickCSS editor loads Monaco from here rather than from cdn.jsdelivr.net.
         // That matters more for this extension than for most: it strips Discord's CSP,
         // so a CDN script would run in the logged-in discord.com origin with nothing
