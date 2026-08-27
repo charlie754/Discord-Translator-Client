@@ -8,39 +8,35 @@ the same translator but sits in a different place, and the differences are set o
 
 When you enable channel translation, the text of messages is sent to the translation service you have selected, via the app's Electron main process. This transmission is necessary for translation to occur.
 
-The default is Google's public translate endpoint, and with the shipped settings it is the only one used. There are two alternatives, and **neither is contacted unless you both change the provider setting and supply an API key of your own.** This app ships no key for either, shares none, and refuses to select a provider until you have entered its key.
+The default is Google's public translate endpoint, and with the shipped settings it is the only one used. There is exactly one alternative, and **it is not contacted unless you both change the provider setting and paste a deployment URL of your own.**
 
-- **DeepL**, reached at `api-free.deepl.com` or `api.deepl.com` depending on your key.
-- **Google Cloud Translation**, reached at **`translation.googleapis.com`**. That is a *different host* from the default provider's `translate.googleapis.com`, three letters apart and not the same service: the default is Google's unofficial free endpoint, this one is the paid Cloud Translation v2 API, billed to a Google Cloud project of your own. Setting it up is described in [GOOGLE_CLOUD_SETUP.md](./GOOGLE_CLOUD_SETUP.md).
+- **Apps Script**, a small proxy **you** deploy into **your own** Google account. The request goes to `script.google.com`, and Google serves the reply from `script.googleusercontent.com`. There is no API key: the deployment URL is the only thing you configure, it is stored locally with the rest of your plugin settings, and it is sent only to Google in order to reach the deployment it names.
 
-Whichever you choose, your key is stored locally with the rest of your plugin settings and is sent only to that provider.
+**Both providers are free, and neither can bill you.** The paid providers this app used to offer — Google Cloud Translation v2 and DeepL — were removed outright, along with their API-key settings, the spend meter and the monthly character cap. There is no longer any setting that takes a paid credential, and no host in the allow-list that charges for a request.
 
 **This includes messages from other users who did not consent to translation.** You are responsible for ensuring that translating messages in a server complies with that server's policies and applicable laws.
 
 ## Local Storage
 
-Three things are kept locally in the app's settings directory, and nothing about any of them is sent
+Two things are kept locally in the app's settings directory, and nothing about either of them is sent
 to the app's author:
 
-- **Your plugin settings**, including any API key you configure.
+- **Your plugin settings**, including the Apps Script deployment URL if you configure one. No API
+  key, because neither surviving provider takes one.
 - **The translation cache** — message text alongside its translation, keyed by a hash of the text
   and the target language. It is what stops the app re-sending something it has already translated.
-- **A per-month character count for the paid providers**, stored under `usageBlob`. This is what the
-  spend meter on the plugin's settings screen displays. **It carries no message text of any kind**:
-  it holds a month string such as `2026-08`, the provider ids `google-cloud` and `deepl`, and one
-  integer for each — the number of characters sent to that provider this month. Nothing identifies a
-  message, a channel or a person. It is replaced when the month rolls over, and the panel's reset
-  button clears it. The default `google` provider is never counted, because it is not billed.
-  See [GOOGLE_CLOUD_SETUP.md](./GOOGLE_CLOUD_SETUP.md) for what the meter does and does not measure.
+
+There used to be a third: a per-month character count under `usageBlob`, which fed a spend meter for
+the paid providers. **Both paid providers are gone, so that meter and the monthly character cap are
+gone with them** — nothing counts characters any more, because nothing is billed.
 
 ## Every Server This App Contacts
 
 | Host | When | What it receives |
 |---|---|---|
 | `translate.googleapis.com` | the default provider: you enable translation, or double/triple-click text | the message text being translated, and the language pair |
-| `api-free.deepl.com` | **only if** you set the provider to DeepL and configure a free DeepL key (free keys end in `:fx`) | the message text being translated, the language pair, and your own DeepL API key |
-| `api.deepl.com` | **only if** you set the provider to DeepL and configure a paid DeepL key | the message text being translated, the language pair, and your own DeepL API key |
-| `translation.googleapis.com` | **only if** you set the provider to Google Cloud Translation and configure a Google Cloud API key | the message text being translated, the language pair, and your own Google Cloud API key |
+| `script.google.com` | **only if** you set the provider to Apps Script and paste your own deployment URL | the message text being translated, the language pair, and the deployment URL itself — which is what identifies your proxy |
+| `script.googleusercontent.com` | as the redirect target of the above, on every Apps Script call — Google serves the reply from here | nothing is posted here: after the redirect the app reissues **one bodiless GET**, so this host returns the translated text rather than receiving your message |
 | `api.github.com` | at startup, and on any later update check | a request for this project's latest release; no account, no identifiers |
 | `clients2.google.com` | only if you turn on **Enable React DevTools** | your IP, to download that extension |
 | `discord.com` | continuously — it is Discord, and in the browser build it is the page the extension runs on | whatever you send Discord by using Discord. Nothing this app adds |
@@ -54,16 +50,20 @@ host the themes they install. A permission is what the extension *may* reach, no
 reach — nothing there is contacted unless a theme you chose points at it. The other theme hosts are
 listed in full under [What Enforces That](#what-enforces-that).
 
-**There are four translation hosts in that table, and the two `googleapis.com` rows are not the
-same service.** `translate.googleapis.com` is Google's unofficial free endpoint and is the shipped
-default; `translation.googleapis.com` is the paid Cloud Translation v2 API and is reached only if
-you configure a key for it. The names differ by three letters and nothing else, which is exactly
-why they are listed separately everywhere in this project rather than folded into one entry.
+**There are three translation hosts in that table, and they belong to two providers.**
+`translate.googleapis.com` is Google's unofficial free endpoint and is the shipped default. The two
+`script.google*` hosts are one provider between them: the POST goes to `script.google.com` and
+Google answers it with a redirect to `script.googleusercontent.com`, which is where the JSON is
+actually served. A deployment cannot complete a single call without both.
 
-**Message text goes to exactly one of the four, and with the shipped settings that one is
-`translate.googleapis.com`.** The other three are mutually exclusive with it and with each other,
-and reaching any of them requires you to change the provider setting *and* enter your own key.
-Nothing else on the list ever receives message content.
+**Message text goes to one provider at a time, and with the shipped settings that provider is
+`translate.googleapis.com`.** Apps Script is mutually exclusive with it, and reaching it requires
+you to change the provider setting *and* paste your own deployment URL. Nothing else on the list
+ever receives message content.
+
+**Both are free. Neither takes an API key and neither can be billed** — the paid Cloud Translation
+v2 and DeepL endpoints that used to appear in this table were removed from the code, from both
+browser manifests and from the host allow-list, so no build can reach them.
 
 **This app makes one request of its own at startup**, and it is the update check — Discord's own
 traffic to `discord.com` is not this app's and is not changed by it. `src/Vencord.ts` calls
@@ -87,20 +87,19 @@ The translation transport runs in the Electron **main process**, where the rende
 Content Security Policy does not apply. It is guarded instead by an explicit hostname
 allow-list checked before the request leaves
 (`src/plugins/channelTranslator/native.ts`): non-HTTPS URLs, and any host other than the
-four translation endpoints in the table above, are refused. The match is on the full
-hostname with `===`, not a suffix or a wildcard, so `evil-deepl.com` is refused exactly as
+three translation endpoints in the table above, are refused. The match is on the full
+hostname with `===`, not a suffix or a wildcard, so `evil-googleapis.com` is refused exactly as
 `localhost` is — and so is `translations.googleapis.com`, which is a near-miss on a real
 entry rather than an obviously hostile name. **That check — not the CSP — is what constrains
-where your message text can go.** Adding DeepL added two entries to that set and nothing to
-the CSP; adding Google Cloud Translation added a fourth entry and, again, nothing to the CSP,
-because the translation transport never runs in the renderer.
+where your message text can go.** Removing the two paid providers removed three entries from
+that set and nothing from the CSP, because the translation transport never runs in the
+renderer — the same reason adding them had added nothing to it.
 
 The CSP allow-list is a separate thing, and it covers only requests **originating in the
-renderer**. It holds 22 entries, unchanged by the DeepL provider and unchanged by the Google
-Cloud Translation provider: `translation.googleapis.com` was deliberately **not** added to it,
-because a CSP entry would buy that provider nothing on the desktop and would grant any renderer
-code a standing permission to reach that host. The reasoning is recorded beside the omission in
-`src/main/csp/index.ts`. Two of the 22 are in the table above
+renderer**. It holds 22 entries, and neither Apps Script host is among them: a CSP entry would
+buy that provider nothing on the desktop and would grant any renderer code a standing permission
+to reach a host that serves every Apps Script deployment on the internet. The reasoning is
+recorded beside the omission in `src/main/csp/index.ts`. Two of the 22 are in the table above
 (`api.github.com`, `translate.googleapis.com`); four are loopback addresses for local
 development; two are
 Discord's own CDNs. The remaining fourteen exist so that **themes you choose to install**
@@ -131,18 +130,27 @@ been removed from this fork.**
 The Chrome, Edge and Firefox extension runs the same translator from the same source, but the
 surroundings differ from the desktop app in ways worth stating plainly.
 
-**Message text goes to the same four hosts, and the same kind of guard decides that.** There is no
+**Message text goes to the same three hosts, and the same kind of guard decides that.** There is no
 Electron main process in a browser, so the transport runs in the extension's background context —
 the only part of an extension that may fetch across origins. It carries the same allow-list, matched
 the same way, in `browser/translationHost.js`: full hostname, `Set.has`, no suffix and no wildcard.
 `test/allowedHosts.test.ts` holds that list identical to the desktop one and fails the build if they
 diverge.
 
-**Redirects are refused, not followed — and that sentence used to be wrong here.** Every request all
-three transports make is now issued with `redirect: "manual"`, on the GET as well as the POST, so an
-allowed host answering with **any** 3xx is refused at that point and nothing travels onward. The
-refusal is unconditional: it does not ask where the redirect pointed, so a redirect back to the same
-host is refused too. Until this was fixed, this document
+**Redirects are refused, not followed — with exactly one narrow exception, named below.** Every
+request all three transports make is issued with `redirect: "manual"`, on the GET as well as the
+POST, so an allowed host answering with **any** 3xx is refused at that point and nothing travels
+onward.
+
+**The exception is Apps Script, and it exists because that provider cannot work without it.** A POST
+to a deployment answers `302` every single time and the JSON is served from
+`script.googleusercontent.com`, so a transport that refused every redirect refused that provider
+outright. What the exception permits is deliberately small: only a request that started at
+`script.google.com` may follow, the response must have **landed** on one of the two Apps Script
+hosts — a narrower list than the general allow-list — and on the desktop, where the runtime can
+show the redirect, only a `302` is honoured and only by reissuing **one bodiless GET**. A `307` or
+`308` is refused outright, because those replay the POST body, and the body is your message. Every
+other host is still refused unconditionally. Until this was fixed, this document
 said the host was "re-checked **after** any redirect, so an allowed host answering with a 302 cannot
 carry your text somewhere else". The code did re-check, and the claim was still false: the transports
 fetched with the default redirect mode, which means the runtime had **already followed** the redirect
@@ -164,19 +172,19 @@ extension and desktop builds do not have this caveat.
 **The relay is reachable from the Discord page.** The translator itself runs in the page's own world,
 so it asks for a translation by posting a message that a content script forwards to the background.
 Any other script running on Discord could post the same message. What that buys an attacker is
-bounded entirely by the allow-list above: it can cause a request to one of the **four** translation
+bounded entirely by the allow-list above: it can cause a request to one of the **three** translation
 endpoints and read the reply. It cannot reach anywhere else, and it cannot read your Discord
 credentials through this path.
 
-**Be precise about what that request can carry, because it changed.** The Google Cloud provider is a
-POST, and supporting it meant the relay had to accept a request body where before it only ever
-issued a GET. So the relay is no longer a pull-only channel: a script on the Discord page can now
-push content of its own choosing to one of those four hosts, not merely ask one of them a question.
-That is a data-exfiltration path in shape, and the only thing limiting it is the destination list,
-not the direction of travel: the content can land at a translation endpoint and nowhere else. What
-those four services do with what they receive is their business and this project cannot speak for
-it — read their own terms. If you have configured a Google Cloud or paid DeepL key, note that this
-path can also spend it.
+**Be precise about what that request can carry, because it changed.** The relay accepts a request
+body — a POST — where earlier versions only ever issued a GET. So it is no longer a pull-only
+channel: a script on the Discord page can push content of its own choosing to one of those three
+hosts, not merely ask one of them a question. That is a data-exfiltration path in shape, and the
+only thing limiting it is the destination list, not the direction of travel: the content can land
+at a translation endpoint and nowhere else. What those services do with what they receive is their
+business and this project cannot speak for it — read their own terms. **What that push can no
+longer do is cost you money**, since neither surviving provider bills: the worst an Apps Script
+deployment suffers is its own daily quota being burned, after which it refuses.
 
 **Be equally precise about the size of it, because 1,048,576 characters is a per-request figure and
 reads like a total.** `MAX_BODY_CHARS` caps **one** request body at 1,048,576 characters. It is not
@@ -190,11 +198,12 @@ moved.
 
 **What is checked on the way out.** The body is validated in `browser/translationHost.js`: only
 `method` and `body` are accepted, any other key (including `headers`) is refused rather than
-ignored, and only GET and POST are allowed. **Any redirect answer is refused rather than followed**
-— not merely one pointing away from an allowed host, and not merely the statuses that replay a body:
-the check treats every 3xx, and every opaque-redirect response, as a refusal whatever it points at.
-That matters for a POST because a cross-origin 307 replays the body, and it matters for a GET too,
-because the free provider carries your message in the query string rather than in a body.
+ignored, and only GET and POST are allowed. **Any redirect answer is refused rather than followed**,
+outside the single Apps Script exception described above — not merely one pointing away from an
+allowed host, and not merely the statuses that replay a body: the check treats every 3xx, and every
+opaque-redirect response, as a refusal whatever it points at. That matters for a POST because a
+cross-origin 307 replays the body, and it matters for a GET too, because the free provider carries
+your message in the query string rather than in a body.
 
 **The extension removes Discord's Content-Security-Policy header.** This is inherited from the
 upstream project and is what allows user themes and custom CSS to load images and fonts at all. It is
@@ -204,19 +213,16 @@ extension is installed, and it is not specific to translation. It is done by
 
 **Your settings live in the page's own storage.** On the desktop they are a file in the app's data
 directory. In the browser they are `localStorage` on `discord.com`, under the key
-`DiscordTranslatorSettings`. Anything else running on that page can read them — including any API
-key you configure, including the translation cache, which holds message text alongside its
-translation, and including the `usageBlob` character count described under
-[Local Storage](#local-storage). Of those three the cache and the key are what matter: `usageBlob`
-holds only a month string, the two paid provider ids and an integer each, so reading it reveals how
-much you translated and nothing about what. If any of this matters to you, use the desktop build.
+`DiscordTranslatorSettings`. Anything else running on that page can read them — including the Apps
+Script deployment URL if you configured one, and including the translation cache, which holds
+message text alongside its translation. Of the two the cache is the more revealing: it is your
+messages. If any of this matters to you, use the desktop build.
 
-**This is worse for a Google Cloud Translation key**, because that key is attached to a billing
-account and a stolen one can be charged to your card, where a stolen DeepL free key cannot. The
-desktop build is the safer place for any paid key. If you use the browser extension anyway, set a
-quota cap on the key so the damage is bounded — see
-[GOOGLE_CLOUD_SETUP.md](./GOOGLE_CLOUD_SETUP.md), which covers key restriction and the cap, and
-which is blunt about the size of the bill an uncapped key can reach.
+**A stolen deployment URL cannot be charged to anyone**, which is the one thing that improved when
+the paid providers were removed: there is no longer a credential in that storage that is attached
+to a billing account. What someone holding your deployment URL can do is spend its daily Apps
+Script quota and send it text of their own. If that concerns you, redeploy the script — a new
+deployment gets a new URL and the old one stops working.
 
 **No update check runs, and no changelog check either.** The web build ships no updater, and the
 Changelog tab is compiled out of it for the same reason — that tab asks `api.github.com` for the
@@ -248,23 +254,25 @@ This is the complete list from both shipped manifests — `browser/manifest.json
 Chrome and Edge) and `browser/manifestv2.json` (Manifest V2, for Firefox). It used to name only the
 hosts, which made it look complete while leaving out the two API permissions that do the most.
 
-**Host permissions.** Six, identical in both manifests. In MV3 they are the `host_permissions` key;
+**Host permissions.** Five, identical in both manifests. In MV3 they are the `host_permissions` key;
 MV2 has no such key, so they sit in `permissions` alongside the API permissions below.
 
 | Host permission | Why it is asked for |
 |---|---|
 | `*://*.discord.com/*` | to run on Discord at all — the content scripts, the translator, and the header rule below |
 | `https://translate.googleapis.com/*` | the default free provider's endpoint |
-| `https://translation.googleapis.com/*` | the paid Cloud Translation v2 API, contacted only if you configure a Google Cloud key |
-| `https://api-free.deepl.com/*` | DeepL, free keys |
-| `https://api.deepl.com/*` | DeepL, paid keys |
+| `https://script.google.com/*` | the Apps Script proxy, contacted only if you paste your own deployment URL |
+| `https://script.googleusercontent.com/*` | where Google serves the reply to that call; without it the Apps Script provider cannot complete a single request |
 | `https://raw.githubusercontent.com/*` | so a theme *you* installed can load files from there, and so its stylesheets arrive with a usable content type |
 
-That is **four** translation hosts, and both manifests request all four.
-`translation.googleapis.com` is requested even though nothing contacts it unless you configure a
-Google Cloud key, because a manifest permission is declared once at install time and cannot be
-asked for later when you happen to need it. A permission is what the extension *may* reach, not
-what it does reach.
+That is **three** translation hosts, and both manifests request all three. The two Apps Script hosts
+are requested even though nothing contacts them unless you paste a deployment URL, because a
+manifest permission is declared once at install time and cannot be asked for later when you happen
+to need it. A permission is what the extension *may* reach, not what it does reach.
+
+**Three permissions were dropped when the paid providers were removed** — the Cloud Translation v2
+host and DeepL's two API hosts. An extension asking for fewer hosts is asking for less, and these
+are the ones that could have carried a billable key.
 
 **API permissions.** These are not hosts, and they are what let the extension change Discord's
 response headers. Each browser needs a different one because the two manifest versions provide
@@ -294,9 +302,11 @@ at all, and it applies to every Discord tab for as long as the extension is inst
 **Firefox also declares what data the add-on collects**, under `data_collection_permissions` in
 `browser/manifestv2.json`, and Firefox shows that declaration at install time. Three entries are
 declared as required: `personalCommunications` (the Discord messages being translated),
-`websiteContent` (the same text, as page content), and `authenticationInfo` (your own provider API
-key — DeepL's or Google Cloud's — stored locally and sent only to the provider it belongs to, and
-only if you configure one). Declaring none would have been false, which is why they are there.
+`websiteContent` (the same text, as page content), and `authenticationInfo` (the Apps Script
+deployment URL, which is a credential in the sense that anyone holding it can spend that
+deployment's daily quota — stored locally, sent only to your own deployment, and only if you
+configure one). Declaring none would have been false, which is why they are there. There is no API
+key in that declaration any more, because there is no provider left that takes one.
 
 ## Everything Clickable in the Translator Panel
 

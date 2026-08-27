@@ -29,6 +29,16 @@
 #
 # The section headings below are context for reviewers. The checker does not
 # read them: every uncommented line is simply an allowed entry.
+#
+# The two paid providers were removed outright - Google Cloud Translation v2 and
+# DeepL - together with the API-key settings, the spend meter and the monthly cap
+# that existed only to bound their bills. Nothing shipped can charge a user any
+# more. Their three lines are gone with the code that reached them, and the host
+# names are deliberately NOT written out anywhere in this file: a grep for one of
+# them across the repo should return nothing, and a comment naming them would make
+# that check answer yes on a provider that no longer exists. The enumeration
+# stamped above therefore predates their removal as well as the additions noted
+# below - it is a record of the run it names, not a current count.
 
 # --- Fetched at runtime, or permitted to be, by the CSP allow-map ---
 api.github.com
@@ -43,38 +53,21 @@ i.imgur.com
 i.pinimg.com
 jsdelivr.net
 raw.githubusercontent.com
+# The free, keyless gtx endpoint reached by
+# src/plugins/channelTranslator/core/providers/google.ts. This is the shipped default and it
+# takes no credential of any kind, so there is nothing here that can bill a user.
 translate.googleapis.com
-# The paid Google Cloud Translation v2 API, reached only by
-# src/plugins/channelTranslator/core/providers/googleCloud.ts. A DIFFERENT HOST from
-# translate.googleapis.com above - note "translation", not "translate" - and it is not a
-# subdomain relationship either, so the exact-match guards need it listed separately or the
-# provider is simply blocked. Not contacted with the shipped defaults: the provider setting is
-# "google", and the registry refuses to construct this provider at all until the user pastes a
-# Google Cloud key of their own (resolveProvider() in core/providers/registry.ts). Added after
-# the enumeration stamped in the header above, so that run's count predates this line.
-translation.googleapis.com
 codeberg.page
-# The two DeepL API hosts, reached only by
-# src/plugins/channelTranslator/core/providers/deepl.ts. Neither is contacted with the
-# shipped defaults: the provider setting is "google", and the registry refuses to construct
-# DeepL at all until the user pastes a key of their own (resolveProvider() in
-# core/providers/registry.ts). They exist so that a gtx rate limit is inconvenient rather
-# than terminal. DeepL splits its API by plan and a key is valid on one host only — free
-# keys end in ":fx" and route to api-free, everything else to api — so both are needed.
-# Both also appear in the ALLOWED_HOSTS set in native.ts; a host declared in one place and
-# not the other is either a dead provider or an undeclared third party.
-api-free.deepl.com
-api.deepl.com
 # Google Apps Script, reached only by
-# src/plugins/channelTranslator/core/providers/appsScript.ts. NOT a third party in the sense the
-# four hosts above are: what is contacted is a Web App the USER deployed into their OWN Google
-# account, at a URL only they hold, running a script they pasted. There is no API key and no
+# src/plugins/channelTranslator/core/providers/appsScript.ts. NOT a third party in the sense
+# translate.googleapis.com above is: what is contacted is a Web App the USER deployed into their OWN
+# Google account, at a URL only they hold, running a script they pasted. There is no API key and no
 # billing - Apps Script has none - so the ceiling (about 5,000 calls a day on a consumer account)
 # refuses rather than charges. Not contacted with the shipped defaults: the provider setting is
 # "google", and the registry refuses to construct this provider at all until the user pastes their
 # own deployment URL (resolveProvider() in core/providers/registry.ts).
 #
-# What this line grants that the DeepL lines do not: script.google.com hosts EVERY Apps Script
+# What this line grants that the gtx line does not: script.google.com hosts EVERY Apps Script
 # deployment on the internet, so an exact-host match cannot distinguish the user's own proxy from
 # anyone else's. The path is what does that, and the path is not enforced here - it is enforced by
 # checkDeploymentUrl() in appsScript.ts, which accepts only /macros/s/<id>/exec (or the Workspace

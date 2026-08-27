@@ -135,12 +135,12 @@ export function createGoogleProvider(http: HttpTransport): TranslationProvider {
                     });
                 }
 
-                // Permanent for the same reason as googleCloud.ts, minus the bill.
+                // Permanent for the same reason as the since-deleted googleCloud.ts, minus the bill.
                 // This endpoint is free, so a retried malformed 200 costs the user
                 // nothing — but it still costs four requests, three backoff sleeps
                 // and four breaker strikes for an answer that is deterministic and
                 // will be exactly as unparseable the fourth time. The two providers
-                // are kept the same shape deliberately: a reader comparing them
+                // were kept the same shape deliberately: a reader comparing them
                 // should not have to work out whether the difference is meaningful.
                 let parsed: {
                     sentences?: Array<{ trans?: string }>;

@@ -20,8 +20,12 @@ export interface HttpResponse {
  * from Discord's own page world — over IPC on the desktop, over the content-script
  * relay in the extension — so forwarding caller-supplied headers would hand any
  * script on the page a header-injection channel through the very guard that
- * exists to prevent one. That is the same reasoning that put DeepL's key in a
- * query parameter (see createDeeplProvider), and it survives this change.
+ * exists to prevent one. That is the same reasoning that once put DeepL's key in
+ * a query parameter rather than an Authorization header, back when DeepL was a
+ * provider here. createDeeplProvider was deleted with it, so that cross-
+ * reference no longer resolves and is left here only as the worked example —
+ * the rule it followed is the one still enforced above, and the next provider
+ * needing a credential on the wire is bound by it too.
  *
  * The Content-Type of a POST is therefore fixed by each transport to
  * application/json, which is what the POST provider here needs. A provider
@@ -41,9 +45,10 @@ export interface HttpRequestInit {
  * Injected so the core stays environment-free and fully testable offline.
  *
  * The second argument is optional so a GET is spelled exactly as it was before
- * POST existed — `http(url)`. google.ts and deepl.ts therefore needed no edit at
- * all, which makes "GET still behaves as it did" true by construction rather
- * than by assertion.
+ * POST existed — `http(url)`. When POST arrived, google.ts and the since-deleted
+ * deepl.ts therefore needed no edit at all, which made "GET still behaves as it
+ * did" true by construction rather than by assertion. google.ts is the surviving
+ * witness and still calls it that way.
  */
 export type HttpTransport = (url: string, init?: HttpRequestInit) => Promise<HttpResponse>;
 

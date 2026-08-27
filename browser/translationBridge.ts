@@ -48,15 +48,14 @@ export interface HttpRequestInit {
  * a host that is not declared in scripts/allowed-hosts.txt.
  *
  * Exact hostnames, matched with Set.has(). Never relax this to endsWith or a
- * wildcard: endsWith("deepl.com") also admits evil-deepl.com.
+ * wildcard: endsWith("googleapis.com") also admits evil-googleapis.com.
+ *
+ * Both surviving providers are free and keyless-or-self-hosted. Nothing here can
+ * bill the user, and there is deliberately no entry that requires a paid account.
  */
 const ALLOWED_HOSTS: ReadonlySet<string> = new Set([
+    // The default, keyless gtx endpoint — see core/providers/google.ts.
     "translate.googleapis.com",
-    // A DIFFERENT host from the free endpoint above: the paid Cloud Translation
-    // v2 API, contacted only if the user configures a Google Cloud key.
-    "translation.googleapis.com",
-    "api-free.deepl.com",
-    "api.deepl.com",
     // A Web App the USER deployed on their OWN Google account, contacted only if
     // they paste its deployment URL — see core/providers/appsScript.ts. The path
     // names one deployment and this guard checks only the host; the path is
@@ -290,10 +289,10 @@ const FOLLOW_MODE_HOSTS: ReadonlySet<string> = new Set(["script.google.com"]);
  * Where a follow-mode response is permitted to have LANDED.
  *
  * Deliberately NARROWER than ALLOWED_HOSTS. A follow-mode request that ended up at
- * api.deepl.com is refused even though DeepL is a perfectly good translation host,
- * because nothing in the Apps Script flow can legitimately end there — and the
- * whole point of a scoped exception is that it does not quietly inherit the reach
- * of the general allow-list.
+ * translate.googleapis.com is refused even though that is a perfectly good
+ * translation host, because nothing in the Apps Script flow can legitimately end
+ * there — and the whole point of a scoped exception is that it does not quietly
+ * inherit the reach of the general allow-list.
  *
  * script.google.com is in the set as well as the result host, because a deployment
  * that answers directly, without redirecting, is a normal Apps Script response and
@@ -466,8 +465,8 @@ function checkUrl(url: unknown): UrlCheck {
     // USERINFO is refused as well, and checked after the host so that a refused
     // host is still reported as a host problem.
     //
-    // The parser reads https://user:pass@translation.googleapis.com/x with
-    // hostname === "translation.googleapis.com" and port === "", so every test
+    // The parser reads https://user:pass@translate.googleapis.com/x with
+    // hostname === "translate.googleapis.com" and port === "", so every test
     // above accepts it — and target.href KEEPS the credentials, so normalising the
     // URL does not strip them either. What stops the request on the page's own
     // fetch today is fetch() itself, which refuses "a URL that includes

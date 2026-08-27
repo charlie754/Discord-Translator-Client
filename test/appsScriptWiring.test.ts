@@ -40,6 +40,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const store = vi.hoisted(() => ({
     provider: "google",
     appsScriptUrl: "",
+    // NOT settings any more — both were deleted with the paid providers. They are
+    // kept in the stand-in store deliberately, as decoys: apiKeyFor() must not
+    // reach for a field just because one is there, and a store holding only the
+    // right answer cannot tell the difference between reading it and guessing.
     deeplApiKey: "",
     googleCloudApiKey: ""
 }));
@@ -157,32 +161,62 @@ describe("apps-script settings wiring", () => {
     });
 });
 
-describe("the other providers still read their own field", () => {
-    // Adding a case to a switch is exactly the edit that can silently take one
-    // away, so the two credentials that already worked are pinned here as well.
-    it.each([
-        ["deepl", "deeplApiKey"],
-        ["google-cloud", "googleCloudApiKey"]
-    ] as const)("%s is constructed from %s", async (provider, field) => {
-        store.provider = provider;
-        store[field] = "a-key";
+describe("the providers that are gone are gone from the wiring too", () => {
+    /*
+     * This describe used to be "the other providers still read their own field",
+     * and it pinned that selecting deepl or google-cloud constructed that
+     * provider from its own key. Both are deleted, so there is no field to read
+     * and no provider to construct — and the old assertions would now pass or
+     * fail for reasons that have nothing to do with the wiring.
+     *
+     * The property that replaces them is the one the deletion has to keep true:
+     * a stale provider id left in a user's saved settings — which is exactly
+     * what an upgrade produces — must be REFUSED IN WORDS, not silently served
+     * by something else. A settings file that still says provider: "deepl" is
+     * the normal case after this change, not a hypothetical.
+     */
+    it.each(["deepl", "google-cloud"] as const)(
+        "%s, still saved in an upgraded settings file, is refused rather than substituted",
+        async provider => {
+            store.provider = provider;
+            store.appsScriptUrl = DEPLOYMENT;
+            store.deeplApiKey = "sk-deepl";
+            store.googleCloudApiKey = "sk-google-cloud";
 
-        const resolution = await currentProvider(unreachable);
+            // unreachable is the transport: a substitution would have to send
+            // something, and sending anything fails this test by throwing.
+            const resolution = await currentProvider(unreachable);
+
+            expect(resolution.ok, `${provider} must not resolve to anything`).toBe(false);
+            if (resolution.ok) return;
+            // The user gets a sentence naming the id they have selected, not a
+            // credential complaint about a provider that no longer exists.
+            expect(resolution.reason).toContain(`Unknown translation provider "${provider}"`);
+            expect(resolution.reason).not.toContain("an API key");
+        }
+    );
+
+    it("does not forward a stale key to the provider it DOES construct", async () => {
+        // The dangerous shape: apps-script selected, dead keys still on disk, and
+        // apiKeyFor() reaching for whichever field is non-empty. Message text
+        // would then be posted to a string that is not a deployment URL.
+        store.provider = "apps-script";
+        store.appsScriptUrl = DEPLOYMENT;
+        store.deeplApiKey = "sk-deepl-must-not-travel";
+        store.googleCloudApiKey = "sk-google-cloud-must-not-travel";
+
+        const { http, calls } = recordingTransport(["hola"]);
+        const resolution = await currentProvider(http);
 
         expect(resolution.ok).toBe(true);
         if (!resolution.ok) return;
-        expect(resolution.provider.id).toBe(provider);
-    });
+        await resolution.provider.translate(["hello"], "auto", "es");
 
-    it.each(["deepl", "google-cloud"] as const)("%s is not satisfied by appsScriptUrl", async provider => {
-        store.provider = provider;
-        store.appsScriptUrl = DEPLOYMENT;
-
-        const resolution = await currentProvider(unreachable);
-
-        expect(resolution.ok).toBe(false);
-        if (resolution.ok) return;
-        expect(resolution.reason).toContain("an API key");
+        expect(calls).toHaveLength(1);
+        expect(calls[0].url).toBe(DEPLOYMENT);
+        const sent = JSON.stringify(calls[0]);
+        expect(sent).not.toContain("sk-deepl-must-not-travel");
+        expect(sent).not.toContain("sk-google-cloud-must-not-travel");
     });
 
     it("keeps the keyless provider keyless", async () => {
@@ -193,5 +227,15 @@ describe("the other providers still read their own field", () => {
         expect(resolution.ok).toBe(true);
         if (!resolution.ok) return;
         expect(resolution.provider.needsKey).toBe(false);
+    });
+
+    it("an unknown id really is refused, and a known one really is not (controls)", async () => {
+        // Both directions, so the refusal above cannot be passing because
+        // currentProvider() refuses everything.
+        store.provider = "not-a-provider-at-all";
+        expect((await currentProvider(unreachable)).ok).toBe(false);
+
+        store.provider = "google";
+        expect((await currentProvider(unreachable)).ok).toBe(true);
     });
 });

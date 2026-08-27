@@ -11,7 +11,7 @@ A Discord client mod that translates a whole channel, including scrollback, into
 - **Selection translation**: double-click a word or triple-click a sentence to translate a selection; shows the original when already translated
 - **Floating panel** at the top-right of the chat area
 - **15 target languages** supported
-- **Spend meter and optional monthly character cap** for the paid providers — the cap is off by default
+- **Free providers only** — no API key, no card, nothing that can bill you
 
 ## Install
 
@@ -87,32 +87,26 @@ Discord must be fully closed when injecting or repairing.
 
 Be clear about what that endpoint is: **it is unofficial.** Google publishes no terms, no quota and no guarantee for it, and it *will* rate-limit you if you translate heavily. When it does, the panel reads **Rate limited** and translation pauses until it recovers.
 
-**DeepL is the way out of that**, using an API key of your own:
+**The Apps Script proxy is the way out of that**, and it is the only other provider. It is still free: you deploy a small script into **your own** Google account and the plugin posts to that deployment instead of to the gtx endpoint.
 
-1. Get a key from [DeepL’s API page](https://www.deepl.com/pro-api). The free tier is enough for ordinary use; free keys end in `:fx`.
-2. Open **Settings → Plugins → ChannelTranslator**.
-3. Paste the key into **deeplApiKey**, then set **Provider** to **DeepL (your own key)**.
+1. Follow the guide at `site\free\index.html` in this repository. The extension builds ship it as `guide.html`, reachable from the plugin's settings screen.
+2. Paste the script from `site\apps-script-proxy.gs` into a new Apps Script project and deploy it as a Web App.
+3. Open **Settings → Plugins → ChannelTranslator**, paste the deployment URL, then set **Provider** to the Apps Script option.
 
-The key is yours: this project ships none and shares none. It is stored locally alongside your other plugin settings and is sent only to DeepL. Free keys are routed to `api-free.deepl.com` and paid keys to `api.deepl.com` — the app picks the host from the `:fx` suffix, so there is nothing else to configure.
+**There is no API key and no billing, because Apps Script has neither.** The ceiling is a daily call quota — roughly 5,000 on a consumer account — and crossing it makes the deployment *refuse*, not charge. The URL is yours: this project ships none and shares none. It is stored locally alongside your other plugin settings and is sent only to Google, to reach the deployment it names.
 
-Select DeepL without entering a key and the app says so and translates nothing. It will not fail silently.
+Select the Apps Script provider without entering a deployment URL and the app says so and translates nothing. It will not fail silently.
 
-**Google Cloud Translation is the third option**, and it is the official, quota-backed Google endpoint rather than the unofficial one above. It needs a Google Cloud account with **billing enabled** — required even to use the allowance, so a card has to be on file either way — and it charges **USD 20 per million characters**. It also sends your messages to `translation.googleapis.com`, which is a different host from the free endpoint above.
+### No paid providers, and no way to spend money
 
-**There is no free tier here, and calling it one sets the wrong expectation.** What Google gives is a **monthly credit of up to USD 10**, which covers roughly the first 500,000 characters at that price. It is shared with Cloud Translation - Advanced, it does not roll over, and it is not a stop: cross it and the next character is simply billed to your card.
+**Both paid providers were removed.** Google Cloud Translation v2 and DeepL are gone, along with their API-key settings, the spend meter and the monthly character cap — those existed only to bound a bill that can no longer happen.
 
-Setting it up is longer than pasting a DeepL key, so it has its own guide: [GOOGLE_CLOUD_SETUP.md](./GOOGLE_CLOUD_SETUP.md), which covers the project, the API, the key, and the restrictions and quota cap that keep a leaked key from running up a bill. **Read its first section before you start.** An alerts-only Cloud Billing budget — the kind you will be offered — does not cap spending, and a new project has no daily character limit at all. The guide gives the real worst-case number, the one control that actually stops a request, and what Google's newer *spend cap* budget does and does not cover.
+The two remaining providers are free by construction, not by tier:
 
-As with DeepL: **paste the key first, then switch the provider.** Selecting a key-requiring provider before its key is in place makes the plugin refuse to translate and say so — correctly, but on a configuration you were halfway through.
+- **Google (free)** takes no credential at all. There is nothing to sign up for and nothing to bill.
+- **Apps Script** runs on your own Google account, where the quota refuses rather than charges.
 
-### Watching what a paid provider costs
-
-If you use Google Cloud Translation or DeepL, the plugin’s own settings screen carries two things, directly under the API key field:
-
-- **A spend meter** showing how many characters have gone to each paid provider this month, with a dollar estimate for Google Cloud. It is an **estimate** and cannot match Google’s invoice: it counts only what this plugin sent, so anything else on the same billing account spending the same credit is invisible to it.
-- **A monthly character cap**, which is **switched off by default** (`monthlyCharacterCap` ships as `0`). Set a number and the plugin refuses to send a message once that month’s total would cross it. It guards against your own heavy month; it **cannot** stop a leaked key, because a leaked key is spent from somebody else’s machine. Only the Google-side quota can do that.
-
-The free **Google (free)** provider is not metered, because nothing bills it. Both controls are documented in [GOOGLE_CLOUD_SETUP.md](./GOOGLE_CLOUD_SETUP.md), and what the meter stores locally is in [PRIVACY.md](./PRIVACY.md).
+The hosts those two providers used are no longer reachable from any build. They were removed from the allow-list in all three transports, from both browser manifests, and from `scripts\allowed-hosts.txt` — so a build that tried to contact one would fail the host audit rather than ship. What the plugin stores locally is in [PRIVACY.md](./PRIVACY.md).
 
 ## Disclosure
 

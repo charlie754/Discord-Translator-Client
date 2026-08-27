@@ -215,7 +215,7 @@ describe("request shape guard — constants are identical in every copy", () => 
 // Behavioural drift: all four copies must make the SAME decision, input by input.
 // ---------------------------------------------------------------------------
 
-const ALLOWED = "https://translation.googleapis.com/language/translate/v2?key=k";
+const ALLOWED = "https://translate.googleapis.com/translate_a/single?client=gtx&dt=t&dj=1&q=hello";
 const BODY = JSON.stringify({ q: "hello", target: "es", format: "text" });
 const OVERSIZED = "x".repeat(1024 * 1024 + 1);
 
@@ -395,11 +395,11 @@ describe("request shape guard — the four copies agree, input by input", () => 
  * Google's own provider builds query strings with encodeURIComponent, which
  * leaves an apostrophe alone; the URL parser percent-encodes it.
  */
-const RAW_URL = "https://translation.googleapis.com/language/translate/v2?key=k&q=it's";
-const NORMALISED_URL = "https://translation.googleapis.com/language/translate/v2?key=k&q=it%27s";
+const RAW_URL = "https://translate.googleapis.com/translate_a/single?client=gtx&q=it's";
+const NORMALISED_URL = "https://translate.googleapis.com/translate_a/single?client=gtx&q=it%27s";
 
-const NON_DEFAULT_PORT = "https://translation.googleapis.com:8080/language/translate/v2";
-const EXPLICIT_443 = "https://translation.googleapis.com:443/language/translate/v2";
+const NON_DEFAULT_PORT = "https://translate.googleapis.com:8080/translate_a/single";
+const EXPLICIT_443 = "https://translate.googleapis.com:443/translate_a/single";
 
 it("the URL fixtures are what this file claims they are (control)", () => {
     // If RAW_URL and NORMALISED_URL were ever the same string, every "sends the
@@ -478,7 +478,7 @@ describe("native.ts (desktop main process)", () => {
     });
 
     it("returns the body when the redirect stayed on the allow-list", async () => {
-        vi.stubGlobal("fetch", vi.fn(async () => okResponse("https://api.deepl.com/v2/translate")));
+        vi.stubGlobal("fetch", vi.fn(async () => okResponse("https://script.googleusercontent.com/macros/echo")));
 
         const res = await ask(ALLOWED, { method: "POST", body: BODY });
         expect(res.status).toBe(200);
@@ -640,20 +640,21 @@ describe("translationBridge.ts (userscript and plain web)", () => {
 // ---------------------------------------------------------------------------
 
 /*
- * `new URL("https://user:pass@translation.googleapis.com/x")` has
- * hostname === "translation.googleapis.com" and port === "", so the host and port
+ * `new URL("https://user:pass@translate.googleapis.com/x")` has
+ * hostname === "translate.googleapis.com" and port === "", so the host and port
  * tests both accept it, and `.href` KEEPS the credentials — passing the normalised
  * href to fetch does not strip them. The request failed anyway, but it failed in
  * fetch(), which refuses "a URL that includes credentials": the runtime was closing
  * the hole and nothing here pinned that. These tests pin it in our own code, on the
  * outbound URL and on the URL that answered.
  */
-const CREDENTIALED = "https://user:pass@translation.googleapis.com/language/translate/v2?key=k";
-const USER_ONLY = "https://user@translation.googleapis.com/language/translate/v2?key=k";
-const PASSWORD_ONLY = "https://:pass@translation.googleapis.com/language/translate/v2?key=k";
-const EMPTY_USERINFO = "https://@translation.googleapis.com/language/translate/v2?key=k";
+const CREDENTIALED = "https://user:pass@translate.googleapis.com/translate_a/single?client=gtx&dt=t&dj=1&q=hello";
+const USER_ONLY = "https://user@translate.googleapis.com/translate_a/single?client=gtx&dt=t&dj=1&q=hello";
+const PASSWORD_ONLY = "https://:pass@translate.googleapis.com/translate_a/single?client=gtx&dt=t&dj=1&q=hello";
+/** Deliberately ALLOWED with a bare "@" spliced in, so its href must normalise back to ALLOWED. */
+const EMPTY_USERINFO = "https://@translate.googleapis.com/translate_a/single?client=gtx&dt=t&dj=1&q=hello";
 /** The classic misread: the allowed name is the USERNAME here, and the host is evil.test. */
-const HOST_AFTER_AT = "https://translation.googleapis.com@evil.test/x";
+const HOST_AFTER_AT = "https://translate.googleapis.com@evil.test/x";
 
 const CREDENTIAL_REFUSAL = "a translation URL must not carry embedded credentials";
 
@@ -666,7 +667,7 @@ it("the credentialed fixtures are refusable ONLY by the new rule (control)", () 
         const u = new URL(url);
         expect(u.protocol, url).toBe("https:");
         expect(u.port, url).toBe("");
-        expect(u.hostname, url).toBe("translation.googleapis.com");
+        expect(u.hostname, url).toBe("translate.googleapis.com");
         expect(u.username !== "" || u.password !== "", url).toBe(true);
     }
 
@@ -716,7 +717,7 @@ describe("URL guard — the three transports agree, URL by URL", () => {
         ["a username and a password", CREDENTIALED, false],
         ["a username alone", USER_ONLY, false],
         ["a password alone", PASSWORD_ONLY, false],
-        ["a percent-encoded @ inside the username", "https://user%40x:pass@translation.googleapis.com/x", false],
+        ["a percent-encoded @ inside the username", "https://user%40x:pass@translate.googleapis.com/x", false],
         ["the allowed name used as the username", HOST_AFTER_AT, false]
     ];
 
@@ -1073,15 +1074,22 @@ describe("redirects are refused before the request is delivered", () => {
  *                    to a Location that passes the same checkUrl() the original
  *                    URL went through.
  *
- * ⚠ THE FIXTURE HOSTS HERE ARE DELIBERATELY NOT THE APPS SCRIPT ONES ANY MORE, and
- * the reason is the point of the section that follows this one. These tests are
- * about the MANUAL branch — inspect the 3xx, validate the Location, reissue as a
+ * ⚠ THE FIXTURE URLS HERE ARE DELIBERATELY NOT ON script.google.com, and the
+ * reason is the point of the section that follows this one. These tests are about
+ * the MANUAL branch — inspect the 3xx, validate the Location, reissue as a
  * bodiless GET — which is what every transport does for every host EXCEPT the one
- * FOLLOW_MODE_HOSTS names. script.google.com is now that one exception in the two
+ * FOLLOW_MODE_HOSTS names. script.google.com is that one exception in the two
  * browser transports, so keying this battery on it would have tested the exception
- * three times and the general rule never. The pair below is two ordinary
- * allow-listed provider hosts, neither of which is in the follow-mode scope, so
- * every assertion here is about the RULE.
+ * three times and the general rule never.
+ *
+ * ⚠ AND THE CHOICE NARROWED WHEN THE PAID PROVIDERS WERE DELETED. This battery
+ * used to key on translation.googleapis.com and the two DeepL hosts, which were
+ * allow-listed and outside the follow-mode scope. All three are gone with the
+ * providers that billed for them, leaving exactly TWO allow-listed hosts outside
+ * that scope: translate.googleapis.com and script.googleusercontent.com. Both are
+ * used below, and the control immediately after re-derives that from the shipped
+ * source rather than trusting this comment — so if the scope ever widens to cover
+ * one of them, this battery says so instead of quietly testing the exception.
  *
  * Every assertion is about WHAT EACH HOP RECEIVED, not about what the caller was
  * told. A status-only assertion is the weak test that let the original defect
@@ -1089,16 +1097,20 @@ describe("redirects are refused before the request is delivered", () => {
  */
 
 /**
- * A redirecting allow-listed host, and an allow-listed host to be redirected TO —
- * neither of them inside the follow-mode exception. Both are real endpoints out of
- * ALLOWED_HOSTS. The Cloud Translation host redirecting to DeepL is not something
- * that happens in production and does not need to be: what is under test is what a
- * transport does with a 3xx from a host it trusts.
+ * A redirecting allow-listed URL, and an allow-listed URL to be redirected TO —
+ * neither host inside the follow-mode exception. Both hosts are real entries in
+ * ALLOWED_HOSTS. The free gtx endpoint redirecting to the Apps Script result host
+ * is not something that happens in production and does not need to be: what is
+ * under test is what a transport does with a 3xx from a host it trusts.
  */
-const MANUAL_EXEC = "https://translation.googleapis.com/language/translate/v2?key=k&hop=1";
-const MANUAL_RESULT = "https://api.deepl.com/v2/translate?hop=2";
-/** A second allow-listed URL, so "one hop only" is tested as a HOP rule, not a host rule. */
-const MANUAL_SECOND = "https://api-free.deepl.com/v2/translate?hop=3";
+const MANUAL_EXEC = "https://translate.googleapis.com/translate_a/single?client=gtx&hop=1";
+const MANUAL_RESULT = "https://script.googleusercontent.com/macros/echo?hop=2";
+/**
+ * A second allow-listed URL, so "one hop only" is tested as a HOP rule, not a host
+ * rule. It shares MANUAL_EXEC's host on purpose now that only two hosts qualify:
+ * the rule under test counts hops, and a distinct host was never what made it one.
+ */
+const MANUAL_SECOND = "https://translate.googleapis.com/translate_a/single?client=gtx&hop=3";
 
 it("the manual-branch fixtures are OUTSIDE the follow-mode exception (control)", () => {
     // Without this the whole battery below could be silently exercising the follow
@@ -1525,9 +1537,17 @@ const APPS_SCRIPT_RESULT = "https://script.googleusercontent.com/macros/echo?use
  * ALLOW-LISTED, and OUTSIDE the follow-mode landing scope. This is the fixture that
  * makes the landing check a real narrowing rather than a second spelling of
  * ALLOWED_HOSTS: a follow-mode response that ends here is refused even though the
- * host is a provider the transports otherwise talk to happily.
+ * host is the plugin's own DEFAULT provider, which the transports talk to on every
+ * message.
+ *
+ * It used to be api.deepl.com. With both paid providers deleted, the free gtx
+ * endpoint is the only allow-listed host left outside the landing scope — which
+ * makes this fixture sharper than the one it replaces, not weaker: refusing the
+ * default provider's own host is the strongest available statement that the scope
+ * does not inherit ALLOWED_HOSTS. native.ts's own comment on FOLLOW_MODE_LANDING
+ * names exactly this case.
  */
-const OUT_OF_SCOPE_ALLOWED = "https://api.deepl.com/v2/translate";
+const OUT_OF_SCOPE_ALLOWED = "https://translate.googleapis.com/translate_a/single?client=gtx&landing=1";
 
 const FOLLOW_LANDING_REFUSAL = "refused a followed redirect that landed off the Apps Script hosts";
 
@@ -1778,10 +1798,11 @@ describe("the follow-mode exception, transport by transport", () => {
         });
 
         it(`${which} REFUSES a follow-mode response that landed on an allow-listed host outside the scope`, async () => {
-            // THE TEST THE LANDING CHECK EXISTS FOR. api.deepl.com is a host these
-            // transports talk to every day, and it is still refused here, because
-            // nothing in the Apps Script flow can legitimately end there. A landing
-            // check that reused ALLOWED_HOSTS would accept this.
+            // THE TEST THE LANDING CHECK EXISTS FOR. translate.googleapis.com is
+            // the default provider's own host — these transports talk to it on
+            // every message — and it is still refused here, because nothing in the
+            // Apps Script flow can legitimately end there. A landing check that
+            // reused ALLOWED_HOSTS would accept this.
             vi.stubGlobal("fetch", vi.fn(async () => okResponse(OUT_OF_SCOPE_ALLOWED)));
 
             const res = await ask(which, APPS_SCRIPT_EXEC, { method: "POST", body: SECRET_BODY });

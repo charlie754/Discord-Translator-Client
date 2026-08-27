@@ -59,13 +59,13 @@ export const CspPolicies: PolicyMap = {
     // which no CSP applies to — this entry only covers requests originating in the
     // renderer, so it is a fallback, not the guard on the transport.
     "translate.googleapis.com": ConnectSrc,
-    // translation.googleapis.com — the paid Cloud Translation v2 API that
-    // core/providers/googleCloud.ts posts to — is deliberately NOT listed here.
-    // On the desktop every translation request is issued by the main process, so
-    // no CSP applies to it and an entry would buy that provider nothing. What an
-    // entry WOULD buy is a standing permission for any renderer code to reach
-    // that host, which is the quiet widening the pruning note above was written
-    // about. If a renderer-side path to it ever appears, add it in that change.
+    // The Apps Script hosts (script.google.com, script.googleusercontent.com) are
+    // deliberately NOT listed here. On the desktop every translation request is
+    // issued by the main process, so no CSP applies to it and an entry would buy
+    // that provider nothing. What an entry WOULD buy is a standing permission for
+    // any renderer code to reach those hosts, which is the quiet widening the
+    // pruning note above was written about. If a renderer-side path to one ever
+    // appears, add it in that change.
 };
 
 const findHeader = (headers: PolicyMap, headerName: Lowercase<string>) => {

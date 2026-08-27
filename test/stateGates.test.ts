@@ -9,7 +9,6 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { ToggleState, translationEnabled } from "../src/plugins/channelTranslator/core/modes";
-import { isBilledProvider } from "../src/plugins/channelTranslator/core/usage";
 
 /**
  * Two defects in state.ts and index.tsx, at the only layer that can see them.
@@ -17,11 +16,12 @@ import { isBilledProvider } from "../src/plugins/channelTranslator/core/usage";
  * state.ts and index.tsx both resolve Vencord aliases (@api/MessageUpdater,
  * @api/Notices, @webpack/common) that do not exist under vitest, so neither can
  * be imported here — the same constraint recorded in
- * test/meteredProviderChokepoint.test.ts, test/selectionPrivacy.test.ts and
+ * test/providerChokepoint.test.ts, test/selectionPrivacy.test.ts and
  * test/settingsCopy.test.ts. Source scanning is the only instrument that reaches
- * these files, and it is used here ONLY for wiring. Every DECISION asserted
- * below is imported and exercised for real: translationEnabled() from
- * core/modes.ts and isBilledProvider() from core/usage.ts.
+ * these files, and it is used here ONLY for wiring. The DECISION asserted below
+ * is imported and exercised for real: translationEnabled() from core/modes.ts.
+ * (isBilledProvider() from core/usage.ts used to be the second one; that module
+ * is deleted, along with every provider that could bill anyone.)
  *
  * 1. A MODE THE USER COULD SWITCH TO IN ORDER TO DEFEAT THEIR OWN SETTING.
  *    Both render entry points ask translationEnabled(), which knows about
@@ -32,12 +32,17 @@ import { isBilledProvider } from "../src/plugins/channelTranslator/core/usage";
  *    thing that enqueues anything, and its gate said no for every DM. One
  *    setting, two answers, chosen by which mode the user happened to be in.
  *
- * 2. THE COST FACT WAS NEVER VOLUNTEERED AFTER FIRST RUN. The consent notice
- *    fires once, on a fresh install, while the provider is still the free
- *    keyless one — and it named "Google Translate" and no price. Switching later
- *    to DeepL or Google Cloud Translation changes the recipient AND starts
- *    billing the user's own key, and nothing said so: consentGiven was already
- *    true, so the notice never returned.
+ * 2. THE RECIPIENT WAS NEVER VOLUNTEERED AFTER FIRST RUN. The consent notice
+ *    fires once, on a fresh install — and it named "Google Translate" as though
+ *    it were the only destination. It is not: the surviving alternative is an
+ *    Apps Script deployment the user stands up in their own Google account, a
+ *    different recipient reached over a different URL.
+ *
+ *    This defect used to have a COST half as well — switching to DeepL or Google
+ *    Cloud Translation started billing the user's own key while consentGiven was
+ *    already true, so an announcement was wired through state.ts to say so. Both
+ *    paid providers are deleted. The announcement is deleted with them, and the
+ *    describe below asserts that it really is gone rather than merely idle.
  */
 
 const PLUGIN = join(process.cwd(), "src", "plugins", "channelTranslator");
@@ -156,103 +161,72 @@ describe("repaintChannel asks translationEnabled, not the toggle", () => {
 });
 
 /*
- * DEFECT 2 — switching to a billed provider says so, once.
+ * DEFECT 2 — the disclosure the first-run notice owes the user.
+ *
+ * The billed-provider announcement that used to live here is GONE, and this is
+ * the record of why. It existed because switching to DeepL or Google Cloud
+ * Translation changed the recipient AND started billing the user's own key while
+ * consentGiven was already true, so nothing said so. Both providers have been
+ * deleted; neither surviving one can bill anybody, so there is no price to
+ * announce and no announcement to test.
+ *
+ * The half of that defect that did NOT go away is the recipient. Message text
+ * still leaves this machine and which third party receives it still depends on a
+ * setting, so the first-run notice below still has to say so — and now has to
+ * name BOTH destinations rather than one of them.
  */
-describe("switching to a billed provider surfaces the cost once", () => {
+describe("the billed-provider machinery is gone, not merely unused", () => {
     const state = () => read(STATE);
     const index = () => read(INDEX);
 
-    it("state.ts decides billed-ness with core/usage's isBilledProvider, not a second list", () => {
-        expect(importsIdentifier(state(), "isBilledProvider")).toBe(true);
-        expect(callsIdentifier(state(), "isBilledProvider")).toBe(true);
-    });
-
-    it("the two providers that charge the user really are the billed ones", () => {
-        // Imported and run, so the notice cannot be wired to a stale idea of
-        // which providers cost money.
-        expect(isBilledProvider("deepl")).toBe(true);
-        expect(isBilledProvider("google-cloud")).toBe(true);
-        expect(isBilledProvider("google")).toBe(false);
-    });
-
-    it("index.tsx registers the notifier and tears it down on stop", () => {
-        const src = index();
-        expect(importsIdentifier(src, "setBilledProviderNotifier")).toBe(true);
-        expect(codeOnly(src)).toContain("setBilledProviderNotifier(null)");
-        // The notice itself is shown by index.tsx, which owns every notice.
-        expect(codeOnly(src)).toContain("showNotice(billedProviderNotice(providerId)");
-    });
-
-    it("state.ts calls out through the injected notifier rather than importing index.tsx", () => {
-        // index.tsx already imports state.ts. A direct call back would be a
-        // cycle, and a cycle here is a plugin that fails to load.
-        expect(importsIdentifier(state(), "showNotice")).toBe(false);
-        expect(state()).not.toContain('from "./index"');
-        expect(codeOnly(state())).toContain("billedProviderNotifier?.(providerId)");
-    });
-
-    it("fires at most once per provider per session — this runs on every message", () => {
+    it("state.ts holds no notifier, no announcement and no idea of billing", () => {
         const src = codeOnly(state());
-        // syncTranslationIdentity() is called from requestTranslation(), i.e.
-        // per message. Without the announced-set this would be a banner per
-        // message rather than a notice per switch.
-        expect(src).toContain("billedProvidersAnnounced.has(providerId)");
-        expect(src).toContain("billedProvidersAnnounced.add(providerId)");
-        const guard = src.indexOf("billedProvidersAnnounced.has(providerId)");
-        const fire = src.indexOf("billedProviderNotifier?.(");
-        expect(guard).toBeGreaterThan(-1);
-        expect(fire).toBeGreaterThan(guard);
+        for (const dead of [
+            "isBilledProvider",
+            "billedProviderNotifier",
+            "billedProvidersAnnounced",
+            "announceBilledProvider"
+        ]) {
+            expect(src, `${dead} survived in state.ts`).not.toContain(dead);
+        }
     });
 
-    it("announces a SWITCH, not the baseline — otherwise it nags on every launch", () => {
-        const src = codeOnly(state());
-        // The first sync of a session establishes what the provider already was.
-        // Treating that as a switch would re-show the notice at every Discord
-        // start for anyone who had settled on a paid provider months ago.
-        expect(src).toContain("const isSwitch = lastProviderIdentity !== null;");
-        expect(src).toContain("if (isSwitch) announceBilledProvider(");
+    it("index.tsx registers no notifier and ships no cost notice", () => {
+        const src = codeOnly(index());
+        for (const dead of [
+            "setBilledProviderNotifier",
+            "billedProviderNotice",
+            "Google Cloud Translation",
+            "DeepL"
+        ]) {
+            expect(src, `${dead} survived in index.tsx`).not.toContain(dead);
+        }
     });
 
-    it("hydrate() takes the baseline, so a switch made before the first translation still speaks", () => {
-        const src = codeOnly(state());
-        const start = src.indexOf("export function hydrate(");
-        expect(start).toBeGreaterThan(-1);
-        const body = src.slice(start, src.indexOf("\n}", start));
-        expect(
-            body,
-            "without this, the first translation of the session is the baseline — so a user who " +
-            "opens settings, switches to a paid provider and only then translates is told nothing"
-        ).toContain("syncTranslationIdentity();");
+    it("core/usage.ts, which decided billed-ness, is not on disk at all", () => {
+        // The import of isBilledProvider used to be at the top of this file. A
+        // deleted module is invisible to a source scan of state.ts, so it is
+        // asserted directly.
+        expect(existsSync(join(PLUGIN, "core", "usage.ts"))).toBe(false);
+        expect(existsSync(join(PLUGIN, "usageSettings.tsx"))).toBe(false);
     });
 
-    it("the notice says what it costs and how to stop it", () => {
-        const src = index();
-        const start = src.indexOf("function billedProviderNotice(");
-        expect(start, "billedProviderNotice() not found").toBeGreaterThan(-1);
-        const body = src.slice(start, src.indexOf("\n}", start));
-        expect(body).toContain("bills you");
-        expect(body).toContain("your own API key");
-        // A cost notice with no way out is an alarm, not information.
-        expect(body).toContain("monthly character cap");
-        expect(body).toContain("Google (free)");
-        // It names the provider that was actually chosen.
-        expect(body).toContain("${label}");
-    });
-
-    it("names both billed providers in words a user recognises from the settings screen", () => {
-        const src = index();
-        expect(src).toContain('"deepl": "DeepL"');
-        expect(src).toContain('"google-cloud": "Google Cloud Translation"');
+    it("the scans above can actually fail (positive control)", () => {
+        // Each assertion is a .not.toContain over codeOnly(), so the control is
+        // that codeOnly() surfaces a live line carrying one of those words.
+        const live = codeOnly('const x = isBilledProvider("deepl");');
+        expect(live).toContain("isBilledProvider");
+        expect(codeOnly(" * isBilledProvider is gone\n")).not.toContain("isBilledProvider");
     });
 });
 
 /*
- * The first-run notice, which is the other half of defect 2.
+ * The first-run notice, which is the surviving half of defect 2.
  */
-describe("the first-run notice is honest about all three providers", () => {
+describe("the first-run notice is honest about both providers", () => {
     const consentNotice = (): string => {
         // Comments stripped FIRST. The block explains why it no longer names one
-        // provider of three, and naming the old wording in that explanation must
+        // provider of two, and naming the old wording in that explanation must
         // not read as still shipping it — a guard that forbids its own
         // explanation rots, and this one went red on correct code before the
         // strip was added.
@@ -264,27 +238,74 @@ describe("the first-run notice is honest about all three providers", () => {
         return src.slice(start, end);
     };
 
+    /**
+     * The sentence the USER reads, not the source that produces it.
+     *
+     * The notice is written as adjacent string literals joined by `+`, so any
+     * phrase that happens to straddle a concatenation boundary is absent from
+     * the raw source while being present on screen — "Direct messages are " +
+     * "excluded unless you opt in." is exactly that, and it went red here on
+     * correct code. Reading the source directly would therefore have forced
+     * either a weakened assertion or a reflow of the shipped notice to suit the
+     * test. Both are the wrong fix: the claim is about what the user is told, so
+     * the literals are rejoined and the claim is checked against that.
+     */
+    const noticeText = (): string =>
+        (consentNotice().match(/"((?:[^"\\]|\\.)*)"/g) ?? [])
+            .map(literal => literal.slice(1, -1))
+            .join("");
+
+    it("the rejoin really does bridge a concatenation boundary (positive control)", () => {
+        // Without this control the helper could silently return "" and every
+        // .toContain below would fail loudly — but every .not.toContain would
+        // pass vacuously, which is the dangerous direction.
+        expect(noticeText().length).toBeGreaterThan(200);
+        const split = '"Direct messages are " +\n"excluded unless you opt in."';
+        expect(split).not.toContain("Direct messages are excluded");
+        const rejoined = (split.match(/"((?:[^"\\]|\\.)*)"/g) ?? [])
+            .map(literal => literal.slice(1, -1))
+            .join("");
+        expect(rejoined).toContain("Direct messages are excluded unless you opt in");
+    });
+
     it("no longer claims the destination is Google Translate", () => {
-        // Two of the three providers are not Google Translate, and one of them
-        // is not Google at all.
+        // One of the two providers is not Google Translate: it is a deployment
+        // the user stands up themselves, at a URL only they know.
         expect(
             consentNotice(),
-            "the first-run notice named one provider of three as if it were the only one"
+            "the first-run notice named one provider of two as if it were the only one"
         ).not.toContain("Google Translate");
+        expect(noticeText()).not.toContain("Google Translate");
     });
 
-    it("says that two of the providers are billed to the user", () => {
-        const notice = consentNotice();
-        expect(notice).toContain("billed to");
-        expect(notice).toContain("DeepL");
-        expect(notice).toContain("Google Cloud Translation");
+    it("names BOTH destinations, because which third party receives the text is a setting", () => {
+        const notice = noticeText();
+        expect(notice).toContain("Google (free)");
+        expect(notice).toContain("Apps Script");
     });
 
-    it("still says the default costs nothing, and still promises the DM opt-in", () => {
-        const notice = consentNotice();
-        expect(notice).toContain("costs nothing");
+    it("makes the disclosure that survived dropping the paid providers", () => {
+        // Removing DeepL and Google Cloud removed the PRICE, not the fact that
+        // private message text leaves this machine. A notice that answered
+        // "is it free?" and stopped would be answering a question nobody asked
+        // about their DMs.
+        const notice = noticeText();
+        expect(
+            notice,
+            "the notice must still say the text leaves the machine, not merely that it is free"
+        ).toContain("leaves this machine");
         // PRIVACY.md and core/modes.ts both rest on this sentence.
         expect(notice).toContain("Direct messages are excluded unless you opt in");
+    });
+
+    it("promises nothing about a bill that could be broken by adding a paid provider", () => {
+        // "neither can bill you" is a claim about the whole provider registry,
+        // not about today's default. test/providers.test.ts is what holds the
+        // registry to it; this asserts the two are talking about the same thing.
+        const notice = noticeText();
+        expect(notice).toContain("neither can bill you");
+        expect(notice).not.toContain("DeepL");
+        expect(notice).not.toContain("Google Cloud Translation");
     });
 
     it("its extractor really is reading the notice and not the whole file (control)", () => {

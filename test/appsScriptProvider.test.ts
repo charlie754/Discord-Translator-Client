@@ -72,15 +72,39 @@ describe("apps script provider — no URL configured", () => {
         expect(resolveProvider("apps-script", okHttp, { apiKey: URL_OK }).ok).toBe(true);
     });
 
-    it("still says \"an API key\" for the providers whose credential IS a key", () => {
-        // The per-provider noun must not have changed the wording for anyone else.
-        const deepl = resolveProvider("deepl", okHttp, {});
-        if (deepl.ok) throw new Error("unreachable");
-        expect(deepl.reason).toContain("needs an API key of your own");
-
-        const cloud = resolveProvider("google-cloud", okHttp, {});
-        if (cloud.ok) throw new Error("unreachable");
-        expect(cloud.reason).toContain("needs an API key of your own");
+    it("still says \"an API key\" for a key-requiring provider that names no noun of its own", () => {
+        // WHAT THIS USED TO ASSERT, and why it is written this way now. It used to
+        // resolve "deepl" and "google-cloud" and check that the per-provider noun
+        // had not changed the wording for them. Both providers are deleted, so
+        // that version now passes on `Unknown translation provider "deepl".` —
+        // which contains neither noun and proves nothing about either.
+        //
+        // The DEFAULT_CREDENTIAL_NOUN branch in resolveProvider() is still live
+        // code and apps-script is the only entry that overrides it, so the branch
+        // has no caller in the shipped registry. Rather than delete the coverage
+        // or fake it with a string comparison, a key-requiring provider is put in
+        // the registry for the length of this test and taken out again — so the
+        // real resolveProvider() really does take the default branch.
+        const id = "test-only-key-provider";
+        registry.set(id, () => ({
+            id,
+            label: "Test Provider",
+            needsKey: true,
+            translate: async () => { throw new Error("must not be reached"); }
+        }));
+        try {
+            const refused = resolveProvider(id, okHttp, {});
+            if (refused.ok) throw new Error("unreachable");
+            expect(refused.reason).toContain("needs an API key of your own");
+            // …and the apps-script override is genuinely an override, not the
+            // default text with different words around it.
+            expect(refused.reason).not.toContain("Web App URL");
+        } finally {
+            registry.delete(id);
+        }
+        // Left exactly as it was found: a leaked entry would make the free-only
+        // registry assertions below depend on test ordering.
+        expect(registry.has(id)).toBe(false);
     });
 
     it("throws rather than sending a URL-less request if it is called anyway", async () => {
@@ -564,10 +588,20 @@ describe("registry", () => {
         expect(registry.has("apps-script")).toBe(true);
     });
 
-    it("still contains the three that were there before", () => {
-        expect(registry.has("google")).toBe(true);
-        expect(registry.has("deepl")).toBe(true);
-        expect(registry.has("google-cloud")).toBe(true);
+    it("holds the free default, and NOTHING that can bill anyone", () => {
+        // This used to read "still contains the three that were there before" and
+        // named deepl and google-cloud. Both are deleted: they took an API key of
+        // the user's own and charged them per character, and the operator's ruling
+        // was to remove them rather than discourage them.
+        //
+        // The promise "no configuration of this plugin can put a charge on
+        // anyone" is a property of THIS MAP and of nothing downstream — the spend
+        // meter and the cap that used to sit behind it are gone too. So the map is
+        // pinned exhaustively rather than by membership: a new entry has to come
+        // past this line and be argued for.
+        expect([...registry.keys()].sort()).toEqual(["apps-script", "google"]);
+        expect(registry.has("deepl")).toBe(false);
+        expect(registry.has("google-cloud")).toBe(false);
     });
 
     it("constructs it from the registry", () => {

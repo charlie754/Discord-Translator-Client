@@ -17,9 +17,6 @@
         "webRequestBlocking",
         "*://*.discord.com/*",
         "https://translate.googleapis.com/*",
-        "https://translation.googleapis.com/*",
-        "https://api-free.deepl.com/*",
-        "https://api.deepl.com/*",
         "https://script.google.com/*",
         "https://script.googleusercontent.com/*",
         "https://raw.githubusercontent.com/*"
@@ -71,7 +68,7 @@
             "_comment_min_version": "140.0 because data_collection_permissions below is honoured only from Firefox 140 (142 on Android). At 128 the key was silently ignored, so the declaration users saw at install time was whatever Mozilla defaulted to rather than what we declared.",
             "strict_min_version": "140.0",
             "data_collection_permissions": {
-                "_comment": "This extension exists to send Discord message text to a translation provider. Declaring none was simply false. personalCommunications covers the chat messages; websiteContent covers the same text as page content; authenticationInfo covers the user's own provider credential - a DeepL key, a Google Cloud key, or the Apps Script deployment URL, which is a credential in the same sense because anyone holding it can spend that deployment's daily quota - stored locally, sent only to the provider it belongs to, and only if they configure one.",
+                "_comment": "This extension exists to send Discord message text to a translation provider. Declaring none was simply false. personalCommunications covers the chat messages; websiteContent covers the same text as page content; authenticationInfo covers the only credential the extension can hold - the Apps Script deployment URL, which is a credential in the sense that anyone holding it can spend that deployment's daily quota - stored locally, sent only to the user's own deployment, and only if they configure one. There is no API key of any kind: both surviving providers are free, and neither can bill anyone.",
                 "required": [
                     "personalCommunications",
                     "websiteContent",

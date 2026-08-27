@@ -34,32 +34,51 @@ const SOURCES = {
  * from one of the files, so that editing a file cannot quietly redefine the
  * expectation it is being measured against.
  *
- * translate.googleapis.com and translation.googleapis.com are two DIFFERENT
- * hosts — the free gtx endpoint and the paid Cloud Translation v2 API. Neither
- * is a subdomain of the other, and the exact-match guard treats them as the
- * unrelated third parties they are.
+ * THE LIST SHRANK FROM SIX TO THREE, AND THE SHRINKING IS THE POINT.
+ * api-free.deepl.com, api.deepl.com and translation.googleapis.com were the
+ * three hosts that could bill somebody: the two DeepL API endpoints and the paid
+ * Cloud Translation v2 API. Both providers are deleted, so those hosts are not
+ * merely unused — they must be unreachable, and DROPPED_PAID_HOSTS below pins
+ * that as a refusal rather than as an absence.
  *
- * script.google.com is the third Google host and the odd one out: it is not a
- * vendor endpoint but the host every user-deployed Apps Script Web App lives on.
- * Its absence from all three sets is what made the "apps-script" provider
+ * translate.googleapis.com survives and is NOT the same host as the deleted
+ * translation.googleapis.com: it is the free, keyless gtx endpoint. Neither was
+ * ever a subdomain of the other, and the exact-match guard treats them as the
+ * unrelated third parties they are — which is precisely why one could be dropped
+ * without touching the other.
+ *
+ * script.google.com is the second surviving host and the odd one out: it is not
+ * a vendor endpoint but the host every user-deployed Apps Script Web App lives
+ * on. Its absence from all three sets is what made the "apps-script" provider
  * unreachable while still being selectable in settings — every request was
  * refused by the transport guard, which is why it is pinned here.
  *
- * script.googleusercontent.com is the fourth Google host and the second half of
- * that same provider: a POST to /exec on script.google.com answers 302, and the
- * translation is served from THIS host. Nothing ever builds a URL on it —
- * checkDeploymentUrl() accepts only a script.google.com deployment URL — so it is
- * reached solely as the target of that redirect, after the Location has been
- * through the same checkUrl() the original URL went through. Adding
- * script.google.com alone left apps-script reachable and still unable to complete
- * a single request.
+ * script.googleusercontent.com is the second half of that same provider: a POST
+ * to /exec on script.google.com answers 302, and the translation is served from
+ * THIS host. Nothing ever builds a URL on it — checkDeploymentUrl() accepts only
+ * a script.google.com deployment URL — so it is reached solely as the target of
+ * that redirect, after the Location has been through the same checkUrl() the
+ * original URL went through. Adding script.google.com alone left apps-script
+ * reachable and still unable to complete a single request.
  */
 const EXPECTED = [
-    "api-free.deepl.com",
-    "api.deepl.com",
     "script.google.com",
     "script.googleusercontent.com",
-    "translate.googleapis.com",
+    "translate.googleapis.com"
+];
+
+/**
+ * The hosts removed with the two providers that could bill the user.
+ *
+ * Kept as a named list rather than simply deleted, because "no longer in
+ * EXPECTED" and "refused by the guard" are different claims and only the second
+ * one protects anybody. These are fed into MUST_REFUSE below, so a host
+ * re-appearing in any of the three ALLOWED_HOSTS sets fails as a REACHABILITY
+ * regression — which is what it would be — rather than only as a list mismatch.
+ */
+const DROPPED_PAID_HOSTS = [
+    "api-free.deepl.com",
+    "api.deepl.com",
     "translation.googleapis.com"
 ];
 
@@ -111,6 +130,25 @@ describe("translation host allow-list", () => {
 
         for (const host of EXPECTED) expect(declared.has(host), host).toBe(true);
     });
+
+    it("declares NONE of the hosts the paid providers used", () => {
+        const declared = new Set(
+            readFileSync(join(ROOT, "scripts/allowed-hosts.txt"), "utf8")
+                .split("\n")
+                .map(l => l.trim())
+                .filter(l => l && !l.startsWith("#"))
+        );
+
+        // A stale entry here is not cosmetic: this file is the CSP/packaging
+        // input, so a host left behind is a host the shipped build still permits
+        // long after the code that used it was deleted.
+        for (const host of DROPPED_PAID_HOSTS) expect(declared.has(host), host).toBe(false);
+
+        // …and the reader really did read something, so the loop above is not
+        // three assertions against an empty set (positive control).
+        expect(declared.size).toBeGreaterThanOrEqual(EXPECTED.length);
+        expect(declared.has("translate.googleapis.com")).toBe(true);
+    });
 });
 
 /*
@@ -123,11 +161,14 @@ describe("translation host allow-list", () => {
  * sufficient, and nothing in this suite looked at the manifests until
  * script.google.com had to be added to both.
  *
- * scripts/checkExtensionPackages.mjs asserts the same thing — against its own
- * PROVIDER_HOSTS literal, which does not include script.google.com, and only
- * after a full extension build. This runs off the source manifests in
- * milliseconds and is measured against EXPECTED, so adding a transport host with
- * no manifest grant fails here rather than in a release build.
+ * scripts/checkExtensionPackages.mjs used to assert the same thing against a
+ * PROVIDER_HOSTS literal of its own, and only after a full extension build. That
+ * literal is gone; what remains there is a self-test of its host-pattern matcher
+ * whose fixtures still spell api.deepl.com — inert strings, not a grant. This
+ * file runs off the source manifests in milliseconds and is measured against
+ * EXPECTED, so adding a transport host with no manifest grant, or leaving a
+ * grant behind after deleting its provider, fails here rather than in a release
+ * build or not at all.
  */
 describe("browser manifests", () => {
     const MANIFESTS = {
@@ -160,6 +201,19 @@ describe("browser manifests", () => {
         }
     });
 
+    it.each(Object.entries(MANIFESTS))("%s grants none of the dropped paid hosts", (_label, path) => {
+        // A host permission is a standing grant to the extension, independent of
+        // any code path. Leaving one in place after deleting the provider that
+        // used it means the shipped extension can still reach a billing endpoint
+        // and the store listing still asks the user for that permission.
+        const patterns = hostPatterns(load(path));
+        for (const host of DROPPED_PAID_HOSTS) {
+            expect(patterns.some(p => p.includes(host)), host).toBe(false);
+        }
+        // The scan is real: the surviving host IS found by the same predicate.
+        expect(patterns.some(p => p.includes("translate.googleapis.com"))).toBe(true);
+    });
+
     it.each(Object.entries(MANIFESTS))("%s reads the hosts it was measured on (positive control)", (_label, path) => {
         // Without this, a manifest whose permissions key had been renamed would
         // return [] from hostPatterns() and the assertion above would fail loudly
@@ -183,11 +237,16 @@ const MUST_REFUSE: [string, string][] = [
     ["plain http", "http://translate.googleapis.com/translate_a/single"],
     ["a lookalike prefix", "https://evil-translate.googleapis.com/x"],
     ["a lookalike suffix", "https://translate.googleapis.com.evil.test/x"],
-    // "translation" and "translate" are both allowed; "translations" is not, and a
-    // prefix or fuzzy match would not be able to tell.
+    // "translate" is allowed; "translations" is not, and a prefix or fuzzy match
+    // would not be able to tell. (Until the paid provider was dropped,
+    // "translation" was allowed too, which made this the sharpest of the three.)
     ["a near-miss on the cloud host", "https://translations.googleapis.com/language/translate/v2"],
+    // The dropped paid hosts themselves. A URL on one of these is now exactly as
+    // foreign as evil.test, and the plugin must treat it that way.
+    ...DROPPED_PAID_HOSTS.map(host =>
+        [`the dropped paid host ${host}`, `https://${host}/v2/translate`] as [string, string]),
     ["a deepl lookalike", "https://evil-deepl.com/v2/translate"],
-    ["a subdomain", "https://a.api.deepl.com/v2/translate"],
+    ["a subdomain of a dropped host", "https://a.api.deepl.com/v2/translate"],
     // The Apps Script host is shared by every deployment on the internet, so the
     // usual near-misses matter here too — and "scripts" is a plural nobody would
     // notice in a settings field.

@@ -17,8 +17,9 @@ import { describe, expect, it } from "vitest";
  * What no unit test in this suite can reach is whether the plugin layer actually
  * ASKS those functions, because render.tsx and selection.ts resolve Vencord
  * aliases (@webpack/common, @api/*) that do not exist under vitest — the same
- * constraint test/meteredProviderChokepoint.test.ts, test/settingsCopy.test.ts
- * and test/usage.test.ts all record for state.ts and settings.ts. A source scan
+ * constraint test/providerChokepoint.test.ts, test/settingsCopy.test.ts and
+ * test/requestBookkeeping.test.ts all record for state.ts and settings.ts. A
+ * source scan
  * is the only instrument that reaches this layer at all, so it is used ONLY for
  * the call sites, never for the decisions.
  *
@@ -29,10 +30,13 @@ import { describe, expect, it } from "vitest";
  *    content, then sent the text to the provider. It never asked the per-server
  *    toggle and never asked about DMs, so a double-click inside a private
  *    message — or inside a server the user had deliberately switched OFF — was a
- *    disclosure, and a billed one on the paid providers.
+ *    disclosure. It was also a BILLED one while the paid providers existed;
+ *    those are deleted and the disclosure is not, which is the half that
+ *    mattered.
  *
  * 2. `includeDMs` WAS A DEAD SETTING. Its only two mentions in the tree were its
- *    own definition and a source-ORDERING scan in test/usage.test.ts. Nothing
+ *    own definition and a source-ORDERING scan in the file that became
+ *    test/requestBookkeeping.test.ts. Nothing
  *    read the value, while index.tsx's first-run notice and PRIVACY.md both told
  *    the user it worked.
  */

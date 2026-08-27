@@ -13,11 +13,17 @@ import { aggregate, shouldTranslate, splitJoined } from "./core/detect";
 import { hashContent } from "./core/hash";
 import { ToggleState, translationEnabled } from "./core/modes";
 import { protect, restore } from "./core/protect";
+// checkDeploymentUrl comes straight from the provider module that defines it,
+// which is how every existing caller reaches it — createAppsScriptProvider() in
+// that same file, and test/appsScriptProvider.test.ts. It is a pure string check
+// with no transport, no settings and no I/O, which is what makes it safe to call
+// before anything else here.
+import { checkDeploymentUrl } from "./core/providers/appsScript";
 import type { HttpRequestInit, HttpTransport, ProviderResolution } from "./core/providers/types";
+import { PermanentFailureRegistry } from "./core/requestBookkeeping";
 import { isPermanent, Scheduler } from "./core/scheduler";
-import { CapNoticeGate, isBilledProvider, isCapRefusal, meterIfBilled, PermanentFailureRegistry, UsageMeter } from "./core/usage";
-import { currentProvider, warnProviderUnavailable } from "./provider";
-import { settings, usageStore } from "./settings";
+import { appsScriptProviderFor, currentProvider, warnProviderUnavailable } from "./provider";
+import { settings } from "./settings";
 
 type TranslationNative = {
     fetchTranslation(
@@ -26,11 +32,42 @@ type TranslationNative = {
     ): Promise<{ status: number; body: string; retryAfterMs?: number }>;
 };
 
+/**
+ * The message thrown when there is no transport at all. Named rather than
+ * inlined so validateAppsScriptUrl() can recognise it and say something a user
+ * can act on instead of showing them this sentence, which is written for us.
+ * The text itself is unchanged.
+ */
+const NATIVE_BRIDGE_MISSING = "ChannelTranslator: native bridge unavailable";
+
+/**
+ * The object the transports install, or undefined when this build has none.
+ *
+ * WHERE IT IS ACTUALLY ABSENT, since the answer decides whether the branch below
+ * is dead code. On the browser/extension/userscript build it is NOT normally
+ * absent: browser/VencordNativeStub.ts assigns `window.VencordNative` with
+ * `pluginHelpers: { ChannelTranslator: ChannelTranslatorHelper }` (stub line 197,
+ * helper defined at browser/translationBridge.ts:889), and browser/Vencord.ts
+ * imports that stub as its first statement, so the bridge exists before any
+ * plugin runs. On the DESKTOP build pluginHelpers is not written by this repo's
+ * source at all: src/VencordNative.ts:24 builds it from the main process's
+ * GET_PLUGIN_IPC_METHOD_MAP reply, so the key is present only if the main
+ * process registered this plugin's native.ts. A partial install, a host that
+ * ships its own preload, or a renderer bundle newer than the main bundle all
+ * produce a VencordNative with no ChannelTranslator under it.
+ *
+ * So: rare, not impossible, and not something the user can diagnose from
+ * "native bridge unavailable".
+ */
+function translationNative(): TranslationNative | undefined {
+    return (VencordNative as any)?.pluginHelpers?.ChannelTranslator as TranslationNative | undefined;
+}
+
 // init is passed straight through and is undefined for every GET, so the two
 // existing providers reach the transport exactly as they did before POST existed.
 const http: HttpTransport = (url, init) => {
-    const native = (VencordNative as any)?.pluginHelpers?.ChannelTranslator as TranslationNative | undefined;
-    if (!native) throw new Error("ChannelTranslator: native bridge unavailable");
+    const native = translationNative();
+    if (!native) throw new Error(NATIVE_BRIDGE_MISSING);
     return native.fetchTranslation(url, init);
 };
 
@@ -45,42 +82,187 @@ export const scheduler = new Scheduler({
 
 /**
  * THE ONLY WAY THIS PLUGIN OBTAINS A PROVIDER. Nothing outside this file may
- * call currentProvider(), and test/meteredProviderChokepoint.test.ts fails if
- * anything starts to.
+ * call currentProvider(), and test/providerChokepoint.test.ts fails if anything
+ * starts to. (That test was renamed from meteredProviderChokepoint when the
+ * meter went; the guard it applies here is unchanged.)
  *
- * The bug this closes: requestTranslation() was metered and capped, and
- * selection.ts — double-click and triple-click translation — was not. It called
- * currentProvider(http) and then provider.translate() on the RAW provider, so a
- * user who set a monthly character cap still paid past it, and the meter they
- * were reading did not know those characters existed. One metered call site and
- * one unmetered one is not a cap; it is a cap with a door in it.
+ * WHY THE CHOKEPOINT SURVIVED THE THING IT WAS BUILT FOR. It was built to hold a
+ * spend meter. requestTranslation() was metered and capped and selection.ts —
+ * double-click and triple-click translation — was not: selection.ts called
+ * currentProvider(http) itself and then translated through the RAW provider, so
+ * a user who had set a monthly character cap kept paying past it. The fix was
+ * structural rather than a second wrapping call site, because a second call site
+ * is a third one waiting to happen, so obtaining a provider AT ALL came through
+ * here.
  *
- * The fix is structural rather than a second meterIfBilled() call site, because
- * a second call site is a third one waiting to happen. Obtaining a provider AT
- * ALL now yields the metered one. A caller cannot forget to meter, because a
- * caller is never handed anything to forget about.
+ * The meter and the cap are gone — every remaining provider is free, so there is
+ * nothing left to meter. The chokepoint is NOT a leftover of them. What it
+ * actually enforces is that one function decides what this plugin talks to and
+ * with which credential, and that decision is read fresh from settings on every
+ * call. That is what makes switching provider take effect on the next message
+ * rather than the next Discord restart, and it is what keeps "where does message
+ * text go?" a question with a single answer in a single place — which matters
+ * more, not less, now that one of the two providers is an endpoint the user
+ * deployed themselves.
  *
- * The meter and the cap are constructed per call, on purpose: the cap is read
- * fresh so raising it takes effect on the next message rather than on the next
- * Discord restart, and meterIfBilled() hands the free keyless provider straight
- * back BY IDENTITY, so nothing on that path changes.
+ * A second call site would put that decision in two places again. Do not add one.
  */
 export function translationProvider(): ProviderResolution {
-    const resolved = currentProvider(http);
-    if (!resolved.ok) return resolved;
-    return {
-        ok: true,
-        provider: meterIfBilled(
-            resolved.provider,
-            new UsageMeter(usageStore()),
-            { monthlyCharacterCap: settings.store.monthlyCharacterCap }
-        )
-    };
+    return currentProvider(http);
 }
 
 /**
- * Messages that will never translate on the current provider and key, so they
- * are not sent — and not paid for — on every render pass forever.
+ * Whether an endpoint can actually be used, or the sentence that says why not.
+ *
+ * Deliberately NOT ProviderResolution: nothing is handed back on success. The
+ * caller asked a question, not for a provider, and returning one would invite a
+ * second, unmetered translation path — the exact shape translationProvider()
+ * exists to prevent.
+ */
+export type EndpointCheck = { ok: true; } | { ok: false; reason: string; };
+
+/**
+ * What to say when there is no transport at all — written for the person
+ * reading it, not for us.
+ *
+ * "native bridge unavailable" is a true sentence about our internals and a
+ * useless one to a user staring at a URL field: it reads as though the URL were
+ * wrong, and the one thing they can act on is the one thing that is fine. See
+ * translationNative() above for when this is actually reachable.
+ */
+const NATIVE_BRIDGE_REASON =
+    "This copy of the plugin cannot reach the helper that sends network requests, so the " +
+    "deployment cannot be checked from here. Nothing is wrong with the URL you pasted. " +
+    "Restart Discord, and if it keeps happening reinstall the plugin.";
+
+/** No message on the thrown value, or something thrown that was not an Error at all. */
+const UNEXPLAINED_FAILURE =
+    "The check failed and gave no reason, which is itself unexpected — please report it.";
+
+/**
+ * The sentence to show for a failed probe.
+ *
+ * The message is taken as-is because core/providers/appsScript.ts and the three
+ * transports already write better user-facing prose than anything that could be
+ * composed here: they name the sign-in page, the daily quota, the deleted
+ * deployment and the /exec-vs-/dev mistake, each with the exact menu path to fix
+ * it. Rewording them here would produce two vocabularies for one failure.
+ *
+ * THE CANDIDATE URL IS NEVER ADDED. Nothing below interpolates it, and nothing
+ * upstream does either: appsScript.ts's messages name statuses and menus, and the
+ * only transport refusal that echoes any part of a URL is the not-an-allowed-host
+ * one, which quotes `protocol//host` and never the path — and which a candidate
+ * that got this far cannot trigger, because checkDeploymentUrl() has already
+ * pinned the host to script.google.com. The deployment id, which is the part that
+ * IS the credential, appears nowhere.
+ */
+function endpointFailureReason(err: unknown): string {
+    const raw = err instanceof Error ? err.message : typeof err === "string" ? err : "";
+    const message = raw.trim();
+    if (!message) return UNEXPLAINED_FAILURE;
+    // Second line of defence for the bridge: validateAppsScriptUrl() checks for
+    // it up front, but the bridge can also go away between that check and the
+    // request, and this is the one internal string that must never be shown raw.
+    if (message === NATIVE_BRIDGE_MISSING) return NATIVE_BRIDGE_REASON;
+    return message;
+}
+
+/**
+ * Is this candidate Apps Script deployment URL one that actually works?
+ *
+ * WHAT IT COSTS THE USER. Nothing in money, and this is not a hedge: Apps Script
+ * has no billing at all, so there is no card and no invoice. It costs ONE call
+ * out of the deployment's daily allowance — about 5,000 on a consumer Google
+ * account — which is worth saying out loud and is not a hazard.
+ *
+ * THE ORDER BELOW IS THE DESIGN, not an implementation detail:
+ *
+ *   1. empty        — answered here, no call
+ *   2. LOCAL SHAPE  — checkDeploymentUrl(), no call
+ *   3. transport    — answered here, no call
+ *   4. resolve      — through provider.ts, so the registry stays behind it
+ *   5. probe        — the one and only request
+ *
+ * Steps 1-3 are free and instant. The user who pasted the /dev URL, the editor
+ * URL out of the address bar, or a URL truncated by their clipboard is told
+ * immediately and in Google's own vocabulary, instead of waiting out a round
+ * trip to be told the same thing. checkDeploymentUrl()'s refusals are reused
+ * verbatim for that reason — they already name Deploy → Manage deployments, and
+ * a second wording of the same advice would be a worse one.
+ *
+ * THE URL IS NEVER LOGGED, NOTICED, OR PUT IN A REASON. It is the credential —
+ * anyone holding it can spend the deployment's daily quota — which is why
+ * core/providers/appsScript.ts says so in capitals and why this function returns
+ * a bare { ok: true } rather than anything derived from the string.
+ *
+ * MUST NOT be called at module scope: it writes settings.store on success, and
+ * appsScriptProviderFor() runs through the same adapter every settings read
+ * goes through.
+ */
+export async function validateAppsScriptUrl(candidateUrl: string): Promise<EndpointCheck> {
+    const trimmed = (candidateUrl ?? "").trim();
+    if (!trimmed) {
+        return {
+            ok: false,
+            reason:
+                "There is nothing to check yet — paste the Web App URL from Deploy → Manage " +
+                "deployments first. It ends with /exec."
+        };
+    }
+
+    // LOCAL, INSTANT, FREE, AND FIRST. Every refusal this returns is one the
+    // network could not have improved on, so making the request first would spend
+    // a call out of the daily allowance to learn something already known.
+    const shape = checkDeploymentUrl(trimmed);
+    if (!shape.ok) return { ok: false, reason: shape.reason };
+
+    // Asked before anything is constructed so the failure names the real cause.
+    // Without it the probe throws NATIVE_BRIDGE_MISSING from inside the provider
+    // and the user reads an internal sentence about a bridge.
+    if (!translationNative()) return { ok: false, reason: NATIVE_BRIDGE_REASON };
+
+    // Through provider.ts, never through the registry directly — see
+    // appsScriptProviderFor() there for why that function cannot live in this
+    // file. It resolves against the CANDIDATE, so the stored URL is neither read
+    // nor disturbed by a check of a URL the user has not committed to.
+    const resolved = appsScriptProviderFor(trimmed, http);
+    if (!resolved.ok) return { ok: false, reason: resolved.reason };
+
+    // Resolved and used directly. There used to be a meterIfBilled() wrapper on
+    // this line, kept deliberately even though it was a no-op for Apps Script, so
+    // that provider construction had exactly ONE shape in this file and whoever
+    // added a verify button for a BILLED provider would copy it and be metered by
+    // default. There are no billed providers left to guard against and no meter
+    // to apply, so the wrapper went with them — and translationProvider() above
+    // is now a bare currentProvider() call for the same reason. The two shapes
+    // still match; there is simply less of both.
+    const { provider } = resolved;
+
+    try {
+        // The smallest honest request: a real translate call, because a HEAD or a
+        // GET would exercise a different code path from the one that has to work
+        // and could pass while translation was broken. One two-letter word is the
+        // least it can be while still being the real thing.
+        await provider.translate(["ok"], "en", "es");
+        // THE ONE PLACE THAT KNOWS A URL ACTUALLY WORKED, which is why the write
+        // is here and not in whatever UI calls this. A caller can know the check
+        // passed; only this line sits after the request that proves it, so
+        // "lastGood" stays literally true rather than degrading into "last
+        // typed". Written AFTER the await, never before it.
+        //
+        // The canonical form from checkDeploymentUrl() is stored, not the raw
+        // paste: that is the string the request was actually made against, with
+        // any query, fragment or embedded credentials already dropped.
+        settings.store.lastGoodAppsScriptUrl = shape.url;
+        return { ok: true };
+    } catch (err) {
+        return { ok: false, reason: endpointFailureReason(err) };
+    }
+}
+
+/**
+ * Messages that will never translate on the current provider and credential, so
+ * they are not re-sent on every render pass forever.
  *
  * Keyed exactly like inFlight, `contentHash:targetLanguage`, so an edited
  * message and a re-targeted translation are different messages and get a fresh
@@ -88,134 +270,53 @@ export function translationProvider(): ProviderResolution {
  */
 const permanentFailures = new PermanentFailureRegistry();
 
-/** At most one cap-refusal banner per cap-trip episode. See CapNoticeGate. */
-const capNotice = new CapNoticeGate();
-
 /**
  * Everything a permanent failure was permanent WITH RESPECT TO.
  *
- * A message DeepL refuses is not a message Google Cloud refuses, and a message
- * refused by a revoked key is not refused by the replacement. When either of
- * those changes, every remembered failure stops being evidence, so the registry
- * is discarded and those messages get a real attempt again.
+ * A message the free gtx endpoint refuses is not a message the user's own Apps
+ * Script deployment refuses, and a message refused by a dead deployment URL is
+ * not refused by the replacement. When either changes, every remembered failure
+ * stops being evidence, so the registry is discarded and those messages get a
+ * real attempt again.
  *
- * THE MONTHLY CAP IS DELIBERATELY NOT IN HERE, and used to be. Folding it in
- * made raising the cap wipe the permanent-failure registry, so every message
- * already proven unpayable-for — a 400 the provider will answer identically
- * forever, a 200 whose body will never parse — was re-sent and re-BILLED, at the
- * exact moment the user had signalled willingness to spend more. A cap is a
- * budget, not evidence about a message: nothing about raising it makes a
- * permanently refused message translatable. See capIdentity() for what a cap
- * change legitimately does invalidate.
+ * WHAT IS NO LONGER IN HERE, and it is a deletion rather than a change of mind.
+ * This used to hash the DeepL and Google Cloud API keys, and there used to be a
+ * second identity beside it for the monthly character cap. Both providers and
+ * the cap are gone. The one live credential left is the Apps Script deployment
+ * URL, so it is the one hashed here.
  *
- * The keys are hashed, not stored: this string is held in a module variable for
- * the life of the session and there is no reason for a credential to live in it.
- * hashContent is FNV-1a and not a security primitive — it is used here only so
- * two different keys compare unequal, which is all this needs.
+ * The credential is hashed, not stored: this string is held in a module variable
+ * for the life of the session and there is no reason for a credential to live in
+ * it. hashContent is FNV-1a and not a security primitive — it is used here only
+ * so two different URLs compare unequal, which is all this needs.
  */
 function providerIdentity(): string {
     return [
         settings.store.provider,
-        hashContent(settings.store.deeplApiKey ?? ""),
-        hashContent(settings.store.googleCloudApiKey ?? "")
+        hashContent(settings.store.appsScriptUrl ?? "")
     ].join("|");
 }
 
-/**
- * What a cap-refusal EPISODE was an episode of.
- *
- * The cap gets its own identity because it does invalidate one of the two
- * guards: the refusal banner quotes the cap figure, so once the number changes
- * the last banner is describing a limit that no longer exists and the next
- * refusal has earned the right to speak again. That is the whole of it — the
- * permanent-failure registry is untouched by this, which is the separation this
- * pair of functions exists to make.
- *
- * Cap refusals were never in the registry to begin with: requestTranslation()'s
- * catch returns on isCapRefusal(err) BEFORE the marking branch, so a capped
- * message is never remembered as permanently failed and resumes the moment the
- * cap rises, exactly as before. test/meteredProviderChokepoint.test.ts asserts
- * that ordering, so it cannot quietly stop being true.
- */
-function capIdentity(): string {
-    return String(settings.store.monthlyCharacterCap ?? 0);
-}
-
 let lastProviderIdentity: string | null = null;
-let lastCapIdentity: string | null = null;
 
 /**
- * MUST run before anything reads permanentFailures or capNotice, and MUST NOT
- * run at module scope — it reads settings.
+ * MUST run before anything reads permanentFailures, and MUST NOT run at module
+ * scope — it reads settings.
  *
- * Two independent comparisons, not one combined fingerprint. A single string
- * cannot express "this change invalidates the registry" separately from "this
- * change only re-arms the banner", and collapsing them is what made a cap change
- * re-bill messages that had already permanently failed.
+ * One comparison now, where there were two. The second existed because the cap
+ * needed to invalidate a refusal banner WITHOUT invalidating the registry:
+ * collapsing them into a single fingerprint made raising the cap wipe the
+ * registry, so every message already proven permanently unsendable was re-sent
+ * and re-billed at the exact moment the user had signalled willingness to spend
+ * more. There is no cap and no banner any more, so there is one thing left to
+ * compare — but the reasoning is recorded because it is the trap anyone folding
+ * a new setting in here would fall into next.
  */
 function syncTranslationIdentity(): void {
     const provider = providerIdentity();
-    if (provider !== lastProviderIdentity) {
-        // First call of the session establishes the baseline rather than
-        // reporting a switch: nothing changed, we simply had not looked yet.
-        const isSwitch = lastProviderIdentity !== null;
-        lastProviderIdentity = provider;
-        permanentFailures.clear();
-        capNotice.reset();
-        if (isSwitch) announceBilledProvider(settings.store.provider);
-    }
-
-    const cap = capIdentity();
-    if (cap !== lastCapIdentity) {
-        lastCapIdentity = cap;
-        // The banner only. The registry is evidence about messages and a budget
-        // is not evidence about a message.
-        capNotice.reset();
-    }
-}
-
-/**
- * How the plugin tells the user that the provider they just chose bills them.
- *
- * Registered by index.tsx, which owns every notice this plugin shows. It is
- * injected rather than imported because index.tsx already imports this module,
- * and calling back into it directly would close that into a cycle.
- */
-export type BilledProviderNotifier = (providerId: string) => void;
-
-let billedProviderNotifier: BilledProviderNotifier | null = null;
-
-/** Install (or, with null, remove) the notifier. Called from start()/stop(). */
-export function setBilledProviderNotifier(fn: BilledProviderNotifier | null): void {
-    billedProviderNotifier = fn;
-}
-
-/**
- * Provider ids whose cost has already been put in front of the user this
- * session. Without this the notice would fire on every translation, because
- * syncTranslationIdentity() runs per message.
- */
-const billedProvidersAnnounced = new Set<string>();
-
-/**
- * THE GAP THIS CLOSES. The only place the plugin ever volunteered what it does
- * with the user's text was the first-run notice, which named Google Translate
- * and said nothing about money — reasonably, because on first run the provider
- * IS the free keyless one. Switching later to DeepL or Google Cloud Translation
- * changes both facts, and nothing said so: consentGiven was already true, so the
- * first-run notice never returned, and the only remaining mention of billing was
- * a settings description the user had to be reading to see.
- *
- * Fired once per provider per session, from the identity sync — i.e. at the
- * moment of the first translation that would actually be billed, not on every
- * message. A switch the user makes and never translates through costs nothing
- * and says nothing, which is the correct amount of noise for it.
- */
-function announceBilledProvider(providerId: string): void {
-    if (!isBilledProvider(providerId)) return;
-    if (billedProvidersAnnounced.has(providerId)) return;
-    billedProvidersAnnounced.add(providerId);
-    billedProviderNotifier?.(providerId);
+    if (provider === lastProviderIdentity) return;
+    lastProviderIdentity = provider;
+    permanentFailures.clear();
 }
 
 /**
@@ -239,13 +340,10 @@ export function guildIdOf(channelId: string | undefined): string | null {
 export function hydrate(): void {
     cache.loadFrom(settings.store.cacheBlob);
     toggle.loadFrom(settings.store.serverState);
-    // Establish the provider/cap baseline HERE rather than letting the first
-    // translation of the session do it. Otherwise a user who opens settings and
-    // switches to a billed provider before translating anything gets no cost
-    // notice at all: that first sync would be the baseline, and a baseline is
-    // silent by design. Starting a session already on a billed provider is
-    // likewise silent, which is correct — the notice belongs to the switch, and
-    // that switch happened in an earlier session.
+    // Establish the provider baseline HERE rather than letting the first
+    // translation of the session do it, so that the first sync is a baseline and
+    // not a spurious "the provider changed" that clears an empty registry for no
+    // reason. It costs one settings read at start().
     syncTranslationIdentity();
 }
 
@@ -298,16 +396,17 @@ export function requestTranslation(message: any): void {
     const flightKey = `${hash}:${target}`;
     if (inFlight.has(flightKey)) return;
 
-    // Before either guard below is trusted: a changed provider, key or cap
-    // invalidates both of them.
+    // Before the guard below is trusted: a changed provider or deployment URL
+    // invalidates every remembered failure.
     syncTranslationIdentity();
 
     // A message that already failed permanently is not sent again. Without this
-    // it is re-enqueued on every render pass, forever, and on a billed provider
-    // every one of those passes is a new charge for a message that will never
-    // render. Nothing else stops it — the cache is written only on success, and
-    // the breaker needs five CONSECUTIVE failures, which one poison message
-    // among healthy traffic never produces.
+    // it is re-enqueued on every render pass, forever — burning the free
+    // endpoint's rate budget or the Apps Script deployment's daily allowance on
+    // a message that will never render, and holding scheduler slots away from
+    // messages that could. Nothing else stops it: the cache is written only on
+    // success, and the breaker needs five CONSECUTIVE failures, which one poison
+    // message among healthy traffic never produces.
     if (permanentFailures.has(flightKey)) return;
 
     const raw = {
@@ -321,8 +420,8 @@ export function requestTranslation(message: any): void {
     if (!shouldTranslate(raw, target)) return;
 
     // A provider that cannot run says why. Returning quietly here is what would
-    // turn "DeepL selected, key not pasted" into a channel that simply never
-    // translates and never explains itself.
+    // turn "Apps Script selected, deployment URL not pasted" into a channel that
+    // simply never translates and never explains itself.
     const resolved = translationProvider();
     if (!resolved.ok) {
         warnProviderUnavailable(resolved.reason);
@@ -364,12 +463,8 @@ export function requestTranslation(message: any): void {
         })
         .then(payload => {
             // A null payload means the message had nothing worth translating, so
-            // nothing was sent and nothing can be concluded about the cap.
+            // nothing was sent and there is nothing to cache.
             if (!payload) return;
-            // A request got through, so whatever was capping spend is not
-            // capping it now. The next cap trip is a new episode and is allowed
-            // to speak again.
-            capNotice.reset();
             const { text, result } = payload;
             cache.set(hash, target, {
                 text,
@@ -380,28 +475,17 @@ export function requestTranslation(message: any): void {
             repaintMessage(raw.channelId, raw.id);
         })
         .catch(err => {
-            // The user's own spend cap comes first and is NOT a permanent
-            // failure. Everything else here is "not yet"; that one is "not until
-            // you change a setting", and it must resume the moment the setting
-            // changes — which marking it would prevent. It costs nothing to let
-            // it retry: the meter refuses it before a single character is sent.
+            // There used to be a branch above this one for the user's own spend
+            // cap, which was NOT a permanent failure and had to resume the moment
+            // the cap was raised. The cap is gone with the paid providers, so
+            // every error reaching here is a real failure of a real request and
+            // the only question left is whether it can ever succeed.
             //
-            // It does have to say so, though. A cap that stops translation
-            // silently is indistinguishable from the plugin being broken.
-            // warnProviderUnavailable is reused for its behaviour rather than
-            // its name, and gated because it CANNOT dedupe this one itself: the
-            // message embeds the per-message `requested` count, so its
-            // "same reason as last time?" check never matches.
-            if (isCapRefusal(err)) {
-                if (capNotice.claim()) warnProviderUnavailable(err.message);
-                return;
-            }
-
             // Permanent means the scheduler already refused to retry it: a 4xx
             // that is not 429, or a 200 whose body will never parse. Asking the
             // same deterministic endpoint the same question again returns the
-            // same answer at the same price, on every render pass, forever.
-            // Remember it and stop paying for it.
+            // same answer, on every render pass, forever. Remember it and stop
+            // asking.
             //
             // A transient failure is still deliberately left unmarked. The
             // inherited plugin had a terminal failure state and a single

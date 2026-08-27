@@ -98,7 +98,8 @@ describe("ToggleState", () => {
  * `includeDMs` was a control that governed nothing.
  *
  * It had exactly two mentions in the whole tree: its own definition in
- * settings.ts, and one line of test/usage.test.ts that located it with
+ * settings.ts, and one line of the since-deleted test/usage.test.ts that
+ * located it with
  * `src.indexOf("includeDMs: {")` to assert the ORDER settings appear in. Nothing
  * read the value. Meanwhile index.tsx's first-run notice told every new user
  * "Direct messages are excluded unless you opt in" and PRIVACY.md described the

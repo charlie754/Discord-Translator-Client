@@ -14,14 +14,20 @@ import { describe, expect, it } from "vitest";
  *
  * 1. COPY DRIFT ACROSS SHIPPED SURFACES. The googleCloudApiKey description used
  *    to say the first 500,000 characters were "free across the project, then USD
- *    20 per million". That framing is wrong twice over — it is a monthly USD 10
+ *    20 per million". That framing was wrong twice over — it was a monthly USD 10
  *    CREDIT, not a free tier, and Google's pricing page states no
  *    project-vs-billing-account scope for it — and it had already been removed
- *    from the 429 hint and contradicted by GOOGLE_CLOUD_SETUP.md. Three shipped
+ *    from the 429 hint and contradicted by the setup guide. Three shipped
  *    surfaces, two stories. Prose is not covered by any type, so it gets a test.
  *
- * 2. A CONTROL THAT DEFEATED ITS OWN DOCUMENTATION. GOOGLE_CLOUD_SETUP.md tells
- *    the reader to pick a language from the supported list rather than type a
+ *    THE SETTING IT WAS ABOUT IS NOW DELETED, along with both paid providers and
+ *    the setup guide that documented one of them. The wording assertions went
+ *    with it; the regex batteries did not, and they now sweep the whole file —
+ *    see the first describe below for why a price reappearing in a plugin that
+ *    cannot charge anybody is a worse defect than the one they were written for.
+ *
+ * 2. A CONTROL THAT DEFEATED ITS OWN DOCUMENTATION. The setup guide told the
+ *    reader to pick a language from the supported list rather than type a
  *    code, because a provider answers an unknown code with a 400. targetLanguage
  *    was nevertheless OptionType.STRING — a free text box that accepted anything.
  *    It is now a SELECT over TARGET_LANGUAGES.
@@ -138,48 +144,79 @@ describe("settings.ts — files under test", () => {
     });
 });
 
-describe("googleCloudApiKey cost copy", () => {
-    const description = () =>
-        settingBlock(flattenConcatenatedStrings(read(SETTINGS_PATH)), "googleCloudApiKey");
+/*
+ * DEFECT 1, AFTER THE PROVIDERS IT WAS ABOUT WERE DELETED.
+ *
+ * This describe used to assert the exact wording of googleCloudApiKey's price
+ * paragraph — the monthly USD 10 credit, its Basic-and-Advanced scope, that it
+ * does not roll over, and the USD 20.00 per 1,000,000 overage. That setting no
+ * longer exists: both paid providers are gone and settings.ts holds no API key
+ * field at all.
+ *
+ * The regex batteries STALE_COST_FRAMING and SCOPE_ASSERTIONS are KEPT and now
+ * run over the whole file. They cost nothing, and the failure they catch is one
+ * step worse than before: any reappearance of that framing means a price claim
+ * has come back into a product that cannot charge anybody, which is a lie rather
+ * than merely stale copy.
+ *
+ * What replaces the wording assertions is the claim that actually matters now —
+ * settings.ts offers no way to spend money and describes none.
+ */
+describe("settings.ts describes a product that cannot bill anyone", () => {
+    const flat = () => flattenConcatenatedStrings(read(SETTINGS_PATH));
 
-    it("finds a non-empty googleCloudApiKey description to assert on", () => {
-        expect(description().length).toBeGreaterThan(200);
+    it("has no API-key setting of any kind left to describe", () => {
+        for (const gone of ["deeplApiKey", "googleCloudApiKey", "monthlyCharacterCap", "usageBlob", "usageSummary"]) {
+            expect(() => settingBlock(flat(), gone), gone).toThrow(/setting not found/);
+        }
     });
 
-    it("calls the allowance a monthly credit of up to USD 10", () => {
-        expect(description()).toMatch(/credit of up to USD 10/);
+    it("settingBlock() still finds a setting that IS there (positive control)", () => {
+        // Without this the loop above passes for a settings.ts that failed to
+        // parse, or an extractor whose anchor shape had drifted — every lookup
+        // would throw and every assertion would be satisfied by the wrong reason.
+        expect(settingBlock(flat(), "appsScriptUrl").length).toBeGreaterThan(200);
     });
 
-    it("says the credit applies collectively to Basic and Advanced", () => {
-        expect(description())
-            .toMatch(/applies collectively to Cloud Translation - Basic and\s+Advanced/);
+    it("the surviving credential says there is no key and no card", () => {
+        const description = settingBlock(flat(), "appsScriptUrl");
+        expect(description).toContain("There is no API key and no card");
+        // The whole reason Apps Script is safe to keep: past the allowance a
+        // request fails instead of costing anything.
+        expect(description).toContain("Apps Script has no billing");
+        expect(description).toContain("script.google.com");
     });
 
-    it("says the credit does not roll over", () => {
-        expect(description()).toContain("does not roll over");
+    it("the provider list offers nothing that takes the user's money", () => {
+        const description = settingBlock(flat(), "provider");
+        expect(description).toContain("neither can bill you");
+        expect(description).toContain("Google (free)");
+        expect(description).toContain("Google Apps Script");
     });
 
-    it("quotes the overage rate as USD 20.00 per 1,000,000 characters", () => {
-        expect(description()).toContain("USD 20.00 per 1,000,000 characters");
+    it("quotes no price at all — no currency figure survives anywhere in the file", () => {
+        // Broader than the two batteries below on purpose. They name the exact
+        // sentences that were wrong; this one refuses the whole CATEGORY, because
+        // there is no longer any correct price for this plugin to quote.
+        const prices = flat().match(/USD\s*[\d.,]+|\$\s?\d/g) ?? [];
+        expect(prices, `settings.ts quotes a price: ${prices.join(", ")}`).toEqual([]);
+    });
+
+    it("would notice a price coming back (positive control)", () => {
+        const shipped = "then USD 20.00 per 1,000,000 characters, billed to your own key.";
+        expect(shipped.match(/USD\s*[\d.,]+|\$\s?\d/g)).not.toBeNull();
     });
 
     it("does not reintroduce the stale free-tier framing anywhere in the file", () => {
-        const flat = flattenConcatenatedStrings(read(SETTINGS_PATH));
-        const offenders = STALE_COST_FRAMING.filter(rx => rx.test(flat)).map(String);
+        const offenders = STALE_COST_FRAMING.filter(rx => rx.test(flat())).map(String);
         expect(offenders, `stale cost framing found in settings.ts: ${offenders.join(", ")}`)
             .toEqual([]);
     });
 
     it("does not assert a project-vs-billing-account scope Google does not state", () => {
-        const flat = flattenConcatenatedStrings(read(SETTINGS_PATH));
-        const offenders = SCOPE_ASSERTIONS.filter(rx => rx.test(flat)).map(String);
+        const offenders = SCOPE_ASSERTIONS.filter(rx => rx.test(flat())).map(String);
         expect(offenders, `unsupported scope claim in settings.ts: ${offenders.join(", ")}`)
             .toEqual([]);
-    });
-
-    it("still says where the key goes and that the app ships none of its own", () => {
-        expect(description()).toContain("translation.googleapis.com");
-        expect(description()).toContain("this app ships no key of its own and shares none");
     });
 
     // Positive controls: the guards above must actually fire on the text that
@@ -192,12 +229,11 @@ describe("googleCloudApiKey cost copy", () => {
         expect(SCOPE_ASSERTIONS.some(rx => rx.test(shipped))).toBe(true);
     });
 
-    it("does not flag the corrected wording (negative control)", () => {
+    it("does not flag prose that carries neither framing (negative control)", () => {
         const corrected =
-            "Cloud Translation gives a monthly credit of up to USD 10, which covers about " +
-            "500,000 characters and applies collectively to Cloud Translation - Basic and " +
-            "Advanced. It does not roll over, and it is a credit rather than a stop — past it, " +
-            "usage bills at USD 20.00 per 1,000,000 characters.";
+            "There is no API key and no card: a consumer Google account allows about 5,000 " +
+            "translation calls a day, and going past that fails the request rather than " +
+            "charging you, because Apps Script has no billing at all.";
         expect(STALE_COST_FRAMING.some(rx => rx.test(corrected))).toBe(false);
         expect(SCOPE_ASSERTIONS.some(rx => rx.test(corrected))).toBe(false);
     });

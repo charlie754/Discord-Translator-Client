@@ -6,7 +6,7 @@
 
 import { permanentError } from "../scheduler";
 import type { TranslateResult } from "../types";
-import { toLanguageCode } from "./googleCloud";
+import { toLanguageCode } from "./languageCodes";
 import type { HttpTransport, ProviderConfig, TranslationProvider } from "./types";
 
 /**
@@ -297,9 +297,9 @@ interface ProxyReply {
 /**
  * A translation proxy running on the user's OWN Google account.
  *
- * ONE REQUEST FOR ALL THE TEXTS, which is the opposite of what deepl.ts and
- * googleCloud.ts do, and the difference is deliberate rather than an oversight.
- * Those two are billed per CHARACTER, so batching saves the user nothing and
+ * ONE REQUEST FOR ALL THE TEXTS, which was the opposite of what the since-deleted deepl.ts and
+ * googleCloud.ts did, and the difference is deliberate rather than an oversight.
+ * Those two were billed per CHARACTER, so batching would save the user nothing and
  * would add an index-mapping step whose failure mode is showing one message's
  * translation on another. Here the scarce resource is CALLS — 5,000 a day, a hard
  * refusal at the ceiling — so one call for five messages is five times the day's
@@ -328,7 +328,7 @@ export function createAppsScriptProvider(
         needsKey: true,
 
         async translate(texts: string[], from: string, to: string): Promise<TranslateResult[]> {
-            // Permanent for the same reason as deepl.ts and googleCloud.ts: no
+            // Permanent for the same reason as the since-deleted deepl.ts and googleCloud.ts: no
             // amount of retrying conjures a URL, and four attempts at a request
             // that was never sent still counted four times toward opening the
             // breaker, taking down whichever provider the user switched to next.
@@ -448,7 +448,7 @@ export function createAppsScriptProvider(
                 return {
                     text: value,
                     // Nothing is detected: the proxy contract carries translations
-                    // only. "auto" is the same fallback googleCloud.ts uses, and it
+                    // only. "auto" is the same fallback the since-deleted googleCloud.ts used, and it
                     // is lowercase because the cache key and selection.ts's
                     // reverse-translate check both compare lowercase tags.
                     sourceLang: "auto",

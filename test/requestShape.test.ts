@@ -5,9 +5,15 @@
  */
 
 /*
- * HttpTransport grew a second argument so a provider could POST a JSON body —
- * core/providers/googleCloud.ts needs one, because Cloud Translation v2 is
- * POST-only.
+ * HttpTransport grew a second argument so a provider could POST a JSON body.
+ *
+ * It was added for core/providers/googleCloud.ts, because Cloud Translation v2
+ * is POST-only. That provider has since been deleted along with every path that
+ * could bill the user — but the second argument stays, because
+ * core/providers/appsScript.ts POSTs too: a Web App deployment is reached with a
+ * JSON body on /exec. The surface below is therefore still live, and dropping
+ * these tests with the provider that first needed them would have left the one
+ * that still uses it untested.
  *
  * That widened a surface PRIVACY.md makes a claim about. Before this change the
  * three transports could only issue a GET to an allow-listed host, so the worst
@@ -24,7 +30,23 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const ALLOWED = "https://translation.googleapis.com/language/translate/v2?key=k";
+/**
+ * An allow-listed host, and deliberately NOT script.google.com.
+ *
+ * Every assertion here is about the general shaping rule — the closed verb
+ * union, the fixed Content-Type, the body cap, `redirect: "manual"` — which is
+ * what all three transports apply to every host EXCEPT the one FOLLOW_MODE_HOSTS
+ * names. Keying this file on the Apps Script host would test that exception
+ * instead of the rule, and the two redirect assertions below would be asserting
+ * the wrong mode. test/transportGuards.test.ts owns the exception.
+ *
+ * It used to be translation.googleapis.com, the paid Cloud Translation host.
+ * That host was removed from all three allow-lists with the provider that used
+ * it, so a fixture on it now measures the hostname refusal rather than the
+ * shaping rule — which is why it moved to the free gtx host rather than simply
+ * being left alone.
+ */
+const ALLOWED = "https://translate.googleapis.com/translate_a/single?client=gtx&dt=t&dj=1&q=hello";
 
 const BODY = JSON.stringify({ q: "hello", target: "es", format: "text" });
 

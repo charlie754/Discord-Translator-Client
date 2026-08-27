@@ -15,21 +15,15 @@ import { React } from "@webpack/common";
 
 import gitRemote from "~git-remote";
 
-import type { UsageStore } from "./core/usage";
-import { renderUsageSettings } from "./usageSettings";
-
 /**
  * The target languages this app actually supports.
  *
  * Value is the BCP-47 tag sent to the provider; label is what the user reads.
  *
- * WHY THIS IS A LIST AND NOT FREE TEXT. GOOGLE_CLOUD_SETUP.md tells the reader
- * to pick from this list rather than type a code, "because Google rejects codes
- * it does not know with a 400". That instruction was previously defeated by the
- * control itself: `targetLanguage` was OptionType.STRING, so the settings screen
- * accepted any string the user typed and the guide's mitigation existed only as
- * advice. A SELECT makes it structural — the unknown code can no longer be
- * entered, so the 400 can no longer be caused this way.
+ * WHY THIS IS A LIST AND NOT FREE TEXT. A provider returns HTTP 400 when it
+ * receives a language code it does not recognize. A text field would let the user
+ * type an unknown code, so a 400 becomes possible. A SELECT makes it structural
+ * — the unknown code can no longer be entered, so the 400 can no longer be caused.
  *
  * ON DUPLICATION. The identical 15 entries are also a literal in
  * panel/Panel.tsx (`LANGUAGES`), which this lane does not own and has not
@@ -56,6 +50,48 @@ export const TARGET_LANGUAGES: Array<{ value: string; label: string; default?: b
     { value: "id", label: "ID - Bahasa Indonesia" },
     { value: "ar", label: "AR - العربية" }
 ];
+
+/**
+ * The providers the `provider` dropdown offers, and the wording it offers them in.
+ *
+ * EXPORTED BECAUSE THERE IS A SECOND READER. provider.ts's
+ * migrateUnavailableProvider() has to tell a user which provider it moved them
+ * TO, and the only human-readable name a provider id has anywhere in this
+ * codebase is the label sitting right here — core/providers/registry.ts is keyed
+ * by id and knows nothing about UI copy. A second copy of these labels over
+ * there would drift the first time one is reworded, and the user would be told
+ * they had been switched to something the dropdown does not call that.
+ *
+ * THIS IS NOT THE SET OF PROVIDERS THAT WORK, and nothing may treat it as one.
+ * That set is core/providers/registry.ts's map and only that map. This array is
+ * UI copy for it — labels, order, and which one a fresh install gets. The
+ * migration therefore asks the REGISTRY whether an id can still be served and
+ * never asks this list, because deriving "does it work?" from a label list is
+ * exactly how removing a provider stranded people in the first place: the
+ * dropdown and the registry are two lists, and only one of them decides whether
+ * a translation happens.
+ *
+ * An id here but absent from the registry is a bug — the dropdown would offer a
+ * provider that refuses every translation. An id in the registry but absent here
+ * is merely a provider with no dropdown entry yet, which is inert.
+ */
+export const PROVIDER_OPTIONS: Array<{ value: string; label: string; default?: boolean; }> = [
+    { label: "Google (free)", value: "google", default: true },
+    { label: "Google Apps Script (your own free proxy)", value: "apps-script" }
+];
+
+/**
+ * What `provider` means when nothing has been chosen — read off the option
+ * marked `default` above rather than written out a second time.
+ *
+ * It has to be the same value @api/Settings hands a fresh install, and that one
+ * is not a constant either: Settings.ts's getDefaultValue() resolves a SELECT by
+ * `setting.options.find(o => o.default)`. Deriving it the same way is what makes
+ * "the dropdown's default" and "what the migration switches you to" one fact
+ * rather than two that can disagree.
+ */
+export const DEFAULT_PROVIDER_ID: string =
+    PROVIDER_OPTIONS.find(option => option.default)?.value ?? PROVIDER_OPTIONS[0].value;
 
 /**
  * The setup guide, under the name the extension package carries it as.
@@ -272,13 +308,14 @@ export function appsScriptUrlProblem(value: string): string | null {
 }
 
 /**
- * The heading for the three credential settings below it, and the way into the
- * guide.
+ * The heading for the credential setting below it, and the way into the guide.
  *
- * A settings screen is a flat list of controls, so "these three belong together"
- * can only be said by putting something between them and what came before. Left
- * ungrouped, deeplApiKey / googleCloudApiKey / appsScriptUrl read as three
- * unrelated boxes and a user reasonably fills in the wrong one.
+ * It used to introduce three credential boxes — a DeepL key, a Google Cloud key
+ * and the Apps Script deployment URL — because a settings screen is a flat list
+ * of controls and "these belong together" can only be said by putting something
+ * between them and what came before. Both API keys are gone with the providers
+ * that billed for them, so it introduces one box now, and the section is what
+ * puts the setup guide within reach of the field it explains.
  */
 /**
  * The button's label, said so that clicking it cannot surprise anyone.
@@ -328,18 +365,19 @@ function CredentialsSection() {
         React.createElement(
             Paragraph,
             null,
-            "The three settings below belong to the three providers that need something of yours. " +
-            "Only the one naming the provider you picked above is ever read; the other two are " +
-            "ignored. Each is stored locally in this client's own settings, is sent only to the " +
-            "provider it belongs to, and is never shared with anyone — this app ships no key, no " +
-            "URL and no account of its own."
+            "One setting below, and it belongs to the one provider that needs something of yours: " +
+            "Google Apps Script. It is read only when you have picked that provider, is stored " +
+            "locally in this client's own settings, is sent only to script.google.com, and is " +
+            "never shared with anyone — this app ships no key, no URL and no account of its own."
         ),
         React.createElement(
             Paragraph,
             null,
-            "Google Apps Script is the free one: a small proxy you deploy once into your own " +
-            "Google account, with no API key and no card on file. It is more setup than pasting a " +
-            "key, which is what the guide is for."
+            "Both options are free and neither can bill you. Google (free) needs nothing at all. " +
+            "Google Apps Script is a small proxy you deploy once into your own Google account, " +
+            "with no API key and no card on file — its daily allowance is yours rather than " +
+            "shared with everyone using the free endpoint. It is more setup than picking the " +
+            "default, which is what the guide is for."
         ),
         // No target, no button. A control whose only outcome is a failure is
         // worse than the sentence that replaces it.
@@ -377,23 +415,18 @@ export const settings = definePluginSettings({
     provider: {
         type: OptionType.SELECT,
         description:
-            "Translation provider. Google (free) is Google's unofficial gtx endpoint — no key, " +
-            "no signup, no guarantee, and it can rate-limit you. Google Apps Script is a free " +
-            "proxy you deploy once into your own Google account: still no key and no card, but " +
-            "the daily allowance is yours rather than shared with everyone else using the free " +
-            "endpoint. DeepL and Google Cloud Translation are the escape hatches, and each needs " +
-            "an API key of your own, billed to you. Whichever you pick, fill in ITS setting in " +
-            "the credentials section below — the others are ignored.",
-        options: [
-            { label: "Google (free)", value: "google", default: true },
-            { label: "Google Apps Script (your own free proxy)", value: "apps-script" },
-            { label: "DeepL (your own key)", value: "deepl" },
-            { label: "Google Cloud Translation (your own key)", value: "google-cloud" }
-        ]
+            "Translation provider. Both are free and neither can bill you — the two paid " +
+            "options that used to be here, DeepL and Google Cloud Translation, have been " +
+            "removed. Google (free) is Google's unofficial gtx endpoint: no key, no signup, no " +
+            "guarantee, and it can rate-limit you. Google Apps Script is a proxy you deploy once " +
+            "into your own Google account — still no key and no card, but the daily allowance is " +
+            "yours rather than shared with everyone else using the free endpoint. Pick Apps " +
+            "Script and you must fill in its Web App URL in the credentials section below.",
+        options: PROVIDER_OPTIONS
     },
-    // The three settings below are one section, not three unrelated boxes. The
-    // component is the only thing a flat list of controls can use to say so, and
-    // it is also where the setup guide is reachable from.
+    // The credential setting below is a section, not a loose box. The component
+    // is the only thing a flat list of controls can use to say so, and it is also
+    // where the setup guide is reachable from.
     credentials: {
         type: OptionType.COMPONENT,
         component: () => React.createElement(CredentialsSection)
@@ -415,53 +448,14 @@ export const settings = definePluginSettings({
         default: "",
         isValid: (value: string) => appsScriptUrlProblem(value) ?? true
     },
-    deeplApiKey: {
-        type: OptionType.STRING,
-        description:
-            "DEEPL — your own DeepL API key. Read only when Provider is DeepL. Free keys end in " +
-            "':fx' and are routed to api-free.deepl.com; anything else goes to api.deepl.com. " +
-            "Stored locally on this machine, sent only to DeepL, and never shared — this app " +
-            "ships no key of its own and shares none.",
-        default: ""
-    },
-    googleCloudApiKey: {
-        type: OptionType.STRING,
-        description:
-            "GOOGLE CLOUD TRANSLATION — your own Google Cloud API key, from a project with the " +
-            "Cloud Translation API enabled. Read only when Provider is Google Cloud Translation, " +
-            "and sent only to " +
-            "translation.googleapis.com — a different host from the free endpoint. Google bills " +
-            "you. Cloud Translation gives a monthly credit of up to USD 10, which covers about " +
-            "500,000 characters and applies collectively to Cloud Translation - Basic and " +
-            "Advanced. It does not roll over, and it is a credit rather than a stop — past it, " +
-            "usage bills at USD 20.00 per 1,000,000 characters. Stored locally on this machine " +
-            "and never shared; this app ships no key of its own and shares none.",
-        default: ""
-    },
-    // Deliberately placed immediately after the key that causes the spending.
-    // A meter on a different screen from the credential is a meter nobody reads.
-    usageSummary: {
-        type: OptionType.COMPONENT,
-        component: () => renderUsageSettings({
-            store: usageStore(),
-            cap: settings.store.monthlyCharacterCap
-        })
-    },
-    monthlyCharacterCap: {
-        type: OptionType.NUMBER,
-        description:
-            "Optional monthly character cap for the PAID providers only (Google Cloud, DeepL). " +
-            "0 means no cap, which is the default — nothing above this line stops a request. " +
-            "Set a number and translation is refused, with an explanation, once sending a message " +
-            "would take you past it that month. This is the plugin refusing, not Google: a Google " +
-            "Cloud BUDGET does not cap spend either, and the only hard stop on Google's side is a " +
-            "quota on the Cloud Translation API.",
-        default: 0,
-        isValid: (value: number) =>
-            Number.isFinite(value) && value >= 0
-                ? true
-                : "Enter 0 for no cap, or a positive number of characters."
-    },
+    // deeplApiKey, googleCloudApiKey, usageSummary and monthlyCharacterCap used
+    // to sit here. They went with the two paid providers: there is no API key
+    // left to store, no spend to meter, and nothing for a cap to refuse. Note
+    // that removing a setting does NOT erase what a user already had in it — any
+    // key they pasted before this change is still in this client's settings file
+    // under its old name, unread by anything. Deleting stored values is a
+    // migration, not a settings edit, and it is not done here.
+
     // The one switch that turns DMs on. The per-server panel toggle cannot: a DM
     // has no guild id to toggle. This setting is read only through
     // core/modes.ts's translationEnabled(), which both the rendered path and the
@@ -472,7 +466,8 @@ export const settings = definePluginSettings({
         type: OptionType.BOOLEAN,
         description:
             "Also translate direct messages, including group DMs. This sends private messages to " +
-            "your translation provider, and on a paid provider it bills you for them. Off by " +
+            "your translation provider — Google's free endpoint, or the Apps Script deployment in " +
+            "your own Google account. Off by " +
             "default, and it is the only control that turns DMs on — the per-server panel toggle " +
             "cannot reach a DM. It governs the whole plugin: channel translation and double-click " +
             "translation alike.",
@@ -496,28 +491,42 @@ export const settings = definePluginSettings({
         default: "[]",
         hidden: true
     },
-    usageBlob: {
+    /**
+     * Bookkeeping, not a second URL field.
+     *
+     * `hidden: true` is honoured: src/api/PluginManager.ts's isSettingHidden()
+     * reads the flag, and src/components/settings/tabs/plugins/PluginModal.tsx
+     * line 124 returns null for a setting it reports on — so this renders no
+     * control at all in the plugin cog, exactly like the three bookkeeping
+     * settings above it. Checked by reading those two files rather than assumed;
+     * the same pair is what keeps cacheBlob invisible today.
+     *
+     * A SECOND VISIBLE BOX WOULD BE THE DEFECT. appsScriptUrl is the one the user
+     * types into. If this one rendered, the settings screen would show two Apps
+     * Script URL fields with no way to tell which is read, and a user would
+     * reasonably edit the wrong one.
+     *
+     * "LAST GOOD" IS MEANT LITERALLY. It is written only after
+     * validateAppsScriptUrl() in state.ts has resolved { ok: true } — i.e. after
+     * a real request reached the deployment and came back with a translation. It
+     * is never written on typing, on blur, or on save, so it can never mean
+     * "last thing pasted". Anything that starts writing it from a field's
+     * onChange has broken the only promise the name makes.
+     */
+    lastGoodAppsScriptUrl: {
         type: OptionType.STRING,
-        description: "Persisted paid-provider character count (managed automatically)",
+        description:
+            "The last Apps Script deployment URL that was VERIFIED to work — written only after " +
+            "a check actually reached the deployment and got a translation back, never merely " +
+            "because a URL was typed or saved. Bookkeeping kept by the plugin, not a setting to " +
+            "edit: paste your deployment URL into the Apps Script field above instead. Stored " +
+            "locally on this machine like the URL itself, and never shared.",
         default: "",
         hidden: true
     }
 });
 
-/**
- * The meter's persistence, as core/usage.ts wants it: two functions over an
- * opaque string, so core/ never learns what a Discord setting is.
- *
- * A FUNCTION rather than a const object on purpose. Everything here has to be
- * lazy — reading settings.store during module evaluation throws
- * "Cannot access settings before plugin is initialized", and because every
- * plugin shares one ~plugins module that throw takes down the whole mod. The
- * bodies below only ever run from a render or from a translation, both of which
- * are long after start().
- */
-export function usageStore(): UsageStore {
-    return {
-        load: () => settings.store.usageBlob ?? "",
-        save: (json: string) => { settings.store.usageBlob = json; }
-    };
-}
+// usageStore() used to live here — two functions over an opaque string, so
+// core/usage.ts could persist the spend meter without ever learning what a
+// Discord setting is. Both the meter and the usageBlob setting it wrote to are
+// gone with the paid providers, and nothing else needed that indirection.

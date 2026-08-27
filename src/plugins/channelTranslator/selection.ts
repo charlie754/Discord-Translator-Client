@@ -8,21 +8,21 @@ import { MessageStore } from "@webpack/common";
 
 import { selectionAction, translationEnabled } from "./core/modes";
 import { protect, restore } from "./core/protect";
-import { ClickBurstGate, isCapRefusal } from "./core/usage";
+import { ClickBurstGate } from "./core/requestBookkeeping";
 import { settings } from "./settings";
 import { entryForMessage, guildIdOf, scheduler, toggle, translationProvider } from "./state";
 
 const POPOVER_ID = "channel-translator-popover";
 
 /**
- * One gesture, one billed translation.
+ * One gesture, one translation.
  *
  * A triple-click fires `dblclick` on the second click and `click` with
  * `detail === 3` on the third, and both handlers below translate — so the
- * gesture the UI recommends for grabbing a whole line issued TWO requests to a
- * paid provider and threw the first answer away. The rule and the reason live in
- * core/usage.ts with the rest of the spend guards, where they are unit-tested;
- * this file only routes the two handlers through it.
+ * gesture the UI recommends for grabbing a whole line issued TWO requests and
+ * threw the first answer away. The rule and the reason live in
+ * core/requestBookkeeping.ts, where they are unit-tested; this file only routes
+ * the two handlers through it.
  *
  * Module-level, like the request path itself: the burst spans two separate
  * events, so a gate constructed per event would be a gate of one.
@@ -30,15 +30,13 @@ const POPOVER_ID = "channel-translator-popover";
 const clickBurst = new ClickBurstGate();
 
 // There is deliberately no HttpTransport and no currentProvider() call in this
-// file any more. Both used to live here, duplicated from state.ts, and the
-// duplicate was the bug: this path translated through the RAW provider, so
-// double-click and triple-click translation was neither counted by the usage
-// meter nor stopped by the user's own monthly character cap. A user who set a
-// cap kept paying past it, through here.
+// file. Both used to live here, duplicated from state.ts, and the duplicate was
+// the bug: this path resolved its own provider, so it silently disagreed with
+// the rendered path about which endpoint and which credential were in use.
 //
-// state.ts's translationProvider() is now the only way to obtain a provider, and
-// what it returns is already metered. Getting this wrong again would mean
-// re-adding an import that test/meteredProviderChokepoint.test.ts fails on.
+// state.ts's translationProvider() is now the only way to obtain a provider.
+// Getting this wrong again would mean re-adding an import that
+// test/providerChokepoint.test.ts fails on.
 
 interface MessageRef {
     channelId: string;
@@ -196,10 +194,10 @@ async function translateSelection(event: MouseEvent, holdForBurst: boolean): Pro
         return;
     }
 
-    // PAST THIS LINE THE REQUEST IS BILLED, so this is where a double-click that
-    // is really the first half of a triple-click has to stop. Deliberately below
-    // the free branches above — showing a held original or a refusal costs
-    // nothing and must not be delayed — and above the "…" popover, so a
+    // PAST THIS LINE A REQUEST GOES OUT, so this is where a double-click that is
+    // really the first half of a triple-click has to stop. Deliberately below the
+    // branches above — showing a held original or a refusal is answered locally,
+    // sends nothing, and must not be delayed — and above the "…" popover, so a
     // superseded click leaves no trace on screen for the click that replaced it
     // to fight with.
     if (holdForBurst && !(await clickBurst.settle())) return;
@@ -227,16 +225,15 @@ async function translateSelection(event: MouseEvent, holdForBurst: boolean): Pro
             return restore(result.text, tokens);
         });
         showPopover(event.clientX, event.clientY, translated);
-    } catch (err) {
-        // Now that this path is capped, it can be refused by the user's own cap
-        // — and "Translation unavailable" for that is the exact message
-        // core/usage.ts exists to avoid, because it sends people to the Google
-        // Cloud console to debug a limit that only exists in these settings.
-        showPopover(
-            event.clientX,
-            event.clientY,
-            isCapRefusal(err) ? err.message : "Translation unavailable"
-        );
+    } catch {
+        // One message for every failure, because after the spend cap was removed
+        // there is no longer a class of refusal that comes from the user's own
+        // settings rather than from the network. The cap used to be special here:
+        // "Translation unavailable" for a limit the user had themselves set would
+        // send them to debug the provider instead of the setting. Nothing left
+        // reaching this line has that shape — a missing deployment URL is caught
+        // by the !resolved.ok branch above, with its own wording.
+        showPopover(event.clientX, event.clientY, "Translation unavailable");
     }
 }
 
