@@ -76,6 +76,16 @@ const DELETED_USAGE = join(ROOT, "src", "plugins", "channelTranslator", "core", 
 const APPS_SCRIPT = join(ROOT, "src", "plugins", "channelTranslator", "core", "providers", "appsScript.ts");
 const HEADING_CSS = join(ROOT, "src", "components", "Heading.css");
 const BASE_TEXT = join(ROOT, "src", "components", "BaseText.tsx");
+/**
+ * THE THIRD SURFACE. The bundled setup guide, shipped as guide.html.
+ *
+ * This row's copy, the plugin cog's `appsScriptUrl` description and this file all
+ * describe ONE box behind ONE validator. The guide is the only one of the three
+ * that is not source code, so it is the one nobody greps when the validator
+ * changes — and that is exactly how it went wrong. See the describe at the end of
+ * this file for the sentence that shipped.
+ */
+const GUIDE = join(ROOT, "site", "free", "index.html");
 
 /** The label the operator specified, character for character. U+2192, space, two words. */
 const EXPECTED_LINK_TEXT = "→ Setup Guide";
@@ -372,10 +382,239 @@ function revealControlsIn(text: string): string[] {
 }
 
 // ---------------------------------------------------------------------------
+// THREE SURFACES, ONE VALIDATOR — the machinery for the guard at the end.
+// ---------------------------------------------------------------------------
+
+/**
+ * The named entities this build's copy actually uses, plus the ASCII four.
+ *
+ * Enumerated rather than pulled from a library on purpose: the assertions below
+ * are about SENTENCES, and a sentence with `&mdash;` still sitting in it is not
+ * the sentence the reader sees. The list was taken from the shipped file — see
+ * the instrument check that asserts nothing is left undecoded.
+ */
+const HTML_ENTITIES: Record<string, string> = {
+    amp: "&", lt: "<", gt: ">", quot: "\"", apos: "'", nbsp: " ",
+    mdash: "—", ndash: "–", rarr: "→", larr: "←", hellip: "…",
+    lsquo: "‘", rsquo: "’", ldquo: "“", rdquo: "”",
+    middot: "·", times: "×", bull: "•", deg: "°"
+};
+
+function decodeEntities(text: string): string {
+    return text
+        .replace(/&#(\d+);/g, (_whole, digits: string) => String.fromCodePoint(Number(digits)))
+        .replace(/&([a-zA-Z][a-zA-Z0-9]*);/g, (whole, name: string) => HTML_ENTITIES[name] ?? whole);
+}
+
+/**
+ * Tags that end a thought on screen.
+ *
+ * WHY THIS EXISTS AND WHY IT IS NOT JUST `<[^>]*>`. The claim this file forbids
+ * is a CONTRADICTION, and a contradiction is asserted inside one sentence: "this
+ * box takes either, but THAT one takes only the URL". The scan therefore matches
+ * two things inside one statement, which means statement boundaries decide what
+ * it can see. Flatten a whole document with no boundaries and an unrelated
+ * heading ends up glued to an unrelated paragraph, and the conjunction fires on a
+ * claim nobody made. `<h2>` and `<li>` carry no full stop, so without this the
+ * guide's step list is one 700-character "sentence".
+ *
+ * `g` flag, and used only in `.replace()`. `RegExp.prototype.test` is stateful
+ * with one — the same trap PASSWORD_TYPE's comment above documents.
+ */
+const BLOCK_LEVEL_TAG =
+    /<\/?(?:p|div|li|ul|ol|dl|dt|dd|h[1-6]|br|tr|td|th|table|thead|tbody|section|article|figure|figcaption|blockquote|pre|summary|details|header|footer|main|aside|nav|form|label|option|select|button|title|desc|text|tspan|body|html|head|noscript)\b[^>]*>/gi;
+
+/**
+ * What the guide says ON SCREEN.
+ *
+ * COMMENTS COME OUT, and that is a deliberate direction. Every assertion built on
+ * this is about a claim made to the READER; an HTML comment is not read by
+ * anybody, so a `<!-- … -->` discussing the old wording must stay legal — the
+ * same reason codeLines() drops `//` lines before the copy matchers run over the
+ * tab. `<script>` and `<style>` bodies go for the same reason and one stronger:
+ * they are 23 KB of CSS and JS that no reader sees, and leaving them in would let
+ * a selector name or a string literal answer a question about prose.
+ *
+ * SVG `<title>`, `<desc>` and `<text>` STAY IN. They are the wireframes' labels
+ * and their accessible descriptions — a screen-reader user is read them verbatim,
+ * so a contradiction hidden in a `<desc>` is a contradiction that shipped.
+ */
+function visibleTextOf(html: string): string {
+    return decodeEntities(
+        html
+            .replace(/<!--[\s\S]*?-->/g, " ")
+            .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+            .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
+            .replace(BLOCK_LEVEL_TAG, ". ")
+            .replace(/<[^>]*>/g, " ")
+    );
+}
+
+/**
+ * One statement per sentence, with the source's own line wrapping undone first.
+ *
+ * The collapse is the load-bearing half. The tab's paragraph is JSX hard-wrapped
+ * at 100 columns, so "…at Settings > Plugins > ChannelTranslator > the cog, so a
+ * value entered in either place shows up in the other." is four source lines. A
+ * per-line scan would look for the contradiction in fragments that cannot contain
+ * it, and would report a clean file for a paragraph that says the opposite of
+ * what it should — the exact failure mode cogDescription()'s comment describes
+ * for the concatenated cog copy.
+ */
+function statementsOf(text: string): string[] {
+    return text
+        .replace(/\s+/g, " ")
+        .split(/(?<=[.!?])\s+/)
+        .map(statement => statement.trim())
+        .filter(Boolean);
+}
+
+let cachedGuideText: string | null = null;
+
+/** The guide's on-screen text. Read and flattened once — the file is ~340 KB. */
+function guideText(): string {
+    if (cachedGuideText === null) cachedGuideText = visibleTextOf(read(GUIDE));
+    return cachedGuideText;
+}
+
+/**
+ * A reference to a DIFFERENT box than the one this sentence is about.
+ *
+ * Half of the conjunction. On its own it is ordinary and correct copy — all three
+ * surfaces are SUPPOSED to point at each other, because the value is shared and a
+ * user who cannot find the other box will paste it twice.
+ */
+const OTHER_SURFACE: Array<{ label: string; pattern: RegExp; }> = [
+    { label: "the cog", pattern: /\bcog\b/i },
+    { label: "\"that one\"", pattern: /\bthat one\b/i },
+    { label: "\"that box\"", pattern: /\bthat (?:box|field)\b/i },
+    { label: "\"the other …\"", pattern: /\bthe other (?:box|one|field|screen|place|settings|tab)\b/i },
+    { label: "the plugin's own settings", pattern: /\bplugin(?:'s|’s)?(?: own)? settings\b/i },
+    { label: "the settings tab", pattern: /\bsettings tab\b/i },
+    { label: "ChannelTranslator", pattern: /\bChannelTranslator\b/i },
+    { label: "Settings → Discord Translator", pattern: /\bSettings\s*(?:→|->|>)\s*Discord Translator\b/i }
+];
+
+/**
+ * A claim that one of the two accepted forms is NOT accepted.
+ *
+ * The other half. Also ordinary on its own — "a Workspace account has to paste
+ * the whole URL" is true, and so is "if you took the Deployment ID rather than
+ * the URL". Neither is about a box.
+ *
+ * TOGETHER they are the defect: a sentence that names another box AND says a form
+ * is refused is a sentence asserting that the other box accepts less than this
+ * one. Since 2026-08 there is exactly one authority — checkDeploymentUrl() in
+ * core/providers/appsScript.ts — and both settings boxes delegate to it, so that
+ * assertion cannot be true of any of them. It can only be stale.
+ *
+ * PINNED AS A CLASS, NOT AS A STRING, and that is not fastidiousness. A
+ * `not.toContain("that one still wants the whole URL")` would be satisfied by
+ * rewording the same lie, which is precisely what a copy edit does.
+ */
+const NARROWER_THAN_HERE: Array<{ label: string; pattern: RegExp; }> = [
+    {
+        label: "one form \"rather than\" the other",
+        pattern: /\b(?:rather than|instead of|and not|but not|not)\s+(?:just\s+|only\s+)?(?:the|a|an)\s+(?:bare\s+|short\s+|whole\s+|full\s+|entire\s+|Deployment\s+|Web\s*[- ]?app\s+)*(?:ID|URL)\b/i
+    },
+    {
+        label: "it takes ONLY one form",
+        pattern: /\b(?:only\s+(?:accepts?|takes?|wants?|allows?|understands?|works with)|(?:accepts?|takes?|wants?|allows?|understands?)\s+only)\b/i
+    },
+    {
+        label: "it refuses a form",
+        pattern: /\b(?:will not|will only|won'?t|does not|doesn'?t|cannot|can'?t)\s+(?:accept|take|use|handle|expand|understand)\b/i
+    },
+    {
+        label: "it demands the whole thing",
+        pattern: /\b(?:wants?|needs?|requires?|expects?|must have|must be|has to be|still needs?)\s+(?:the\s+)?(?:whole|full|entire|complete)\b/i
+    }
+];
+
+/**
+ * Every statement in `text` that says another box accepts less than this one.
+ *
+ * Returns the offending statements, not a boolean, so the failure message names
+ * the sentence to delete instead of leaving the reader to find it in 340 KB.
+ */
+function crossSurfaceRestrictionClaims(text: string): string[] {
+    return statementsOf(text).flatMap(statement => {
+        if (!OTHER_SURFACE.some(surface => surface.pattern.test(statement))) return [];
+        const narrowings = NARROWER_THAN_HERE.filter(claim => claim.pattern.test(statement));
+        if (narrowings.length === 0) return [];
+        return [`[${narrowings.map(claim => claim.label).join(" + ")}] ${statement}`];
+    });
+}
+
+/** The two forms, by name, and the shape of the longer one. */
+const NAMES_THE_ID = /\bDeployment\s+ID\b/i;
+const NAMES_THE_URL = /\bWeb\s*[- ]?App\s+URL\b/i;
+const NAMES_THE_URL_SHAPE = /script\.google\.com\/macros\/s\//i;
+
+/**
+ * Wordings that tell the reader BOTH forms are allowed.
+ *
+ * Naming the two values is not the same as saying either will do — a page can
+ * name the ID in step 6 and the URL in step 7 and still leave the reader
+ * believing the box takes one of them. This is the sentence that does the work,
+ * and the surface that loses it has drifted even though both nouns survive.
+ */
+const ACCEPTS_EITHER_FORM: Array<{ label: string; pattern: RegExp; }> = [
+    { label: "takes/accepts either", pattern: /\b(?:takes?|accepts?|allows?|reads?|handles?)\s+(?:either|whichever|both)\b/i },
+    { label: "\"either form/one\"", pattern: /\beither\s+(?:form|one|of (?:the two forms|them))\b/i },
+    { label: "\"both forms\"", pattern: /\bboth\s+(?:forms?|values?|boxes)\b/i }
+];
+
+function acceptsEitherFormIn(text: string): string[] {
+    return ACCEPTS_EITHER_FORM.filter(c => c.pattern.test(text)).map(c => c.label);
+}
+
+/**
+ * The three places this one credential is described, and the on-screen text of
+ * each.
+ *
+ * The guide is HTML and the other two are source, so each carries its own
+ * extractor — but every one of them yields RENDERED COPY with comments removed,
+ * because a guard about what the user is told must not be answerable by a
+ * comment explaining what the user used to be told.
+ */
+const CREDENTIAL_SURFACES: Array<{ label: string; path: string; visible: () => string; }> = [
+    {
+        label: "the setup guide (site/free/index.html)",
+        path: GUIDE,
+        visible: guideText
+    },
+    {
+        label: "the plugin cog's appsScriptUrl description",
+        path: PLUGIN_SETTINGS,
+        visible: () => decodeEntities(cogDescription(read(PLUGIN_SETTINGS)))
+    },
+    {
+        label: "the client settings tab's Apps Script row",
+        path: TAB,
+        visible: () => decodeEntities(codeOf(section(read(TAB))))
+    }
+];
+
+/**
+ * THE SENTENCE THAT SHIPPED, restored verbatim as its own tiny document.
+ *
+ * Kept here as a fixture so the guard has a permanent positive control: the exact
+ * markup that was live in site/free/index.html, at the moment the cog stopped
+ * being stricter and nobody went back to the guide. Every assertion in the final
+ * describe is run against this as well as against the real file, so "the real
+ * file is clean" can never be reported by a matcher that stopped matching.
+ */
+const SHIPPED_CONTRADICTION =
+    "<p class=\"note\">The plugin cog has a box for the same value, and that one still wants " +
+    "the whole URL ending in <code>/exec</code> rather than the ID. Whichever box you fill in, " +
+    "the other shows what you saved.</p>";
+
+// ---------------------------------------------------------------------------
 
 describe("instrument checks — the scan is measuring the thing it names", () => {
     it("every file it reads exists and is not empty", () => {
-        for (const file of [TAB, TAB_CSS, PLUGIN_SETTINGS, PLUGIN_STATE, REGISTRY, APPS_SCRIPT, HEADING_CSS, BASE_TEXT]) {
+        for (const file of [TAB, TAB_CSS, PLUGIN_SETTINGS, PLUGIN_STATE, REGISTRY, APPS_SCRIPT, HEADING_CSS, BASE_TEXT, GUIDE]) {
             expect(existsSync(file), `not found: ${file}`).toBe(true);
             expect(read(file).length, `empty: ${file}`).toBeGreaterThan(0);
         }
@@ -578,6 +817,178 @@ describe("instrument checks — the scan is measuring the thing it names", () =>
         expect(moneyClaimsIn(
             "It uses one call out of that day's ~5,000 and nothing else."
         )).toEqual([]);
+    });
+
+    // -- the guide, and the three-surface matchers ---------------------------
+
+    it("the guide it reads is the shipped guide, and it is the Apps Script one", () => {
+        // GUIDE is the only path in this file that leaves src/. If it ever points
+        // at a stub, a template or the wrong page, every assertion built on it
+        // passes for the wrong reason — and does so quietly, because an empty
+        // string contains no contradiction either.
+        const html = read(GUIDE);
+        expect(html.slice(0, 200).toLowerCase()).toContain("<!doctype html>");
+        expect(html, "not the Apps Script guide").toContain("script.google.com");
+        expect(html.length, "the guide shrank to a stub").toBeGreaterThan(100_000);
+        expect(guideText().length, "nothing survived the markup strip").toBeGreaterThan(10_000);
+    });
+
+    it("visibleTextOf() keeps rendered copy and drops comments, script and style (controls)", () => {
+        // THE COMMENT CARRIES A `>` ON PURPOSE, and it took a surviving mutant to
+        // notice. Without one, `<[^>]*>` swallows the whole `<!-- … -->` by
+        // itself, so deleting the comment rule changes nothing and this control
+        // cannot tell. With a `>` inside, the generic tag strip stops at
+        // "Settings >" and the remainder of the comment leaks into the prose scan
+        // — which is the case that matters, and the one an editorial note like
+        // "Settings > Plugins" hits first. The shipped guide has 15 comments and
+        // none of them currently contains a `>`, so today the explicit rule is
+        // defence in depth rather than a live leak.
+        const sample =
+            "<style>.note::after { content: \"the cog only takes the URL\"; }</style>" +
+            "<script>const hint = \"that box wants the whole URL\";</script>" +
+            "<!-- Settings > Plugins: the cog only takes the whole URL rather than the ID -->" +
+            "<p>Paste the <strong>Deployment ID</strong> &mdash; either form is fine.</p>";
+        // Collapsed, because that is what the matchers are handed: an inline
+        // <strong> leaves two spaces behind and statementsOf() is what closes
+        // them up. Asserting on the un-collapsed form would be testing a stage
+        // nothing reads.
+        const visible = statementsOf(visibleTextOf(sample)).join(" ");
+        expect(visible, "a <style> body reached the prose scan").not.toContain("content:");
+        expect(visible, "a <script> body reached the prose scan").not.toContain("const hint");
+        expect(visible, "an HTML comment reached the prose scan").not.toContain("rather than the ID");
+        expect(visible, "the rendered sentence was lost").toContain("Paste the Deployment ID");
+        expect(visible, "&mdash; was left undecoded").toContain("—");
+        // The negative half of the comment rule: the SAME words, rendered, must
+        // survive. Without this, "drops comments" is satisfied by dropping
+        // everything.
+        expect(
+            statementsOf(visibleTextOf("<p>the cog only takes the whole URL rather than the ID</p>")).join(" ")
+        ).toContain("rather than the ID");
+    });
+
+    it("visibleTextOf() ends a statement at a block boundary (negative control)", () => {
+        // Two unrelated blocks must not fuse into one sentence. If they did, any
+        // heading naming the cog would combine with any later paragraph mentioning
+        // a full URL and the conjunction would fire on a claim nobody made.
+        // Both halves of the conjunction are present, one per block. Fused they
+        // would read as a contradiction; separate they are two true statements.
+        const twoBlocks = "<h2>In Settings &rarr; Plugins &rarr; ChannelTranslator &rarr; the cog</h2>"
+            + "<p>A Google Workspace account needs the whole URL.</p>";
+        const statements = statementsOf(visibleTextOf(twoBlocks));
+        expect(statements.length).toBeGreaterThan(1);
+        expect(
+            statements.some(s => /\bcog\b/.test(s) && /needs the whole/.test(s)),
+            "the two blocks fused into one statement — the boundary rule is not working"
+        ).toBe(false);
+        expect(crossSurfaceRestrictionClaims(visibleTextOf(twoBlocks))).toEqual([]);
+        // …and the positive half: the SAME two halves inside ONE block are one
+        // statement, and are caught. Without this the assertion above is satisfied
+        // by a matcher that never fires at all.
+        const oneBlock = "<p>In Settings &rarr; Plugins &rarr; ChannelTranslator &rarr; the cog, "
+            + "a Google Workspace account needs the whole URL.</p>";
+        expect(crossSurfaceRestrictionClaims(visibleTextOf(oneBlock))).toHaveLength(1);
+    });
+
+    it("statementsOf() reassembles copy the source hard-wraps (positive control)", () => {
+        // Read out of the tab itself, not restated: this sentence really is split
+        // across source lines, and a per-line scan cannot see it whole.
+        const wrapped = codeOf(section(read(TAB)));
+        const lines = wrapped.split("\n");
+        expect(
+            lines.some(line => line.includes("plugin's own settings")),
+            "the tab no longer carries this sentence — pick another control"
+        ).toBe(true);
+        expect(
+            lines.some(line => line.includes("plugin's own settings") && line.includes("the cog")),
+            "the sentence now fits on one line — this control no longer proves anything, so "
+            + "either pick a longer one or drop it"
+        ).toBe(false);
+        expect(
+            statementsOf(decodeEntities(wrapped)).some(s =>
+                s.includes("plugin's own settings") && s.includes("the cog")),
+            "the wrapped sentence was never rejoined — the scan is reading fragments"
+        ).toBe(true);
+    });
+
+    it("the restriction matcher fires on the sentence that actually shipped (positive control)", () => {
+        // THE DEFECT, verbatim. Both halves of the conjunction are asserted by
+        // name, so a future edit that keeps the test green by gutting one of the
+        // two lists fails here instead.
+        const claims = crossSurfaceRestrictionClaims(visibleTextOf(SHIPPED_CONTRADICTION));
+        expect(claims, "the guard cannot see the defect it was written for").toHaveLength(1);
+        expect(claims[0]).toContain("rather than");
+        expect(claims[0]).toContain("that one still wants the whole URL ending in /exec");
+        expect(claims[0]).toContain("one form \"rather than\" the other");
+        expect(claims[0]).toContain("it demands the whole thing");
+    });
+
+    it("the restriction matcher fires on the other shapes the same lie can take (positive control)", () => {
+        for (const reworded of [
+            "The plugin cog has a box for the same value, but that one only accepts the whole Web App URL.",
+            "The other box will not accept a bare Deployment ID.",
+            "In the translator plugin's own settings the same field needs the full URL.",
+            "That box takes only the URL, not the ID."
+        ]) {
+            expect(
+                crossSurfaceRestrictionClaims(reworded),
+                `reworded contradiction slipped through: ${reworded}`
+            ).toHaveLength(1);
+        }
+    });
+
+    it("the restriction matcher abstains on the TRUE sentences (negative control)", () => {
+        // Every one of these is live copy today, and every one carries HALF the
+        // conjunction. If the matcher cannot tell them from the defect it will be
+        // deleted by the first author it obstructs, and then it guards nothing.
+        for (const trueSentence of [
+            // names another box, claims no restriction
+            "The plugin cog has a box for the same value, and it takes either form too — both " +
+            "boxes ask the same question of the same checker.",
+            "This is the same setting as the Apps Script URL in the translator plugin's own " +
+            "settings, at Settings > Plugins > ChannelTranslator > the cog, so a value entered " +
+            "in either place shows up in the other.",
+            // claims a restriction, about a form or an account — not about a box
+            "If you took the Deployment ID in step 6 rather than the URL, the address is " +
+            "https://script.google.com/macros/s/ followed by that ID and then /exec.",
+            "A Google Workspace account must use the whole URL either way, because its address " +
+            "carries the organisation's domain.",
+            "So an endpoint that requires any Google sign-in is an endpoint the plugin cannot " +
+            "use, however valid the account."
+        ]) {
+            expect(
+                crossSurfaceRestrictionClaims(trueSentence),
+                `true sentence flagged as a contradiction: ${trueSentence}`
+            ).toEqual([]);
+        }
+    });
+
+    it("the both-forms matchers fire on copy that names both, and abstain on copy that names one "
+        + "(controls)", () => {
+        const both = "Paste the Deployment ID or the whole Web App URL, of the form " +
+            "https://script.google.com/macros/s/<DEPLOYMENT_ID>/exec — the box takes either.";
+        expect(NAMES_THE_ID.test(both)).toBe(true);
+        expect(NAMES_THE_URL.test(both)).toBe(true);
+        expect(NAMES_THE_URL_SHAPE.test(both)).toBe(true);
+        expect(acceptsEitherFormIn(both)).toContain("takes/accepts either");
+
+        const urlOnly = "The Web App URL of the Apps Script proxy, of the form " +
+            "https://script.google.com/macros/s/<DEPLOYMENT_ID>/exec.";
+        expect(NAMES_THE_ID.test(urlOnly), "the ID matcher fires on copy with no ID in it")
+            .toBe(false);
+        expect(acceptsEitherFormIn(urlOnly)).toEqual([]);
+
+        const idOnly = "Press the Copy button on the Deployment ID row and paste it here.";
+        expect(NAMES_THE_URL.test(idOnly), "the URL matcher fires on copy with no URL in it")
+            .toBe(false);
+        expect(acceptsEitherFormIn(idOnly)).toEqual([]);
+
+        // Naming both nouns is NOT the same as saying either is accepted, and this
+        // is the case that separates them.
+        const namesBothSaysNeither = "Google's Deploy dialog shows a Deployment ID and a Web " +
+            "App URL.";
+        expect(NAMES_THE_ID.test(namesBothSaysNeither)).toBe(true);
+        expect(NAMES_THE_URL.test(namesBothSaysNeither)).toBe(true);
+        expect(acceptsEitherFormIn(namesBothSaysNeither)).toEqual([]);
     });
 });
 
@@ -1176,6 +1587,170 @@ describe("the credential box takes a Deployment ID as well as a URL, and says so
         const oldPh = placeholderOf(OLD_INPUT);
         expect(oldPh).not.toContain("Deployment ID");
         expect(oldPh.indexOf("AKfycb")).toBe(-1);
+    });
+});
+
+/**
+ * 🔴 THREE SURFACES DESCRIBE ONE BOX. NONE OF THEM MAY MAKE ANOTHER SOUND STRICTER.
+ *
+ * WHAT SHIPPED, AND HOW. The credential is described in three places — the
+ * bundled setup guide (site/free/index.html), the plugin cog's `appsScriptUrl`
+ * description, and this row. For a while they genuinely disagreed: this row took
+ * a bare Deployment ID and the cog ran a second parser of its own that refused
+ * one. The guide said so, correctly and helpfully:
+ *
+ *     "The plugin cog has a box for the same value, and that one still wants the
+ *      whole URL ending in /exec rather than the ID."
+ *
+ * Then appsScriptUrlProblem() was rewritten to delegate to checkDeploymentUrl(),
+ * the second parser went, and the two boxes started agreeing by construction. The
+ * sentence above became FALSE at that moment — and stayed shipped, because it
+ * lives in a 340 KB HTML file that nothing in this suite read. It was caught by an
+ * adversarial reviewer after the change was committed.
+ *
+ * WHY A CLASS AND NOT A STRING. The sentence has already been fixed; pinning its
+ * absence would guard against re-pasting one specific paragraph and nothing else.
+ * What has to be forbidden is the SHAPE: a sentence that names another box and
+ * asserts a form is refused. That claim was true once and can never be true again
+ * while one validator answers for every surface, so the matcher is allowed to be
+ * absolute about it.
+ *
+ * WHY IT ALSO CHECKS THE OTHER DIRECTION. A guard that only forbids sentences is
+ * satisfied by deleting the copy, and a surface that says nothing about the two
+ * forms has drifted just as far as one that lies about them — the reader simply
+ * never learns the shorter form exists. So each surface must also NAME both forms
+ * and SAY that either is accepted.
+ *
+ * WHAT THIS DOES NOT DO. It does not check that the two forms are actually
+ * accepted — that is behaviour, it belongs to the code, and it is pinned by
+ * test/settingsValidatorDelegation.test.ts (which calls both validators over a
+ * table) and by the appsScript.ts assertions earlier in this file. This describe
+ * is only about the three descriptions agreeing with each other.
+ */
+describe("three surfaces, one credential box: none of them may claim another takes less", () => {
+    it("the one authority really is one authority — both settings boxes route to it", () => {
+        // The premise. If the cog ever grows a parser of its own again, the
+        // sentence this guard forbids could become TRUE, and forbidding a true
+        // sentence is how a guard turns into a liability. Read out of the code, so
+        // that day fails here with a reason rather than somewhere confusing.
+        expect(read(APPS_SCRIPT), "checkDeploymentUrl() is gone — nothing arbitrates the forms")
+            .toContain("export function checkDeploymentUrl(");
+        expect(
+            read(PLUGIN_SETTINGS),
+            "the cog's validator stopped delegating to checkDeploymentUrl() — the surfaces can " +
+            "disagree again, and the copy rule below may no longer be safe to enforce"
+        ).toContain("const shape = checkDeploymentUrl(trimmed);");
+        expect(
+            read(PLUGIN_STATE),
+            "the settings tab's validator stopped delegating to checkDeploymentUrl()"
+        ).toContain("const shape = checkDeploymentUrl(trimmed);");
+    });
+
+    it("all three surfaces are in the scan — dropping one is a pass by omission", () => {
+        // Every assertion below is a `for` over CREDENTIAL_SURFACES, so deleting an
+        // entry turns each of them green without changing a word of the copy. This
+        // is the assertion that notices, and it is the same guard
+        // test/no-module-scope-settings.test.ts keeps over its own file list.
+        expect(CREDENTIAL_SURFACES.map(surface => surface.path)).toEqual([GUIDE, PLUGIN_SETTINGS, TAB]);
+        for (const surface of CREDENTIAL_SURFACES) {
+            expect(existsSync(surface.path), `not found: ${surface.path}`).toBe(true);
+        }
+    });
+
+    it("no surface says another box takes less than it does", () => {
+        for (const surface of CREDENTIAL_SURFACES) {
+            const claims = crossSurfaceRestrictionClaims(surface.visible());
+            expect(
+                claims,
+                `${surface.label} tells the reader that another box accepts less than this one. ` +
+                "There is one validator — checkDeploymentUrl() — and every box delegates to it, " +
+                "so no box is stricter than any other and this sentence cannot be true:\n  " +
+                claims.join("\n  ") +
+                `\nFile: ${surface.path}`
+            ).toEqual([]);
+        }
+    });
+
+    it("…and that is not a matcher that stopped matching (positive control)", () => {
+        // The instrument, re-run at the point of use. If the assertion above ever
+        // passes because the scan lost its way into the file — a renamed section,
+        // an extractor throwing on a shape it did not expect — this fails beside
+        // it and says so.
+        expect(
+            crossSurfaceRestrictionClaims(visibleTextOf(SHIPPED_CONTRADICTION)),
+            "the guard no longer recognises the exact sentence it exists to catch"
+        ).toHaveLength(1);
+        for (const surface of CREDENTIAL_SURFACES) {
+            const text = surface.visible();
+            expect(text.length, `${surface.label}: the extractor returned nothing`)
+                .toBeGreaterThan(400);
+            expect(
+                crossSurfaceRestrictionClaims(text + " " + visibleTextOf(SHIPPED_CONTRADICTION)),
+                `${surface.label}: the scan cannot find the defect even when it is planted in it`
+            ).toHaveLength(1);
+        }
+    });
+
+    it("every surface names the Deployment ID form", () => {
+        for (const surface of CREDENTIAL_SURFACES) {
+            expect(
+                NAMES_THE_ID.test(surface.visible()),
+                `${surface.label} no longer names the Deployment ID. A reader of this surface ` +
+                `will not learn the shorter form is accepted at all.\nFile: ${surface.path}`
+            ).toBe(true);
+        }
+    });
+
+    it("every surface names the Web App URL form, and shows its shape", () => {
+        // The other direction, and the one an "improvement" breaks: the ID is
+        // shorter and nicer, so copy drifts towards showing only that. Every
+        // existing install holds a URL, and a Workspace account cannot use an ID
+        // at all.
+        for (const surface of CREDENTIAL_SURFACES) {
+            const text = surface.visible();
+            expect(
+                NAMES_THE_URL.test(text),
+                `${surface.label} no longer names the Web App URL form\nFile: ${surface.path}`
+            ).toBe(true);
+            expect(
+                NAMES_THE_URL_SHAPE.test(text),
+                `${surface.label} no longer shows what a Web App URL looks like\nFile: ${surface.path}`
+            ).toBe(true);
+        }
+    });
+
+    it("every surface says EITHER is accepted, not merely that both exist", () => {
+        // Naming the two values is what Google's own Deploy dialog does. Saying
+        // the box takes whichever you have is the sentence that makes the shorter
+        // form usable, and it is the one a copy edit drops first.
+        for (const surface of CREDENTIAL_SURFACES) {
+            expect(
+                acceptsEitherFormIn(surface.visible()),
+                `${surface.label} names both forms but never says either will do\n` +
+                `File: ${surface.path}`
+            ).not.toEqual([]);
+        }
+    });
+
+    it("M-REGRESS: the guard is red on the guide exactly as it shipped (positive control)", () => {
+        // The whole point, run end to end on a real document rather than a
+        // fragment: take the guide's own markup, put the false sentence back where
+        // it was, and confirm the assertion that guards it fails.
+        const asShipped = read(GUIDE).replace(
+            /<p class="note">The plugin cog has a box for the same value,[^<]*(?:<[^>]*>[^<]*)*?<\/p>/,
+            SHIPPED_CONTRADICTION
+        );
+        expect(
+            asShipped,
+            "the paragraph this guard is named after is no longer in the guide in any form — " +
+            "the substitution above matched nothing, so this control is measuring nothing"
+        ).toContain("that one still wants the whole URL");
+        const claims = crossSurfaceRestrictionClaims(visibleTextOf(asShipped));
+        expect(claims, "the shipped defect no longer trips the guard").toHaveLength(1);
+        expect(claims[0]).toContain("rather than the ID");
+        // …and the file on disk is NOT that. The negative half: if the real guide
+        // ever contains it again, this is the assertion that says so.
+        expect(guideText()).not.toContain("that one still wants the whole URL");
     });
 });
 
