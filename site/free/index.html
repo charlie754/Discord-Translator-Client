@@ -827,7 +827,7 @@ function json(obj) {
   <div class="step-head">
     <span class="step-num" aria-hidden="true">6</span>
     <div>
-      <h2>Press Deploy and copy the Web app URL</h2>
+      <h2>Press Deploy and copy the Deployment ID</h2>
       <p class="time">About 2 minutes</p>
     </div>
   </div>
@@ -836,10 +836,10 @@ function json(obj) {
     <p>The success panel reads <strong>&ldquo;Deployment successfully updated.&rdquo;</strong> and shows three things:</p>
     <ul>
       <li><strong>Version 1</strong> and the date. If you have deployed this project before, it will be the next number up instead.</li>
-      <li><strong>Deployment ID</strong> &mdash; a long code with its own Copy button. <strong>Not this one.</strong> It is not a URL, and the plugin has nowhere to put it.</li>
-      <li><strong>Web app URL</strong> &mdash; starts <code>https://script.google.com/macros/s/</code> and ends in <code>/exec</code>, with its own Copy button. <strong>This is the one the plugin wants.</strong></li>
+      <li><strong>Deployment ID</strong> &mdash; a long code with its own Copy button. <strong>This is the one to take.</strong> It is the same code that sits in the middle of the Web app URL, so the plugin can rebuild the whole address from it.</li>
+      <li><strong>Web app URL</strong> &mdash; starts <code>https://script.google.com/macros/s/</code> and ends in <code>/exec</code>, with its own Copy button. <strong>This works too.</strong> If you already have it, or you are on a Google Workspace account, paste this one instead &mdash; a Workspace address carries your organisation&rsquo;s domain, which cannot be rebuilt from the ID alone.</li>
     </ul>
-    <p><strong>Press the Copy button on the Web app URL row</strong>, check that what you copied ends in <code>/exec</code>, then press <strong>Done</strong>. If it does not end in <code>/exec</code>, you copied the Deployment ID &mdash; reopen the deployment and take the other one.</p>
+    <p><strong>Press the Copy button on the Deployment ID row</strong>, then press <strong>Done</strong>. What you copied should be one long run of letters, digits, hyphens and underscores with no slashes in it. If it starts with <code>https://</code> you pressed the Copy button on the Web app URL row instead &mdash; that is fine, the plugin accepts either.</p>
   </div>
 
   <details>
@@ -859,36 +859,36 @@ function json(obj) {
     <div class="shot-body">
       <svg class="wf" viewBox="0 0 460 218" role="img" aria-labelledby="wf7t wf7d">
         <title id="wf7t">Wireframe of the deployment success panel: Deployment successfully updated, Version 1 with a date, a Deployment ID with a Copy button, and a Web app URL with a Copy button.</title>
-        <desc id="wf7d">A schematic drawing, not a capture. The Web app URL row and its Copy button are outlined in the accent colour and marked with the number 6. The Deployment ID above it is drawn in muted grey with its value masked, because it is not the value you need. A Done button sits at the bottom right.</desc>
+        <desc id="wf7d">A schematic drawing, not a capture. The Deployment ID row and its Copy button are outlined in the accent colour and marked with the number 6, and its value is masked because it is the credential. The Web app URL below it is drawn in muted grey: it is accepted too, but it is not the one this step asks for. A Done button sits at the bottom right.</desc>
         <text class="cap" x="14" y="19" font-size="11">Diagram &#8212; not a screenshot</text>
         <rect class="panel" x="14" y="30" width="432" height="176" rx="10"/>
         <text class="b" x="30" y="54" font-size="13">Deployment successfully updated.</text>
         <text class="m" x="30" y="76" font-size="11">Version 1 on &lt;date&gt;</text>
         <text class="m" x="30" y="100" font-size="11">Deployment ID</text>
-        <rect class="block" x="30" y="106" width="290" height="22" rx="6"/>
+        <rect class="hi" x="30" y="106" width="290" height="22" rx="6"/>
         <rect class="mask" x="42" y="113" width="200" height="8" rx="4"/>
-        <rect class="block" x="328" y="106" width="56" height="22" rx="6"/>
-        <text class="m" x="356" y="121" font-size="10" text-anchor="middle">Copy</text>
+        <rect class="hi" x="328" y="106" width="56" height="22" rx="6"/>
+        <text class="hit" x="356" y="121" font-size="10" text-anchor="middle">Copy</text>
         <text class="m" x="30" y="146" font-size="11">Web app URL</text>
-        <rect class="hi" x="30" y="152" width="290" height="24" rx="6"/>
-        <text class="hit mono" x="42" y="168" font-size="10">https://script.google.com/macros/s/AKfycb.../exec</text>
-        <rect class="hi" x="328" y="152" width="56" height="24" rx="6"/>
-        <text class="hit" x="356" y="168" font-size="10" text-anchor="middle">Copy</text>
-        <circle class="pin" cx="404" cy="164" r="11"/>
-        <text class="pint" x="404" y="168.5" font-size="12" text-anchor="middle">6</text>
+        <rect class="block" x="30" y="152" width="290" height="24" rx="6"/>
+        <text class="m mono" x="42" y="168" font-size="10">https://script.google.com/macros/s/AKfycb.../exec</text>
+        <rect class="block" x="328" y="152" width="56" height="24" rx="6"/>
+        <text class="m" x="356" y="168" font-size="10" text-anchor="middle">Copy</text>
+        <circle class="pin" cx="404" cy="118" r="11"/>
+        <text class="pint" x="404" y="122.5" font-size="12" text-anchor="middle">6</text>
         <rect class="block" x="328" y="184" width="56" height="18" rx="5"/>
         <text class="m" x="356" y="197" font-size="10" text-anchor="middle">Done</text>
       </svg>
       <details class="shot-note">
         <summary><span class="shot-swap">Why this is a drawing and not a screenshot</span></summary>
         <div class="dbody">
-          <p class="shot-what">This one is a diagram because the real panel shows a live Web app URL for a specific account &mdash; and that URL is the credential, so it cannot be published as a capture.</p>
+          <p class="shot-what">This one is a diagram because the real panel shows a live Deployment ID and Web app URL for a specific account &mdash; and both of those are the credential, so neither can be published as a capture.</p>
         </div>
       </details>
     </div>
-    <figcaption>Two copyable values. Take the one ending in <code>/exec</code>.</figcaption>
+    <figcaption>Two copyable values, and the plugin takes either. Take the Deployment ID.</figcaption>
   </figure>
-  <p class="done"><input type="checkbox" id="chk-6"><label for="chk-6">Done &mdash; step 6, and the copied URL ends in /exec</label></p>
+  <p class="done"><input type="checkbox" id="chk-6"><label for="chk-6">Done &mdash; step 6, and something is on the clipboard</label></p>
 </section>
 
 <!-- ============================ STEP 7 ============================ -->
@@ -896,18 +896,22 @@ function json(obj) {
   <div class="step-head">
     <span class="step-num" aria-hidden="true">7</span>
     <div>
-      <h2>Paste the URL into Discord Translator</h2>
+      <h2>Paste it into Discord Translator</h2>
       <p class="time">About 1 minute</p>
     </div>
   </div>
   <div class="act">
-    <p>Open the plugin settings and fill in one field:</p>
+    <p>Two settings, both inside Discord:</p>
     <ol>
-      <li>Set the translation provider to <strong>Google Apps Script (your own free proxy)</strong>.</li>
-      <li>Paste the <strong>Web app URL</strong> from step 6 &mdash; the one ending in <code>/exec</code>. That is the only value there is; nothing else needs typing.</li>
+      <li>In <strong>Settings &rarr; Plugins &rarr; ChannelTranslator &rarr; the cog</strong>, set the translation provider to <strong>Google Apps Script (your own free proxy)</strong>.</li>
+      <li>In <strong>Settings &rarr; Discord Translator</strong>, find the <strong>Apps Script proxy</strong> section, paste the <strong>Deployment ID</strong> you copied in step 6, and press <strong>Save</strong>. That box takes either form &mdash; the ID or the whole Web app URL &mdash; and expands an ID into the full URL for you. Save also tries it for real against your own deployment, so a bad paste is caught here rather than at your first message.</li>
     </ol>
+    <p class="note">The plugin cog has a box for the same value, and it takes either form too &mdash; both boxes ask the same question of the same checker. Whichever one you fill in, the other shows what you saved.</p>
     <p>Then translate one message. A reply comes back in a second or two.</p>
-    <p class="note">The URL looks like this. Yours will have a different <code>AKfycb&hellip;</code> portion, and that portion is the credential &mdash; do not paste it anywhere public.</p>
+    <p class="note">The two forms look like this. Yours will have a different <code>AKfycb&hellip;</code> portion, and that portion is the credential &mdash; do not paste it anywhere public.</p>
+    <div class="valrow">
+      <code>AKfycb...</code>
+    </div>
     <div class="valrow">
       <code>https://script.google.com/macros/s/AKfycb.../exec</code>
     </div>
@@ -1116,7 +1120,7 @@ if (body.secret !== SHARED_SECRET) {
 <!-- ============================ FINAL ACTION ============================ -->
 <section class="finish" aria-labelledby="next">
   <h2 id="next">Do one more thing</h2>
-  <p>Open your Web app URL in a <strong>private browsing window</strong>, where you are not signed in to Google. Anything that is not a Google sign-in page is correct &mdash; it proves the plugin can reach it. A Google sign-in page means step 5 did not take, and you would otherwise find that out from a failure that looks like broken code.</p>
+  <p>Open your Web app URL in a <strong>private browsing window</strong>, where you are not signed in to Google. If you took the Deployment ID in step 6 rather than the URL, the address is <code>https://script.google.com/macros/s/</code> followed by that ID and then <code>/exec</code> &mdash; which is exactly what the plugin builds for you. Anything that is not a Google sign-in page is correct &mdash; it proves the plugin can reach it. A Google sign-in page means step 5 did not take, and you would otherwise find that out from a failure that looks like broken code.</p>
   <div class="linkrow">
     <a class="deeplink" href="https://script.google.com/home" target="_blank" rel="noopener noreferrer">Open Apps Script to re-check the deployment <span class="arrow" aria-hidden="true">&#8599;</span></a>
     <button type="button" class="copy" data-copy="https://script.google.com/home" data-label="Apps Script URL">Copy link</button>

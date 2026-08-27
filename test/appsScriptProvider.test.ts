@@ -233,6 +233,246 @@ describe("apps script provider — the URL is validated before anything is sent"
     });
 });
 
+/*
+ * ── THE BARE DEPLOYMENT ID ──────────────────────────────────────────────────
+ *
+ * Google's Deploy dialog shows a "Deployment ID" with its own copy button, and
+ * that ID is the <ID> segment of https://script.google.com/macros/s/<ID>/exec.
+ * The operator's ruling is that the credential box take EITHER form.
+ *
+ * "Strictly additive" is the load-bearing half of that ruling and it is what the
+ * first block below is for: no paste that worked before may stop working, and no
+ * accepted paste may normalise to a different string than it did. The existing
+ * URL assertions in the describe above are left exactly as they were for the same
+ * reason — they are the before-picture, and rewriting them would have erased it.
+ */
+describe("apps script provider — the bare Deployment ID", () => {
+    /*
+     * Derived from URL_OK rather than written out again, so "the two forms agree"
+     * cannot be made true by a typo in a second copy of the id.
+     */
+    const ID = new URL(URL_OK).pathname.split("/")[3];
+
+    /** Accepted → its canonical URL. Throws, loudly, if the check refused. */
+    function accepted(raw: string): string {
+        const check = checkDeploymentUrl(raw);
+        if (!check.ok) throw new Error(`expected accepted, was refused: ${check.reason}`);
+        return check.url;
+    }
+
+    /** Refused → its reason. Throws, loudly, if the check accepted. */
+    function refused(raw: string): string {
+        const check = checkDeploymentUrl(raw);
+        if (check.ok) throw new Error(`expected refused, was accepted as: ${check.url}`);
+        return check.reason;
+    }
+
+    it("the two helpers are instruments, not rubber stamps (control)", () => {
+        // Without this, an accepted() that never threw and a refused() that never
+        // threw would make every assertion below pass while measuring nothing.
+        expect(ID).toBe("AKfycbxTESTdeploymentIDnotreal123456");
+        expect(() => accepted(URL_PROJECT)).toThrow(/was refused/);
+        expect(() => refused(URL_OK)).toThrow(/was accepted/);
+    });
+
+    // ───────────────────────────────────────────────────────────────────────
+    // Additive: the URL form is untouched
+    // ───────────────────────────────────────────────────────────────────────
+
+    it("every URL that normalised before still normalises to the same string", () => {
+        // The full before-picture, pinned by value rather than by "still ok". A
+        // change that accepted these but rebuilt them differently would be exactly
+        // as broken as one that refused them, and only this shape catches it.
+        const WORKSPACE = "https://script.google.com/a/macros/example.com/s/AKfycbxTESTdeployment123/exec";
+        const unchanged: ReadonlyArray<readonly [string, string]> = [
+            [URL_OK, URL_OK],
+            [`  ${URL_OK}\n`, URL_OK],
+            [`${URL_OK}?foo=bar#frag`, URL_OK],
+            [WORKSPACE, WORKSPACE],
+            [`\t${WORKSPACE}  `, WORKSPACE]
+        ];
+        for (const [paste, canonical] of unchanged) expect(accepted(paste), paste).toBe(canonical);
+    });
+
+    it("every URL that was refused before is still refused, for the same reason", () => {
+        // Same argument from the other side: the new branch must not have opened a
+        // door. Each entry is a case the describe above already owns; here they are
+        // in one table so a single mutation cannot quietly pass them one at a time.
+        const stillRefused: ReadonlyArray<readonly [string, RegExp]> = [
+            [URL_PROJECT, /EDITOR/],
+            ["https://script.google.com/u/0/home/projects/1a2b3c/edit", /EDITOR/],
+            ["https://script.google.com/macros/s/AKfycbxTESTdeployment123/dev", /\/dev/],
+            ["https://script.google.com/macros/s/AKfycbxTEST123", /\/exec/],
+            [URL_OK.replace("https:", "http:"), /https:\/\//],
+            ["https://evil.test/macros/s/AKfycbxTEST123/exec", new RegExp(APPS_SCRIPT_HOST)],
+            ["https://script.google.com.evil.test/macros/s/AKfycbxTEST123/exec", new RegExp(APPS_SCRIPT_HOST)],
+            ["https://user:pass@script.google.com/macros/s/AKfycbxTEST123/exec", /username or password/],
+            ["", /no Web App URL configured/],
+            ["   ", /no Web App URL configured/]
+        ];
+        for (const [paste, names] of stillRefused) expect(refused(paste), paste).toMatch(names);
+    });
+
+    // ───────────────────────────────────────────────────────────────────────
+    // The new form
+    // ───────────────────────────────────────────────────────────────────────
+
+    it("normalises a bare Deployment ID to the canonical /exec URL", () => {
+        expect(accepted(ID)).toBe(`https://${APPS_SCRIPT_HOST}/macros/s/${ID}/exec`);
+    });
+
+    it("gives the IDENTICAL canonical string for both forms of one deployment", () => {
+        // The whole point of normalising in one function: nothing downstream — the
+        // three transports, the stored "last good" value, the settings check — can
+        // tell which form the user typed, so none of them has to.
+        expect(accepted(ID)).toBe(accepted(URL_OK));
+        expect(accepted(ID)).toBe(URL_OK);
+    });
+
+    it("tolerates whitespace around either form", () => {
+        for (const paste of [` ${ID}`, `${ID} `, `\n\t ${ID} \r\n`, `  ${URL_OK}  `]) {
+            expect(accepted(paste), JSON.stringify(paste)).toBe(URL_OK);
+        }
+    });
+
+    it("accepts an id at the length floor and refuses one below it", () => {
+        // Pins MIN_DEPLOYMENT_ID_LENGTH from both sides. Without the accepting half
+        // a floor raised to 1000 would still pass the refusing half.
+        expect(accepted("A".repeat(20))).toBe(`https://${APPS_SCRIPT_HOST}/macros/s/${"A".repeat(20)}/exec`);
+        expect(refused("A".repeat(19))).toMatch(/too short/);
+    });
+
+    it("lets a doubtful-but-well-formed id through to the network rather than guessing", () => {
+        // A PROJECT id out of the editor URL is the same characters as a deployment
+        // id and no local rule can separate them. It is accepted on purpose: Google
+        // answers 404, whose hint already names the fix, whereas a false refusal
+        // tells a user their correct credential is wrong and leaves them nothing to
+        // do. Nothing here asserts the id is real — only that we do not pretend to
+        // know it is not.
+        expect(accepted("1a2b3c4d5e6f_A-Z0123456789")).toContain("/macros/s/1a2b3c4d5e6f_A-Z0123456789/exec");
+    });
+
+    // ───────────────────────────────────────────────────────────────────────
+    // Refusals, each naming the actual problem
+    // ───────────────────────────────────────────────────────────────────────
+
+    it("refuses an id with a space and says so", () => {
+        // Two things pasted with a space between them, or a phrase typed by hand.
+        expect(refused(`${ID} ${ID}`)).toMatch(/spaces/);
+        // The wording still opens with the sentence the older test pins, because
+        // this really is not a web address either.
+        expect(refused("my apps script")).toMatch(/not a web address/);
+        expect(refused("my apps script")).toMatch(/spaces/);
+    });
+
+    it("refuses an id with a slash — that is a URL with pieces missing", () => {
+        const reason = refused(`${ID}/exec`);
+        expect(reason).toMatch(/not a web address/);
+        // …and still points at both accepted forms rather than one.
+        expect(reason).toMatch(/Deployment ID/);
+    });
+
+    it("refuses an id carrying a scheme, naming https as the requirement", () => {
+        expect(refused(`AKfycb:${"1".repeat(30)}`)).toMatch(/https:\/\//);
+    });
+
+    it("refuses characters a Deployment ID cannot contain", () => {
+        const reason = refused(`AKfycb!!${"z".repeat(30)}`);
+        expect(reason).toMatch(/letters, digits/);
+        // Long enough to clear the floor, so this really is the character check
+        // answering and not the length one.
+        expect(reason).not.toMatch(/too short/);
+    });
+
+    it("names a truncated id as truncated, and tells the user to use the copy button", () => {
+        const reason = refused("AKfycbShort");
+        expect(reason).toMatch(/too short/);
+        expect(reason).toMatch(/Manage deployments/);
+        // Not the "not a web address" wording: a short id IS an attempt at the new
+        // form and must not be told it should have been a URL.
+        expect(reason).not.toMatch(/not a web address/);
+    });
+
+    it("names the missing https:// rather than calling a scheme-less URL nonsense", () => {
+        const reason = refused(`${APPS_SCRIPT_HOST}/macros/s/${ID}/exec`);
+        expect(reason).toMatch(/https:\/\//);
+        expect(reason).toMatch(/missing/);
+    });
+
+    it("names a path pasted without its host", () => {
+        for (const paste of [`macros/s/${ID}/exec`, `/macros/s/${ID}/exec`, "a/macros/example.com/s/X/exec"]) {
+            const reason = refused(paste);
+            expect(reason, paste).toMatch(/tail of a Web App URL/);
+            expect(reason, paste).toMatch(new RegExp(APPS_SCRIPT_HOST));
+        }
+    });
+
+    it("gives the editor URL, the /dev URL and a truncated id three DIFFERENT messages", () => {
+        // The requirement is not that each is refused — it is that each user is
+        // told which of three different mistakes they made. One shared "invalid"
+        // string would pass every individual assertion above.
+        const reasons = [
+            refused(URL_PROJECT),
+            refused("https://script.google.com/macros/s/AKfycbxTESTdeployment123/dev"),
+            refused("AKfycbShort")
+        ];
+        expect(new Set(reasons).size).toBe(3);
+        for (const reason of reasons) expect(reason.length).toBeGreaterThan(40);
+    });
+
+    it("never quotes the paste back in an id refusal", () => {
+        // The value is the credential. A reason that echoed it would put it into a
+        // settings notice and from there into a screenshot — the property
+        // test/appsScriptEndpointValidation.test.ts pins for the URL branch, held
+        // here for the branch that file predates.
+        const secret = `AKfycbSECRETVALUE${"9".repeat(20)}`;
+        for (const paste of [`${secret} ${secret}`, `${secret}!!`, "AKfycbShort"]) {
+            expect(refused(paste), paste).not.toContain(paste.trim());
+        }
+    });
+
+    // ───────────────────────────────────────────────────────────────────────
+    // End to end: the id reaches the wire as the canonical URL
+    // ───────────────────────────────────────────────────────────────────────
+
+    it("POSTs a bare-id configuration to the canonical URL, not to the id", async () => {
+        const http = vi.fn(okHttp);
+        await createAppsScriptProvider(http, { apiKey: `  ${ID}  ` }).translate(["Hello"], "auto", "es");
+
+        const [url, init] = http.mock.calls[0];
+        expect(url).toBe(URL_OK);
+        expect(new URL(url).hostname).toBe(APPS_SCRIPT_HOST);
+        expect(init!.method).toBe("POST");
+    });
+
+    it("refuses to send anything for a malformed id, permanently", async () => {
+        const http = vi.fn(okHttp);
+        const err = await createAppsScriptProvider(http, { apiKey: "AKfycbShort" })
+            .translate(["hi"], "auto", "es")
+            .catch(e => e);
+
+        expect(http).not.toHaveBeenCalled();
+        expect(err.message).toContain("apps-script:");
+        expect(err.message).toContain("too short");
+        // Deterministic: the string in the settings field is exactly as wrong on
+        // the fourth attempt, so retrying spends breaker strikes for nothing.
+        expect(isPermanent(err)).toBe(true);
+    });
+
+    it("is resolved by the registry from a bare id", () => {
+        expect(resolveProvider("apps-script", okHttp, { apiKey: ID }).ok).toBe(true);
+    });
+
+    it("offers the id as an alternative when nothing is configured at all", () => {
+        // The empty-field message is the first sentence a new user reads. It names
+        // BOTH accepted forms, because a user told only about the URL will go and
+        // hunt for the URL — which is the trip this change exists to save them.
+        const reason = refused("");
+        expect(reason).toMatch(/no Web App URL configured/);
+        expect(reason).toMatch(/Deployment ID/);
+    });
+});
+
 describe("apps script provider — a successful translation", () => {
     it("returns the translated text", async () => {
         const [r] = await createAppsScriptProvider(okHttp, { apiKey: URL_OK })

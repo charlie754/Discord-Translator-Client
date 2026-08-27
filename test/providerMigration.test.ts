@@ -68,6 +68,11 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+// The REAL module, on the same principle as the registry below: settings.ts
+// imports checkDeploymentUrl() because appsScriptUrlProblem() delegates to it,
+// core/ resolves fine under vitest, so the genuine article is handed over rather
+// than a hand-written copy that could drift away from it.
+import { checkDeploymentUrl } from "../src/plugins/channelTranslator/core/providers/appsScript";
 import { registry } from "../src/plugins/channelTranslator/core/providers/registry";
 import type { ProviderFactory } from "../src/plugins/channelTranslator/core/providers/types";
 
@@ -129,7 +134,9 @@ function loadSettingsConstants(): SettingsConstants {
         "@utils/types": { OptionType: optionType },
         "@utils/web-metadata": { EXTENSION_BASE_URL: undefined },
         "@webpack/common": { React: { createElement: () => null } },
-        "~git-remote": { __esModule: true, default: "charlie754/Discord-Translator-Client" }
+        "~git-remote": { __esModule: true, default: "charlie754/Discord-Translator-Client" },
+        // The real one — see the import at the top of this file.
+        "./core/providers/appsScript": { checkDeploymentUrl }
     };
 
     const require_ = (id: string) => {

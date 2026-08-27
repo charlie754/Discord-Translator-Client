@@ -15,6 +15,15 @@ import { React } from "@webpack/common";
 
 import gitRemote from "~git-remote";
 
+// THE SINGLE AUTHORITY on what a valid Apps Script endpoint is, imported rather
+// than re-implemented — see appsScriptUrlProblem() below for what re-implementing
+// it cost. Safe in this direction and only this one: appsScript.ts imports
+// ../scheduler, ../types, ./languageCodes and ./types, and NOTHING under core/
+// imports settings.ts, so the plugin → core edge this adds is the one that was
+// already there. It is a pure string check — no transport, no settings, no I/O —
+// which is what makes it callable from a settings validator at all.
+import { checkDeploymentUrl } from "./core/providers/appsScript";
+
 /**
  * The target languages this app actually supports.
  *
@@ -269,42 +278,48 @@ function openGuide(target: GuideTarget): void {
 }
 
 /**
- * Why an Apps Script deployment URL is unusable, or null if it looks like one.
+ * Why an Apps Script credential is unusable, or null if it looks like one.
  *
- * An empty string is not a problem — it is the default, and it is what every
- * user who has not chosen this provider has.
+ * THIS FUNCTION NO LONGER DECIDES ANYTHING. It is an adapter, and the whole of
+ * its judgement is checkDeploymentUrl()'s in core/providers/appsScript.ts. That
+ * matters more than the four lines suggest: this used to be a SECOND PARSER over
+ * the same setting, with its own idea of what a valid endpoint was, and the two
+ * disagreed. The Apps Script section on the client settings tab took a bare
+ * Deployment ID — the short value Google's own Deploy dialog puts a copy button
+ * beside — while this box, the cog's own, answered the identical string with
+ * "That is not a URL." and sent the user to the other screen to paste it. One
+ * value, two authorities, two verdicts, and no mechanism that could ever have
+ * made them agree except two people editing two rule sets in step.
  *
- * The `/exec` requirement is the one worth spelling out. Apps Script hands out
- * two URLs: `/exec` is the deployment, reachable by "Anyone"; `/dev` is the head
- * revision and requires the owner's own signed-in session. Pasting `/dev`
- * produces a redirect to accounts.google.com, which the transport refuses
- * outright (redirects are not followed), so the user sees a blocked-request
- * failure with nothing pointing at the URL they pasted. Catching it here turns
- * that into a sentence.
+ * They now agree BY CONSTRUCTION rather than by maintenance. Every form
+ * checkDeploymentUrl() accepts — the whole Web App URL, or the bare ID it
+ * expands into one — this box accepts, on the day the provider learns it and
+ * without an edit here. test/settingsValidatorDelegation.test.ts pins the
+ * biconditional directly: appsScriptUrlProblem(x) === null exactly when
+ * checkDeploymentUrl(x).ok, over a table that includes every refusal shape.
+ *
+ * THE REFUSAL TEXT IS PASSED THROUGH VERBATIM, not re-worded. checkDeploymentUrl()
+ * already distinguishes the /dev URL from the editor URL from a wrong host from a
+ * scheme-less paste from a truncated ID, and each refusal names the specific fix.
+ * Re-wording any of them here would recreate the divergence in the copy instead of
+ * the code. state.ts's validate button surfaces `shape.reason` the same way, so a
+ * user meets identical wording whichever screen they are standing on.
+ *
+ * THE ONE DELIBERATE DIVERGENCE, and it is a contract difference rather than a
+ * rule difference. An empty box is not an error — it is the default, and it is
+ * what every user who has not chosen this provider has, so it must not paint the
+ * cog red. checkDeploymentUrl("") is quite reasonably NOT ok, because its callers
+ * are about to make a request and have nothing to send. So blank is answered here,
+ * above the delegation, and never reaches it. That is the only input on which the
+ * two functions differ, and the test table above asserts it explicitly rather than
+ * excluding it.
  */
 export function appsScriptUrlProblem(value: string): string | null {
     const trimmed = value.trim();
     if (trimmed === "") return null;
 
-    let url: URL;
-    try {
-        url = new URL(trimmed);
-    } catch {
-        return "That is not a URL. Paste the whole Web App URL, starting with https://.";
-    }
-
-    if (url.protocol !== "https:") {
-        return "The deployment URL must start with https:// — Apps Script serves nothing over http.";
-    }
-    if (url.hostname !== "script.google.com") {
-        return "An Apps Script Web App URL is hosted at script.google.com. " +
-            `This one points at ${url.hostname || "no host at all"}.`;
-    }
-    if (!url.pathname.endsWith("/exec")) {
-        return "Use the URL ending in /exec from Deploy > New deployment, not the /dev one. " +
-            "The /dev URL only works while you are signed in as the deployment's owner.";
-    }
-    return null;
+    const shape = checkDeploymentUrl(trimmed);
+    return shape.ok ? null : shape.reason;
 }
 
 /**
@@ -434,10 +449,15 @@ export const settings = definePluginSettings({
     appsScriptUrl: {
         type: OptionType.STRING,
         description:
-            "GOOGLE APPS SCRIPT — the deployment URL of the proxy you deployed to your own Google " +
-            "account. Read only when Provider is Google Apps Script. It is the Web App URL the " +
-            "deployment gives you, of the form " +
-            "https://script.google.com/macros/s/<DEPLOYMENT_ID>/exec, deployed with " +
+            "GOOGLE APPS SCRIPT — the proxy you deployed to your own Google account. Its Deploy " +
+            "dialog hands you two values for it, and Discord Translator takes either: the short " +
+            "Deployment ID, which has its own copy button, or the whole Web App URL, of the form " +
+            "https://script.google.com/macros/s/<DEPLOYMENT_ID>/exec. They name the same " +
+            "deployment, and an ID is expanded into that URL before anything is sent, so this " +
+            "box takes whichever one you have. A Google Workspace account must use the URL " +
+            "either way, because its address carries the organisation's domain and that cannot " +
+            "be recovered from the ID on its own. Read " +
+            "only when Provider is Google Apps Script, and deployed with " +
             "\"Execute as: Me\" and \"Who has access: Anyone\". There is no API key and no card: a " +
             "consumer Google account allows about 5,000 translation calls a day, and going past " +
             "that fails the request rather than charging you, because Apps Script has no billing " +
