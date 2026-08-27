@@ -20,12 +20,18 @@ import type { HttpTransport, ProviderConfig, TranslationProvider } from "./types
  * the ceiling is refusal rather than a bill. The ceiling on a consumer account is
  * 5,000 translate calls per day and it resets daily.
  *
- * THE "KEY" IS A URL. needsKey is true and ProviderConfig.apiKey carries the
- * deployment URL, because that URL *is* the credential: anyone holding it can
- * spend the deployment's daily quota. It is therefore validated here rather than
- * forwarded, and validated hard — see checkDeploymentUrl(). A user-supplied
- * string that becomes a request URL is the one input on this provider that the
- * transports cannot re-derive for themselves.
+ * THE "KEY" IS A URL — OR THE ID INSIDE IT. needsKey is true and
+ * ProviderConfig.apiKey carries the deployment URL, because that URL *is* the
+ * credential: anyone holding it can spend the deployment's daily quota. It is
+ * therefore validated here rather than forwarded, and validated hard — see
+ * checkDeploymentUrl(). A user-supplied string that becomes a request URL is the
+ * one input on this provider that the transports cannot re-derive for themselves.
+ *
+ * The same field also accepts the bare DEPLOYMENT ID, which is what Google's own
+ * Deploy dialog offers a dedicated copy button for. Both forms normalise to the
+ * identical canonical /exec URL, so everything downstream — the three transports,
+ * the settings check, the stored "last good" value — keeps seeing exactly one
+ * shape. See checkDeploymentUrl(), which is the single authority on both.
  *
  * The transport still has the final word: script.google.com must be in the
  * ALLOWED_HOSTS set of all three transports or nothing here can reach it. This
@@ -73,24 +79,172 @@ const PROJECT_PATHS = [
     /^(?:\/u\/\d+)?\/home\/?$/
 ];
 
+/**
+ * ── THE BARE DEPLOYMENT ID ───────────────────────────────────────────────────
+ *
+ * Google's Deploy dialog shows a "Deployment ID" with its own copy button, and
+ * that ID is literally the <ID> segment of
+ * https://script.google.com/macros/s/<ID>/exec — the reference implementation
+ * this product was modelled on builds its endpoint by exactly that
+ * concatenation. So a bare ID needs no derivation: it is the URL with the
+ * boilerplate removed, and it is normalised back to the same canonical string.
+ *
+ * TELLING THE TWO FORMS APART. A URL carries a scheme, or a forward slash, or
+ * both. A Deployment ID carries neither — it is a single path segment. That is
+ * the whole rule, and it is applied to the TRIMMED paste, so surrounding
+ * whitespace decides nothing.
+ *
+ *   "https://script.google.com/macros/s/<ID>/exec"  → slash + scheme → URL branch
+ *   "script.google.com/macros/s/<ID>/exec"          → slash          → URL branch
+ *   "macros/s/<ID>/exec"                            → slash          → URL branch
+ *   "<ID>"                                          → neither        → ID branch
+ *   "my apps script"                                → neither        → ID branch
+ *
+ * The two middle cases are REFUSED, each with its own wording (see the catch
+ * block in checkDeploymentUrl). They are not accepted, because the operator's
+ * ruling was that the box take two forms and these are a third and a fourth;
+ * accepting them later would be strictly additive and would break nothing here.
+ */
+
+/**
+ * What a Deployment ID may be made of.
+ *
+ * NOT INVENTED. It is the same character class DEPLOYMENT_PATHS above already
+ * accepts for the <ID> segment of a full URL. Reusing it is what guarantees that
+ * a bare ID accepted here builds a URL this very function would also accept — a
+ * wider class would let checkDeploymentUrl() return a URL it refuses.
+ */
+const DEPLOYMENT_ID = /^[A-Za-z0-9_-]+$/;
+
+/**
+ * The length floor under which a paste is called truncated rather than tried.
+ *
+ * [A] ASSUMED, NOT MEASURED. There is no published specification for the format
+ * of an Apps Script deployment id, and none is invented here. The only claim
+ * behind this number is a weak one that does not need a spec: the ids Google
+ * shows are long, and nothing shorter than twenty characters is a plausible
+ * complete one — a clipboard that stopped early, or half a value selected by
+ * hand, is.
+ *
+ * IT IS DELIBERATELY LOW. A false rejection tells a user that their correct
+ * credential is wrong and leaves them nothing to do about it; a doubtful value
+ * let through costs one request and comes back as a specific, honest 404 whose
+ * hint already says "nothing is deployed at it any more … copy the current Web
+ * app URL". Given that asymmetry the floor is set to catch only the obviously
+ * incomplete, and everything above it is the network's question to answer.
+ *
+ * NO UPPER BOUND, on purpose. The full-URL branch has never bounded the length
+ * of the <ID> segment either, so bounding it only for the bare form would refuse
+ * a string this function accepts when it is wrapped in a URL — the same value
+ * judged two ways by one authority.
+ */
+const MIN_DEPLOYMENT_ID_LENGTH = 20;
+
+/** RFC 3986's scheme production, anchored: matches "https:", "mailto:", "AKfycb:". */
+const HAS_SCHEME = /^[A-Za-z][A-Za-z0-9+.-]*:/;
+
+/** A Web App URL with the https:// missing off the front — with or without the "//". */
+const SCHEMELESS_HOST = new RegExp(`^(?://)?${APPS_SCRIPT_HOST.replace(/\./g, "\\.")}/`, "i");
+
+/** Only the tail of a Web App URL: the path, pasted without the host. */
+const PATH_ONLY = /^\/?(?:macros\/s\/|a\/macros\/)/i;
+
 export type DeploymentUrlCheck =
     | { ok: true; url: string; }
     | { ok: false; reason: string; };
 
 /**
- * Is this a Web App deployment URL, and if not, what did the user paste instead?
+ * A paste with no scheme and no slash in it: judged as a bare Deployment ID.
+ *
+ * Private, and called from exactly one place, because checkDeploymentUrl() must
+ * stay the single authority on what a valid endpoint is — three transports, the
+ * settings check and state.ts's validate button all resolve their answer through
+ * it, and a second entry point is how two of them start disagreeing.
+ *
+ * WHAT IS NOT CHECKED, and why. Nothing here distinguishes a deployment id from
+ * a PROJECT id copied out of the editor URL: both are long strings of the same
+ * characters, and no local rule can separate them. A project id therefore passes
+ * and is answered by Google with a 404, whose STATUS_HINT already names the fix.
+ * That is the intended trade — the alternative is a guess that refuses real
+ * credentials.
+ *
+ * A WORKSPACE ACCOUNT CANNOT USE THIS FORM. Its URL is
+ * /a/macros/<domain>/s/<ID>/exec and the <domain> is not recoverable from the id
+ * alone, so a Workspace user pasting a bare id gets the consumer URL and a
+ * failure from Google. They must paste the whole URL, which is the form their
+ * dialog hands them anyway.
+ */
+function checkDeploymentId(candidate: string): DeploymentUrlCheck {
+    // Checked before the character class so the commonest wrong paste — a phrase,
+    // or two things pasted with a space between them — is named for what it is
+    // rather than reported as a stray character.
+    if (/\s/.test(candidate)) {
+        return {
+            ok: false,
+            reason:
+                "that is not a web address, and it is not a Deployment ID either — it has spaces " +
+                "in it. Paste either the whole Web App URL, which looks like " +
+                `https://${APPS_SCRIPT_HOST}/macros/s/<a long id>/exec, or just the Deployment ID ` +
+                "on its own — Deploy → Manage deployments shows both, each with its own copy button."
+        };
+    }
+
+    if (!DEPLOYMENT_ID.test(candidate)) {
+        return {
+            ok: false,
+            reason:
+                "a Deployment ID is made only of letters, digits, hyphens and underscores, and " +
+                "this one contains something else. If you meant to paste the whole Web App URL it " +
+                `starts with https://${APPS_SCRIPT_HOST}/macros/s/ and ends with /exec; if you ` +
+                "meant the ID on its own, use the copy button beside Deployment ID in " +
+                "Deploy → Manage deployments."
+        };
+    }
+
+    if (candidate.length < MIN_DEPLOYMENT_ID_LENGTH) {
+        return {
+            ok: false,
+            reason:
+                "that is far too short to be a Deployment ID — it looks like only part of one was " +
+                "copied. The ID Google shows is a long string; use the copy button beside it in " +
+                "Deploy → Manage deployments rather than selecting the text by hand, or paste the " +
+                "whole Web App URL ending in /exec instead."
+        };
+    }
+
+    // The same canonical string the URL branch returns for the same deployment.
+    return { ok: true, url: `https://${APPS_SCRIPT_HOST}/macros/s/${candidate}/exec` };
+}
+
+/**
+ * Is this a usable Apps Script endpoint, and if not, what did the user paste
+ * instead?
+ *
+ * TWO ACCEPTED FORMS, ONE CANONICAL ANSWER. A full Web App URL, or the bare
+ * Deployment ID from Google's Deploy dialog. Both return
+ * `https://script.google.com/macros/s/<ID>/exec` — the identical string for the
+ * identical deployment — so nothing downstream has to know which was typed.
+ * Which branch a paste takes is decided by scheme-or-slash; see the block above
+ * DEPLOYMENT_ID for the rule and the four worked cases.
  *
  * Every refusal names what was expected, because "invalid URL" sends a
  * non-technical user back to a settings field with nothing to change. The
  * project-URL case gets its own wording: it is not a typo, it is a different page
  * of the same product, and the user will re-paste the identical string unless
- * they are told which URL to go and fetch.
+ * they are told which URL to go and fetch. The bare-ID refusals are worded the
+ * same way, and for the same reason.
+ *
+ * NO REFUSAL EVER QUOTES THE PASTE BACK. The value is the credential, and
+ * test/appsScriptEndpointValidation.test.ts pins that: a reason that echoed the
+ * string would put it into a settings notice and, from there, into a screenshot.
  *
  * On success the URL is REBUILT from the parsed host and path rather than passed
  * through. That drops any query string, fragment or embedded credentials the
  * paste carried, so what the transport receives is exactly the shape that was
  * checked — the same validate-one-thing-send-another gap checkUrl() closes in
- * native.ts, closed here for the same reason.
+ * native.ts, closed here for the same reason. The bare-ID branch is the same
+ * guarantee reached from the other side: it BUILDS the URL, so there is nothing
+ * left over to drop.
  */
 export function checkDeploymentUrl(raw: string): DeploymentUrlCheck {
     const trimmed = (raw ?? "").trim();
@@ -98,21 +252,54 @@ export function checkDeploymentUrl(raw: string): DeploymentUrlCheck {
         return {
             ok: false,
             reason:
-                "no Web App URL configured — paste your Apps Script deployment URL into the " +
-                "plugin settings. It looks like https://script.google.com/macros/s/…/exec"
+                "no Web App URL configured — paste your Apps Script deployment URL, or just its " +
+                "Deployment ID, into the plugin settings. The URL looks like " +
+                "https://script.google.com/macros/s/…/exec"
         };
+    }
+
+    // Neither a scheme nor a slash: this is not a URL and must not be reported as
+    // a broken one. Judged as a Deployment ID instead, which is the form Google's
+    // Deploy dialog gives its own copy button.
+    if (!trimmed.includes("/") && !HAS_SCHEME.test(trimmed)) {
+        return checkDeploymentId(trimmed);
     }
 
     let parsed: URL;
     try {
         parsed = new URL(trimmed);
     } catch {
+        // Two near-misses that ARE web addresses and would read as an insult if
+        // told they are not one. Neither is accepted — the ruling was that the box
+        // take a full URL or a bare ID, and these are neither — but each is told
+        // exactly what is missing.
+        if (SCHEMELESS_HOST.test(trimmed)) {
+            return {
+                ok: false,
+                reason:
+                    "that is the Web App URL with the https:// missing from the front. Paste the " +
+                    "whole thing, https:// included — the copy button in Deploy → Manage " +
+                    "deployments gives you the complete URL."
+            };
+        }
+
+        if (PATH_ONLY.test(trimmed)) {
+            return {
+                ok: false,
+                reason:
+                    "that is only the tail of a Web App URL — the part after the host is there, " +
+                    `but https://${APPS_SCRIPT_HOST} is missing from the front. Paste the whole ` +
+                    "URL, or paste just the Deployment ID on its own, with no slashes in it."
+            };
+        }
+
         return {
             ok: false,
             reason:
                 "that is not a web address. The Apps Script Web App URL starts with " +
                 `https://${APPS_SCRIPT_HOST}/macros/s/ and ends with /exec — copy it from ` +
-                "Deploy → Manage deployments → the copy button under Web app."
+                "Deploy → Manage deployments → the copy button under Web app. The Deployment ID " +
+                "from that same dialog, pasted on its own, works too."
         };
     }
 

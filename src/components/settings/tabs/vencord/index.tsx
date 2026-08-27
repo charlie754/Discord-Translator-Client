@@ -406,7 +406,9 @@ function TranslationApiKeySection() {
                 kind: "ok",
                 message:
                     "Checked and applied. The deployment answered with a translation, so this " +
-                    "URL is now both the one in use and the one Reset returns to."
+                    "URL is now both the one in use and the one Reset returns to. If you pasted " +
+                    "a Deployment ID, the box now shows the full Web App URL it stands for — " +
+                    "the same deployment, written out in full."
             });
         } catch {
             // validateAppsScriptUrl() turns every failure it can see into a
@@ -470,15 +472,21 @@ function TranslationApiKeySection() {
                     : null}
             </div>
             <Paragraph className={Margins.bottom8}>
-                The Web App URL of the Apps Script proxy you deploy once into your own Google
-                account. It looks like https://script.google.com/macros/s/&lt;DEPLOYMENT_ID&gt;/exec
-                and it is read only when the translator's provider is Google Apps Script. There is
+                The Apps Script proxy you deploy once into your own Google account, named in
+                either of the two forms its Deploy dialog hands you. Paste the Deployment ID —
+                the short code with its own copy button — or the whole Web App URL, which looks
+                like https://script.google.com/macros/s/&lt;DEPLOYMENT_ID&gt;/exec. Both name the
+                same deployment: an ID is expanded into that URL before anything is sent, so the
+                box shows the full URL once it has been checked. Either way it is read only when
+                the translator's provider is Google Apps Script. A Google Workspace account has
+                to paste the whole URL — its address carries the organisation's domain, and that
+                cannot be recovered from the ID on its own. There is
                 no API key and no card: a consumer Google account allows about 5,000 translation
                 calls a day, and going past that fails the request rather than charging you,
                 because Apps Script has no billing at all. Stored locally in this client's settings,
                 sent only to script.google.com, and never shared. This is the same setting as the
                 Apps Script URL in the translator plugin's own settings, at Settings &gt; Plugins
-                &gt; ChannelTranslator &gt; the cog, so a URL entered in either place shows up in
+                &gt; ChannelTranslator &gt; the cog, so a value entered in either place shows up in
                 the other.
                 {guide ? null : " " + NO_GUIDE_SENTENCE}
             </Paragraph>
@@ -520,7 +528,12 @@ function TranslationApiKeySection() {
                 // and test/appsScriptRowSaveReset.test.ts fails on the whole file
                 // — comments included — if the password form reappears.
                 type="text"
-                placeholder="https://script.google.com/macros/s/…/exec"
+                // THE ID FORM LEADS, because it is the one Google's Deploy dialog
+                // gives a copy button to and the one the setup guide now tells the
+                // reader to take. The URL is still shown, because a user who
+                // already has one — or who is on Workspace and must use one —
+                // needs to see that it is still accepted.
+                placeholder="AKfycb… (Deployment ID) or https://script.google.com/macros/s/…/exec"
                 value={draft}
                 onChange={value => {
                     setDraft(value);
@@ -533,13 +546,13 @@ function TranslationApiKeySection() {
                 // Best effort, and only that — see the constant.
                 {...PASSWORD_MANAGER_OPT_OUTS}
                 spellCheck={false}
-                aria-label="Apps Script proxy deployment URL"
+                aria-label="Apps Script proxy Deployment ID or Web App URL"
             />
             <Paragraph className={Margins.top8} style={{ color: "var(--text-muted)" }}>
-                Save checks the URL here first — the shape is verified locally, instantly, and
-                without contacting anyone. Only a well-formed URL is then tried for real against
-                your own deployment, which uses one call out of that day's ~5,000 and nothing
-                else.
+                Save checks what you pasted here first — an ID or a URL, the shape is verified
+                locally, instantly, and without contacting anyone. Only a well-formed value is
+                then tried for real against your own deployment, which uses one call out of that
+                day's ~5,000 and nothing else.
             </Paragraph>
             {dirty && (
                 <Paragraph className={Margins.top8} style={{ color: "var(--text-feedback-warning)" }}>
@@ -554,7 +567,7 @@ function TranslationApiKeySection() {
                     onClick={onSave}
                     disabled={saveDisabled}
                     aria-busy={checking}
-                    aria-label="Check this Apps Script deployment URL and apply it"
+                    aria-label="Check this Apps Script Deployment ID or Web App URL and apply it"
                 >
                     {checking ? "Checking…" : "Save"}
                 </Button>

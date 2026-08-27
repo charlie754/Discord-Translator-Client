@@ -50,6 +50,15 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
+// THE REAL MODULE, not a hand-written stub of it. settings.ts now imports
+// checkDeploymentUrl() because appsScriptUrlProblem() delegates its whole
+// judgement to it, and core/ resolves fine under vitest — so this harness hands
+// over the genuine article, for the same reason test/providerMigration.test.ts
+// hands over the real registry rather than a copy. Nothing in THIS file
+// exercises the validator; the entry exists so the tests below are measuring
+// guide behaviour instead of a module-resolution failure.
+import { checkDeploymentUrl } from "../src/plugins/channelTranslator/core/providers/appsScript";
+
 const SETTINGS_PATH = join(process.cwd(), "src", "plugins", "channelTranslator", "settings.ts");
 const SETTINGS_SOURCE = readFileSync(SETTINGS_PATH, "utf8");
 
@@ -153,7 +162,9 @@ function loadSettings(opts: LoadOptions = {}): LoadedModule {
         // esbuild emits __toESM(require(...)) for a default import; __esModule
         // is what stops it wrapping the string in another object.
         "~git-remote": { __esModule: true, default: gitRemote },
-        "./usageSettings": { renderUsageSettings: () => null }
+        "./usageSettings": { renderUsageSettings: () => null },
+        // The real one — see the import at the top of this file.
+        "./core/providers/appsScript": { checkDeploymentUrl }
     };
 
     const require_ = (id: string) => {

@@ -65,6 +65,15 @@ const PLUGIN_STATE = join(ROOT, "src", "plugins", "channelTranslator", "state.ts
  */
 const REGISTRY = join(ROOT, "src", "plugins", "channelTranslator", "core", "providers", "registry.ts");
 const DELETED_USAGE = join(ROOT, "src", "plugins", "channelTranslator", "core", "usage.ts");
+/**
+ * The provider module that decides what this credential may look like.
+ *
+ * Read for the same reason REGISTRY is read: the row's copy now PROMISES that a
+ * bare Deployment ID is accepted, and a promise about behaviour has to be checked
+ * against the code that behaves, not against a second copy of the belief written
+ * out here.
+ */
+const APPS_SCRIPT = join(ROOT, "src", "plugins", "channelTranslator", "core", "providers", "appsScript.ts");
 const HEADING_CSS = join(ROOT, "src", "components", "Heading.css");
 const BASE_TEXT = join(ROOT, "src", "components", "BaseText.tsx");
 
@@ -169,6 +178,37 @@ function failurePath(saveBody: string): string {
 function successPath(saveBody: string): string {
     const guard = failurePath(saveBody);
     return saveBody.slice(saveBody.indexOf(guard) + guard.length);
+}
+
+/**
+ * The `placeholder="…"` string the input actually renders.
+ *
+ * A LITERAL ONLY, on purpose. If the placeholder ever becomes an expression this
+ * throws rather than returning the empty string a lenient regex would hand back —
+ * an extractor that silently returns "" makes every assertion about the
+ * placeholder's CONTENT pass vacuously, which is the failure mode this whole file
+ * exists to refuse. Run it over comment-stripped source so a comment discussing
+ * the placeholder cannot be mistaken for the placeholder.
+ */
+function placeholderOf(sectionCode: string): string {
+    const at = sectionCode.indexOf("placeholder=");
+    expect(at, "the input has no placeholder at all").toBeGreaterThan(-1);
+    const literal = /placeholder="((?:[^"\\]|\\.)*)"/.exec(sectionCode.slice(at));
+    expect(literal, "the placeholder is no longer a plain string literal").not.toBeNull();
+    return literal![1].replace(/\\"/g, "\"");
+}
+
+/**
+ * The plugin cog's `appsScriptUrl` description, flattened.
+ *
+ * The description is written as `"…" + "…"` across a dozen lines to stay inside
+ * the codebase's line length, so a raw `toContain` on the FILE cannot see any
+ * sentence that happens to straddle a break — it would report a perfectly good
+ * sentence as missing, or worse, pass because the fragment it happened to pick
+ * fits on one line. Slice the block, join its literals, then match.
+ */
+function cogDescription(pluginSrc: string): string {
+    return stringLiterals(sliceBetween(pluginSrc, "    appsScriptUrl: {", "        default: \"\",")).join("");
 }
 
 /** The body of `function onReset()`. */
@@ -335,7 +375,7 @@ function revealControlsIn(text: string): string[] {
 
 describe("instrument checks — the scan is measuring the thing it names", () => {
     it("every file it reads exists and is not empty", () => {
-        for (const file of [TAB, TAB_CSS, PLUGIN_SETTINGS, PLUGIN_STATE, REGISTRY, HEADING_CSS, BASE_TEXT]) {
+        for (const file of [TAB, TAB_CSS, PLUGIN_SETTINGS, PLUGIN_STATE, REGISTRY, APPS_SCRIPT, HEADING_CSS, BASE_TEXT]) {
             expect(existsSync(file), `not found: ${file}`).toBe(true);
             expect(read(file).length, `empty: ${file}`).toBeGreaterThan(0);
         }
@@ -965,6 +1005,180 @@ describe("the copy does not claim this path costs money", () => {
     });
 });
 
+/**
+ * THE BOX TAKES TWO FORMS, AND THE COPY IS THE ONLY THING THAT SAYS SO.
+ *
+ * Operator ruling: the credential may be given as the whole Web App URL, exactly
+ * as before, OR as the short Deployment ID that Google's own Deploy dialog puts a
+ * copy button beside. checkDeploymentUrl() accepts both and normalises them to one
+ * canonical /exec address, so nothing downstream can tell which was typed.
+ *
+ * A capability nobody is told about is not a feature. Every assertion here is
+ * about what the user can READ — the body copy, the placeholder, the accessible
+ * names — because that is the entire mechanism by which a user learns the shorter
+ * form is allowed. The last two are the other direction: they check the PROMISE
+ * against the code that keeps it, so this row cannot go on advertising an ID after
+ * the parser stops taking one.
+ *
+ * STRICTLY ADDITIVE, and the negative controls are what pin that. The URL form was
+ * valid before this change and must still be named, still be shown, and still be
+ * accepted; an "improvement" that quietly drops it would break every existing
+ * install, and a Google Workspace user has no other option at all.
+ */
+describe("the credential box takes a Deployment ID as well as a URL, and says so", () => {
+    it("the rendered copy tells the user to paste the Deployment ID", () => {
+        const src = codeOf(section(read(TAB)));
+        expect(
+            src,
+            "nothing rendered names the Deployment ID — the shorter form is accepted in " +
+            "silence, so nobody will use it"
+        ).toContain("Paste the Deployment ID");
+    });
+
+    it("and the Web App URL is still offered, not replaced (negative control)", () => {
+        // Without this, the assertion above is satisfied by copy that tells the
+        // user the ID is now the ONLY accepted form. It is not: every stored URL
+        // still works, and a Workspace account cannot use an ID at all.
+        const src = codeOf(section(read(TAB)));
+        expect(src).toContain("or the whole Web App URL");
+        expect(src).toContain("https://script.google.com/macros/s/");
+        expect(src, "the Workspace caveat went — those users have no working instruction")
+            .toContain("Workspace");
+    });
+
+    it("the placeholder shows the ID form, and shows it first", () => {
+        const ph = placeholderOf(codeOf(section(read(TAB))));
+        expect(ph, "the placeholder does not name the Deployment ID").toContain("Deployment ID");
+        const idAt = ph.indexOf("AKfycb");
+        const urlAt = ph.indexOf("https://");
+        expect(idAt, "the placeholder shows no example ID").toBeGreaterThan(-1);
+        expect(urlAt, "the placeholder stopped showing the URL form entirely").toBeGreaterThan(-1);
+        expect(
+            idAt,
+            "the URL form is shown before the ID form — the point of the change is that the " +
+            "SHORTER value leads, because it is the one with a copy button"
+        ).toBeLessThan(urlAt);
+    });
+
+    it("the accessible names cover both forms, not the URL alone", () => {
+        // A screen-reader user gets the aria-label and nothing else. Leaving it
+        // saying "deployment URL" tells them the ID is not allowed here.
+        const src = codeOf(section(read(TAB)));
+        expect(src).toContain('aria-label="Apps Script proxy Deployment ID or Web App URL"');
+        expect(src).toContain("Check this Apps Script Deployment ID or Web App URL and apply it");
+    });
+
+    it("the provider really does accept a bare ID — read out of appsScript.ts, not restated", () => {
+        // The copy above is a claim about behaviour. This is the behaviour.
+        const provider = read(APPS_SCRIPT);
+        expect(provider, "checkDeploymentId() is gone — the row's copy now promises a form " +
+            "nothing implements").toContain("function checkDeploymentId(");
+        expect(
+            provider,
+            "checkDeploymentUrl() no longer diverts a slash-less, scheme-less paste to the " +
+            "ID branch, so a bare Deployment ID is refused again"
+        ).toContain("return checkDeploymentId(trimmed);");
+    });
+
+    /**
+     * 🔴 THE SECOND PARSER IS GONE, AND THIS IS WHAT KEEPS IT GONE.
+     *
+     * `appsScriptUrl` is wired to `isValid: appsScriptUrlProblem`. That function
+     * used to be a parser of its own — NOT checkDeploymentUrl() — so this row
+     * accepted a bare Deployment ID while the cog's own box answered the
+     * identical string with "That is not a URL." One setting, two authorities,
+     * two verdicts, kept in step by nothing but two people remembering to edit
+     * both. It now delegates, so they agree by construction.
+     *
+     * WHAT IS PINNED HERE IS THE COPY TRACKING THE CODE, IN BOTH DIRECTIONS.
+     * While the delegation is absent the cog's description must carry the caveat
+     * that this box needs the whole URL; while it is present that caveat is a lie
+     * and must be absent. Either half moving without the other fails this. The
+     * BEHAVIOUR of the delegation — that the two validators return the same
+     * verdict on the same input — is pinned separately and much harder in
+     * test/settingsValidatorDelegation.test.ts, which calls both functions
+     * instead of reading the source of either.
+     */
+    it("the cog's copy says exactly what the cog's own validator does", () => {
+        const plugin = read(PLUGIN_SETTINGS);
+        const delegates = plugin.includes("const shape = checkDeploymentUrl(trimmed);");
+        const warnsItCannot = cogDescription(plugin).includes("THIS BOX still needs the whole URL");
+        expect(
+            delegates !== warnsItCannot,
+            delegates
+                ? "appsScriptUrlProblem() now accepts a bare Deployment ID, but the cog's own " +
+                  "description still tells the user this box cannot take one — delete the " +
+                  "\"THIS BOX still needs the whole URL\" sentence from settings.ts"
+                : "appsScriptUrlProblem() still refuses a bare Deployment ID and the cog's " +
+                  "description no longer says so — it is advertising a form that box rejects"
+        ).toBe(true);
+    });
+
+    it("and the signpost to the other screen is gone, because this box takes the ID itself", () => {
+        // This sentence used to be the least-bad answer available: the box could
+        // not take an ID, so its refusal at least named a screen that could. Now
+        // that the box takes one, sending the user somewhere else is a false
+        // instruction — it costs them a navigation to reach a field no better
+        // than the one they are already standing in.
+        const plugin = read(PLUGIN_SETTINGS);
+        expect(
+            plugin,
+            "the refusal still tells an ID-holding user to go and paste it on the settings " +
+            "tab, but this box accepts it — delete that sentence from appsScriptUrlProblem()"
+        ).not.toContain("If you copied the short Deployment ID instead");
+        expect(
+            cogDescription(plugin),
+            "the cog description still redirects the user to the settings tab for the ID form"
+        ).not.toContain("Apps Script proxy section on Discord Translator's own settings tab");
+    });
+
+    it("and the description still names BOTH forms, so that is not satisfied by deleting the copy "
+        + "(negative control)", () => {
+        // Without this, the assertions above pass for a description that says
+        // nothing at all about which values the box takes — which is the failure
+        // mode "delete the sentence" most easily turns into.
+        const description = cogDescription(read(PLUGIN_SETTINGS));
+        expect(description, "the description no longer names the Deployment ID form")
+            .toContain("Deployment ID");
+        expect(description, "the description no longer names the Web App URL form")
+            .toContain("Web App URL");
+        expect(description, "the Workspace caveat went — those users have no working instruction")
+            .toContain("Workspace");
+    });
+
+    it("cogDescription() flattens the block and stops at it (controls)", () => {
+        const description = cogDescription(read(PLUGIN_SETTINGS));
+        // A sentence that straddles a concatenation break in the source: proof
+        // the flattening is doing something a raw file scan could not.
+        expect(description).toContain("There is no API key and no card");
+        expect(description.length).toBeGreaterThan(400);
+        // The next setting down must be outside the slice.
+        expect(description).not.toContain("Also translate direct messages");
+        expect(() => cogDescription("const x = 1;")).toThrow();
+    });
+
+    it("placeholderOf() reads a literal, and refuses a dynamic one (controls)", () => {
+        expect(placeholderOf('<TextInput placeholder="abc" value={draft} />')).toBe("abc");
+        expect(() => placeholderOf("<TextInput value={draft} />")).toThrow();
+        expect(() => placeholderOf("<TextInput placeholder={PLACEHOLDER} />")).toThrow();
+    });
+
+    it("every assertion above fails on the copy this row USED to carry (positive control)", () => {
+        // The exact strings that were there before the two forms were accepted. If
+        // the matchers cannot tell the old row from the new one they are measuring
+        // nothing, and the whole describe passes vacuously.
+        const OLD_BODY = "The Web App URL of the Apps Script proxy you deploy once into your own " +
+            "Google account. It looks like https://script.google.com/macros/s/<DEPLOYMENT_ID>/exec";
+        expect(OLD_BODY).not.toContain("Paste the Deployment ID");
+        expect(OLD_BODY).not.toContain('aria-label="Apps Script proxy Deployment ID or Web App URL"');
+
+        const OLD_INPUT = '<TextInput placeholder="https://script.google.com/macros/s/…/exec" />';
+        const oldPh = placeholderOf(OLD_INPUT);
+        expect(oldPh).not.toContain("Deployment ID");
+        expect(oldPh.indexOf("AKfycb")).toBe(-1);
+    });
+});
+
 describe("what the row kept from before", () => {
     it("the long-URL, no-autocomplete, no-spellcheck and label properties are all still there", () => {
         const src = section(read(TAB));
@@ -972,7 +1186,11 @@ describe("what the row kept from before", () => {
             .toContain("maxLength={null}");
         expect(src).toContain('autoComplete="off"');
         expect(src).toContain("spellCheck={false}");
-        expect(src).toContain('aria-label="Apps Script proxy deployment URL"');
+        // UPDATED, NOT WEAKENED. Still an exact-string pin on the input's
+        // accessible name; only the name changed, because the box now takes a
+        // Deployment ID as well as a URL and an aria-label saying "deployment URL"
+        // tells a screen-reader user the shorter form is not allowed here.
+        expect(src).toContain('aria-label="Apps Script proxy Deployment ID or Web App URL"');
     });
 
     it("every button is this codebase's own Button component", () => {
