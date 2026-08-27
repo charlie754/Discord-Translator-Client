@@ -5,6 +5,9 @@
  */
 
 // plugin/panel/Panel.tsx
+import { plugins } from "@api/PluginManager";
+import { openPluginModal } from "@components/settings";
+import type { Plugin } from "@utils/types";
 import { React, SelectedChannelStore, SelectedGuildStore, useStateFromStores } from "@webpack/common";
 
 import { PanelState } from "../core/modes";
@@ -39,6 +42,15 @@ const LANGUAGES: Array<{ value: string; label: string; }> = [
     { value: "id", label: "ID - Bahasa Indonesia" },
     { value: "ar", label: "AR - العربية" }
 ];
+
+/**
+ * Must match the `name` given to definePlugin in ../index.tsx. It is the key
+ * under which the plugin registry stores this plugin's own Plugin object, which
+ * is what openPluginModal needs. test/panelRateLimitEscape.test.ts fails if the
+ * two ever drift apart, because a mismatch is silent at build time and only
+ * shows up as a button that does nothing.
+ */
+const PLUGIN_NAME = "ChannelTranslator";
 
 const KOFI_URL = "https://ko-fi.com/irp_hongkong";
 /** TODO: confirm once the repo is pushed — one line to change. */
@@ -77,6 +89,24 @@ export function Panel() {
         repaintChannel(channelId);
     };
 
+    /**
+     * The way out of "Rate limited".
+     *
+     * The panel used to name the failure and stop there. The remedy — point the
+     * plugin at a free endpoint of your own — lives in this plugin's settings,
+     * which is two screens away and which nobody looking at a stuck panel has
+     * any reason to open. This opens that screen directly.
+     *
+     * Guarded rather than asserted: openPluginModal dereferences the plugin
+     * immediately, so a missing registry entry would throw out of an onClick
+     * handler and take the panel's React tree with it. Doing nothing is a worse
+     * button and a better failure.
+     */
+    const openOwnSettings = () => {
+        const self: Plugin | undefined = plugins[PLUGIN_NAME];
+        if (self) openPluginModal(self);
+    };
+
     return (
         <div className="shell" data-state={state}>
             <div className="pill">
@@ -106,6 +136,33 @@ export function Panel() {
 
             <div className="body"><div><div className="pad">
                 <div className="rule" />
+
+                {/* Directly under the "Rate limited" status in the pill above, so the
+                    remedy is the first thing the body shows when the provider has
+                    stopped answering. Rendered ONLY in the degraded state — see
+                    test/panelRateLimitEscape.test.ts, which fails if this guard is
+                    removed. Note that in this state the .row siblings below shift by
+                    one, so their nth-child stagger delays step 50ms later; that is
+                    cosmetic and only ever visible while rate limited. */}
+                {state === "degraded" && (
+                    <button
+                        className="escape"
+                        aria-label="Use your own free endpoint"
+                        onClick={openOwnSettings}
+                    >
+                        <svg className="escape__icon" viewBox="0 0 24 24" fill="none"
+                             stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+                             strokeLinejoin="round" aria-hidden="true">
+                            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+                            <path d="M10 17l5-5-5-5" />
+                            <path d="M15 12H3" />
+                        </svg>
+                        <span className="escape__label">
+                            <span className="escape__title">Use your own free endpoint</span>
+                            <span className="escape__sub">Free · no API key</span>
+                        </span>
+                    </button>
+                )}
 
                 <div className="row">
                     <span className="label">Mode</span>

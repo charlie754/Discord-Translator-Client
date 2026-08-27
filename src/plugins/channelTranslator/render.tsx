@@ -8,6 +8,7 @@
 import { Parser } from "@webpack/common";
 
 import { hashContent } from "./core/hash";
+import { translationEnabled } from "./core/modes";
 import { markPatchHit } from "./patches";
 import { settings } from "./settings";
 import { cache, entryForMessage, guildIdOf, requestTranslation, toggle } from "./state";
@@ -22,7 +23,12 @@ export function transformMessage(message: any): any {
     markPatchHit("clone");
     if (!message?.content) return message;
     if (settings.store.mode !== "replace") return message;
-    if (!toggle.isOn(guildIdOf(message.channel_id))) return message;
+    // Servers answer to the panel toggle; DMs answer to includeDMs and to
+    // nothing else. Both questions live in translationEnabled() so this path and
+    // selection.ts cannot drift apart. See core/modes.ts.
+    if (!translationEnabled(toggle, guildIdOf(message.channel_id), settings.store.includeDMs)) {
+        return message;
+    }
 
     const hash = hashContent(message.content);
     const hit = cache.get(hash, settings.store.targetLanguage);
@@ -51,7 +57,7 @@ export function wrapContent(content: any, messageId: string, channelId: string):
     if (!messageId) return content;
 
     // Off means off: never render a translation, however warm the cache is.
-    if (!toggle.isOn(guildIdOf(channelId))) return content;
+    if (!translationEnabled(toggle, guildIdOf(channelId), settings.store.includeDMs)) return content;
 
     const { mode } = settings.store;
     const target = settings.store.targetLanguage;
@@ -73,6 +79,15 @@ export function wrapContent(content: any, messageId: string, channelId: string):
     }
 
     // Mode A: mark the message as rewritten.
+    //
+    // This title is an INSTRUCTION, and following it used to cost money: it sent
+    // the user to selection.ts, which issued a billed reverse translation to
+    // recover text the plugin had never destroyed — the clone documented above
+    // is handed to the renderer while Discord's own MessageStore keeps the
+    // original. selection.ts now serves that original from the store and makes
+    // no request at all, which is the only reading under which this sentence was
+    // ever honest. Changing this copy without checking originalFor() there puts
+    // the charge back.
     return (
         <span
             className="ct-rewritten"

@@ -28,10 +28,52 @@ jobs:
       - name: Unit tests
         run: npx --yes pnpm@10 test:unit
 
+      # --standalone, and not optional, for the reason release.yml gives at its own
+      # build step: without it scripts/build/build.mjs freezes `process.platform` to
+      # the runner's own ("linux") and esbuild then drops the branches that can no
+      # longer be reached, and IS_STANDALONE stays false. This job used to build
+      # without it, so CI was gating an artifact nobody ships.
+      #
+      # It matters specifically for the host check below. scripts/allowed-hosts.txt
+      # says in its own header that the list was derived from `pnpm build
+      # --standalone`, and that a non-standalone build "enumerates a different set:
+      # it omits the two .asar filenames below and it is not the artifact users
+      # install" — so checkHosts.mjs was being run against a build the list it
+      # compares against was never written for.
       - name: Build
-        run: npx --yes pnpm@10 build
+        run: npx --yes pnpm@10 build --standalone
+
+      # Reads the banner in the built artifact, not the flag that was meant to
+      # produce it. release.yml does the same, and for the same reason: a flag that
+      # stopped taking effect would otherwise be invisible from here.
+      - name: Verify the build is standalone
+        run: |
+          head -c 200 dist/desktop/patcher.js
+          echo
+          head -c 200 dist/desktop/patcher.js | grep -q "Standalone: true"
+          head -c 200 dist/equibop/main.js | grep -q "Standalone: true"
 
       # Enumerates every host in the packed archives against scripts/allowed-hosts.txt.
       # Must run after the build: it reads dist/*.asar, never the sources.
       - name: Check third-party hosts
         run: node scripts/checkHosts.mjs
+
+      # The browser extension is built and gated here, not only in release.yml.
+      # Until now it was not: the extension packages are artifacts users install,
+      # and nothing looked at them on a push or a pull request. The first time
+      # anything checked was the tag build, which is after review has passed and
+      # after the only chance to reject the change cheaply has gone.
+      #
+      # --standalone for this build too. Without it IS_STANDALONE stays false and
+      # the shipped bundle keeps the Patch Helper developer tab, which compiles
+      # pasted text with Function() inside a page whose CSP this extension strips.
+      # That has shipped from this repository before. checkExtensionPackages.mjs
+      # fails on both the banner and the tab — but only if what it reads was built
+      # the way the released package is built.
+      - name: Build browser extension
+        run: npx --yes pnpm@10 buildWeb --standalone
+
+      # Reads the packaged artifacts — the unpacked directories AND the bytes
+      # inside the zips — never the sources that are supposed to produce them.
+      - name: Verify the extension packages
+        run: node scripts/checkExtensionPackages.mjs

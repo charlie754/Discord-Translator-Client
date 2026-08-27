@@ -11,6 +11,7 @@ A Discord client mod that translates a whole channel, including scrollback, into
 - **Selection translation**: double-click a word or triple-click a sentence to translate a selection; shows the original when already translated
 - **Floating panel** at the top-right of the chat area
 - **15 target languages** supported
+- **Free providers only** — no API key, no card, nothing that can bill you
 
 ## Install
 
@@ -86,25 +87,40 @@ Discord must be fully closed when injecting or repairing.
 
 Be clear about what that endpoint is: **it is unofficial.** Google publishes no terms, no quota and no guarantee for it, and it *will* rate-limit you if you translate heavily. When it does, the panel reads **Rate limited** and translation pauses until it recovers.
 
-**DeepL is the way out of that**, using an API key of your own:
+**The Apps Script proxy is the way out of that**, and it is the only other provider. It is still free: you deploy a small script into **your own** Google account and the plugin posts to that deployment instead of to the gtx endpoint.
 
-1. Get a key from [DeepL’s API page](https://www.deepl.com/pro-api). The free tier is enough for ordinary use; free keys end in `:fx`.
-2. Open **Settings → Plugins → ChannelTranslator**.
-3. Paste the key into **deeplApiKey**, then set **Provider** to **DeepL (your own key)**.
+1. Follow the guide at `site\free\index.html` in this repository. The extension builds ship it as `guide.html`, reachable from the plugin's settings screen.
+2. Paste the script from `site\apps-script-proxy.gs` into a new Apps Script project and deploy it as a Web App.
+3. Open **Settings → Plugins → ChannelTranslator**, paste the deployment URL, then set **Provider** to the Apps Script option.
 
-The key is yours: this project ships none and shares none. It is stored locally alongside your other plugin settings and is sent only to DeepL. Free keys are routed to `api-free.deepl.com` and paid keys to `api.deepl.com` — the app picks the host from the `:fx` suffix, so there is nothing else to configure.
+**There is no API key and no billing, because Apps Script has neither.** The ceiling is a daily call quota — roughly 5,000 on a consumer account — and crossing it makes the deployment *refuse*, not charge. The URL is yours: this project ships none and shares none. It is stored locally alongside your other plugin settings and is sent only to Google, to reach the deployment it names.
 
-Select DeepL without entering a key and the app says so and translates nothing. It will not fail silently.
+Select the Apps Script provider without entering a deployment URL and the app says so and translates nothing. It will not fail silently.
+
+### No paid providers, and no way to spend money
+
+**Both paid providers were removed.** Google Cloud Translation v2 and DeepL are gone, along with their API-key settings, the spend meter and the monthly character cap — those existed only to bound a bill that can no longer happen.
+
+The two remaining providers are free by construction, not by tier:
+
+- **Google (free)** takes no credential at all. There is nothing to sign up for and nothing to bill.
+- **Apps Script** runs on your own Google account, where the quota refuses rather than charges.
+
+The hosts those two providers used are no longer reachable from any build. They were removed from the allow-list in all three transports, from both browser manifests, and from `scripts\allowed-hosts.txt` — so a build that tried to contact one would fail the host audit rather than ship. What the plugin stores locally is in [PRIVACY.md](./PRIVACY.md).
 
 ## Disclosure
 
-Discord Translator shows a banner linking to [Goat Project](https://dagoat.io) in the translator
-panel and in its settings tab. **Goat Project is the author's own project**, so this is
-self-promotion rather than paid advertising.
+The translator panel carries three outbound destinations, and all three are the author's:
 
-The banner is a link and some text. It makes no network request, runs no code, mines nothing and
-sends nothing — `dagoat.io` is contacted only if you click it. Nothing about you or your messages
-reaches it either way.
+- A **banner linking to [Goat Project](https://dagoat.io)**, also shown in the settings tab.
+  **Goat Project is the author's own project**, so this is self-promotion rather than paid
+  advertising.
+- A **Ko-fi donation button** linking to the author's page at `ko-fi.com`.
+- A **Star Project on Github** button linking to this repository.
+
+Each is a link, an inline SVG and some text. **None of them makes a network request**, runs code,
+mines anything or sends anything — those hosts are contacted only if you click. Nothing about you or
+your messages reaches any of them either way. [PRIVACY.md](./PRIVACY.md) lists all three.
 
 ## Privacy
 

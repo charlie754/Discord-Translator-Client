@@ -12,8 +12,45 @@ export interface HttpResponse {
     retryAfterMs?: number;
 }
 
-/** Injected so the core stays environment-free and fully testable offline. */
-export type HttpTransport = (url: string) => Promise<HttpResponse>;
+/**
+ * Everything a provider may vary about a request beyond its URL.
+ *
+ * Deliberately NOT a general request descriptor. There is no `headers` field and
+ * there must not be one: every transport implementing HttpTransport is reachable
+ * from Discord's own page world — over IPC on the desktop, over the content-script
+ * relay in the extension — so forwarding caller-supplied headers would hand any
+ * script on the page a header-injection channel through the very guard that
+ * exists to prevent one. That is the same reasoning that once put DeepL's key in
+ * a query parameter rather than an Authorization header, back when DeepL was a
+ * provider here. createDeeplProvider was deleted with it, so that cross-
+ * reference no longer resolves and is left here only as the worked example —
+ * the rule it followed is the one still enforced above, and the next provider
+ * needing a credential on the wire is bound by it too.
+ *
+ * The Content-Type of a POST is therefore fixed by each transport to
+ * application/json, which is what the POST provider here needs. A provider
+ * wanting a different one is a deliberate edit to all three transports, not a
+ * value a caller gets to pick.
+ *
+ * `method` is a closed union for the same reason: the transports refuse anything
+ * that is not exactly "GET" or "POST", so no verb can be smuggled through.
+ */
+export interface HttpRequestInit {
+    method?: "GET" | "POST";
+    /** Request payload. Sent only with POST, and length-capped by every transport. */
+    body?: string;
+}
+
+/**
+ * Injected so the core stays environment-free and fully testable offline.
+ *
+ * The second argument is optional so a GET is spelled exactly as it was before
+ * POST existed — `http(url)`. When POST arrived, google.ts and the since-deleted
+ * deepl.ts therefore needed no edit at all, which made "GET still behaves as it
+ * did" true by construction rather than by assertion. google.ts is the surviving
+ * witness and still calls it that way.
+ */
+export type HttpTransport = (url: string, init?: HttpRequestInit) => Promise<HttpResponse>;
 
 /**
  * Per-provider configuration the adapter reads out of plugin settings and hands
