@@ -195,10 +195,164 @@ const GUIDE_PACKAGED_NAME = "guide.html";
  */
 const GUIDE_MIN_BYTES = 50_000;
 
-/**
- * Read the guide, or null if this machine does not carry it.
+/*
+ * ---------------------------------------------------------------------------
+ * THE INLINE SCRIPT IS SPLIT OUT HERE, BECAUSE AN EXTENSION PAGE MAY NOT RUN ONE
+ * ---------------------------------------------------------------------------
  *
- * @type {() => Promise<Buffer | null>}
+ * THE DEFECT. The guide's whole interactive layer — step ticking, the progress
+ * bar, the localStorage that remembers where you got to, the jump menu, the reset
+ * button, the live region — lives in ONE inline <script> block. Opened as a file
+ * or served from a website that block runs. Opened as chrome-extension://<id>/
+ * guide.html it does not, and never has: extension pages are served under
+ * `script-src 'self'`, which forbids inline execution. The operator's console
+ * said so in as many words —
+ *
+ *   Executing inline script violates the following Content Security Policy
+ *   directive "script-src 'self'". ... The action has been blocked.
+ *   Context: guide.html — Stack Trace: guide.html:1143
+ *
+ * This is not a regression. It shipped in v0.2.7 and in every build since, so the
+ * guide has been a static page for every extension user since it launched, and it
+ * looked exactly like a working one until someone ticked a step.
+ *
+ * WHY THE MANIFEST CANNOT FIX IT. The obvious cheaper repair — declare
+ * `content_security_policy.extension_pages` with the block's sha256 — is not
+ * available on MV3. Chromium's own validator takes a different path for MV3 than
+ * for MV2: extensions/common/csp_validator.cc calls IsHashSource() only from
+ * GetSecureDirectiveValues() (the MV2 sanitiser), while the MV3 path,
+ * DoesCSPDisallowRemoteCode(), accepts a script source only if
+ *
+ *     source_lower == kSelfSource || source_lower == kNoneSource ||
+ *     IsLocalHostSource(source_lower) ||
+ *     source_lower == kWasmUnsafeEvalSource;
+ *
+ * Anything else — a hash included — is rejected with kInvalidCSPInsecureValueError
+ * and the extension fails to load. MDN says the same in one sentence: "Manifest V3
+ * does not allow CSP hashes in script-src of extension_pages." A hash would also
+ * have to be recomputed on every edit to the guide, which is a second reason not
+ * to want it.
+ *
+ * WHY THE SOURCE IS NOT CHANGED INSTEAD. site/free/index.html is deliberately ONE
+ * self-contained file — its images are inlined as data URIs precisely so it works
+ * when opened in isolation, which is a property that was won by fixing this exact
+ * problem once already. Splitting the script at source would take that away from
+ * the standalone and website copies to serve the packaged one.
+ *
+ * So the split happens HERE, at package time, and only for the package: the source
+ * keeps its inline script and stays one file, and the extension gets guide.html
+ * plus a sibling guide.js that `script-src 'self'` is happy to load.
+ *
+ * WHAT THIS CANNOT FIX, AND WHO CATCHES IT. Extraction moves a <script> body; it
+ * cannot rescue an inline `onclick=` handler or a `javascript:` URL, both of which
+ * are equally dead under `script-src 'self'` and equally invisible. The guide has
+ * neither today. scripts/checkExtensionPackages.mjs asserts that on the PACKAGED
+ * bytes, so if one is ever added the gate fails rather than the user.
+ */
+const GUIDE_SCRIPT_NAME = "guide.js";
+
+/**
+ * Index of the ">" that closes the tag opening at `open`, or -1.
+ *
+ * Quote-aware rather than a `[^>]*` regex, so an attribute value containing ">"
+ * cannot silently cut a tag in half and hand the caller a body that starts in the
+ * middle of an attribute.
+ *
+ * @type {(html: string, open: number) => number}
+ */
+function tagEnd(html, open) {
+    let quote = null;
+    for (let i = open + 1; i < html.length; i++) {
+        const c = html[i];
+        if (quote !== null) {
+            if (c === quote) quote = null;
+            continue;
+        }
+        if (c === '"' || c === "'") { quote = c; continue; }
+        if (c === ">") return i;
+    }
+    return -1;
+}
+
+/**
+ * Split every inline <script> out of `html` into its own file.
+ *
+ * Works on a latin1 view of the bytes on purpose. This is a byte-level split at
+ * ASCII delimiters, not a text transformation: latin1 is the one Node encoding
+ * that round-trips arbitrary bytes unchanged, so a guide carrying anything that is
+ * not valid UTF-8 comes out of here byte-identical instead of peppered with U+FFFD.
+ *
+ * A <script> that already has a src is left exactly as it is — it is already
+ * loading from a file, which is the shape we are converting TO.
+ *
+ * @type {(html: string) => { html: string, scripts: { name: string, code: string }[] }}
+ */
+function splitGuideScripts(html) {
+    const OPEN = /<script\b/gi;
+    // Per the HTML spec a script element's text ends at the first "</script"
+    // followed by whitespace, "/" or ">" — not at every "</script" substring — so
+    // the delimiter is matched that way rather than as a bare indexOf.
+    const CLOSE = /<\/script[\s/>]/i;
+
+    /** @type {{ name: string, code: string }[]} */
+    const scripts = [];
+    let out = "";
+    let cursor = 0;
+    let m;
+
+    while ((m = OPEN.exec(html)) !== null) {
+        const start = m.index;
+        const openEnd = tagEnd(html, start);
+        if (openEnd === -1) {
+            throw new Error(
+                `Refusing to package ${GUIDE_SOURCE}: the <script> tag at byte ${start} is never ` +
+                "closed by a \">\". The file is malformed, and splitting it would ship a guide " +
+                "whose markup is cut in half."
+            );
+        }
+
+        const attrs = html.slice(start + "<script".length, openEnd);
+        const bodyStart = openEnd + 1;
+        const closeOffset = html.slice(bodyStart).search(CLOSE);
+        if (closeOffset === -1) {
+            throw new Error(
+                `Refusing to package ${GUIDE_SOURCE}: the <script> element at byte ${start} has ` +
+                "no </script>. The file is malformed."
+            );
+        }
+
+        const bodyEnd = bodyStart + closeOffset;
+        const closeTagEnd = html.indexOf(">", bodyEnd) + 1;
+
+        // lastIndex is moved past the whole element rather than left just after the
+        // opening tag, so a "<script" appearing inside the JS as a string literal
+        // cannot be mistaken for a second element.
+        OPEN.lastIndex = closeTagEnd;
+
+        if (/\bsrc\s*=/i.test(attrs)) continue;
+
+        const code = html.slice(bodyStart, bodyEnd);
+        // Numbered from the second on. The guide has exactly one block and the name
+        // guide.js is what settings.ts and the gate expect to see referenced, but
+        // concatenating several blocks into one file would change their semantics —
+        // a syntax error in one would take the others down with it — so each keeps
+        // its own file and its own place in the document order.
+        const name = scripts.length === 0 ? GUIDE_SCRIPT_NAME : `guide.${scripts.length + 1}.js`;
+        scripts.push({ name, code });
+
+        out += html.slice(cursor, start) + `<script src="${name}"></script>`;
+        cursor = closeTagEnd;
+    }
+
+    out += html.slice(cursor);
+    return { html: out, scripts };
+}
+
+/**
+ * Read the guide and split its inline script out, or null if this machine does not
+ * carry the guide at all.
+ *
+ * @type {() => Promise<{ html: Buffer, scripts: { name: string, content: Buffer }[] } | null>}
  */
 async function loadGuide() {
     let content;
@@ -234,7 +388,31 @@ async function loadGuide() {
         );
     }
 
-    return content;
+    const split = splitGuideScripts(content.toString("latin1"));
+    const html = Buffer.from(split.html, "latin1");
+
+    if (split.scripts.length === 0) {
+        // Not a failure: a guide with no script of its own is a static page, which
+        // is a legitimate thing for it to be. It is worth saying out loud, because
+        // the guide DOES have an interactive layer today and its silent
+        // disappearance would look identical to this line never printing.
+        console.info(
+            `Setup guide packaged as ${GUIDE_PACKAGED_NAME} with no inline script to extract ` +
+            "— it carries no interactive layer."
+        );
+    } else {
+        console.info(
+            `Setup guide: extracted ${split.scripts.length} inline script(s) out of ` +
+            `${GUIDE_SOURCE} into ${split.scripts.map(s => s.name).join(", ")} ` +
+            `(${split.scripts.reduce((n, s) => n + Buffer.byteLength(s.code, "latin1"), 0)} bytes of code). ` +
+            "The source keeps its inline copy; extension pages may not run one."
+        );
+    }
+
+    return {
+        html,
+        scripts: split.scripts.map(s => ({ name: s.name, content: Buffer.from(s.code, "latin1") }))
+    };
 }
 
 /**
@@ -246,7 +424,7 @@ async function loadGuide() {
  * once per target, and a machine without site/ should say so once rather than
  * once per package.
  *
- * @type {Promise<Buffer | null> | undefined}
+ * @type {Promise<{ html: Buffer, scripts: { name: string, content: Buffer }[] } | null> | undefined}
  */
 let guideOnce;
 const getGuide = () => (guideOnce ??= loadGuide());
@@ -263,7 +441,17 @@ async function buildExtension(target, files) {
     const entries = {
         "dist/DiscordTranslator.js": await readFile("dist/browser/extension.js"),
         "dist/DiscordTranslator.css": await readFile("dist/browser/extension.css"),
-        ...(guide === null ? {} : { [GUIDE_PACKAGED_NAME]: guide }),
+        // guide.js (and any sibling) rides along with guide.html or not at all: a
+        // page whose <script src> points at a file that was not packaged is the same
+        // dead interactive layer as the inline script it replaced, one layer further
+        // down. checkExtensionPackages.mjs re-derives this from the packaged HTML
+        // rather than trusting the name, so a rename here cannot get past it.
+        ...(guide === null
+            ? {}
+            : {
+                [GUIDE_PACKAGED_NAME]: guide.html,
+                ...Object.fromEntries(guide.scripts.map(s => [s.name, s.content]))
+            }),
         // The QuickCSS editor loads Monaco from here rather than from cdn.jsdelivr.net.
         // That matters more for this extension than for most: it strips Discord's CSP,
         // so a CDN script would run in the logged-in discord.com origin with nothing

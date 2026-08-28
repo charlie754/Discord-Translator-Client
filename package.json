@@ -1,7 +1,7 @@
 {
     "name": "discord-translator",
     "private": "true",
-    "version": "0.2.8",
+    "version": "0.2.9",
     "description": "A Discord client mod for translating messages in real-time across channels",
     "homepage": "https://github.com/charlie754/Discord-Translator-Client#readme",
     "bugs": {

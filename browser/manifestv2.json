@@ -55,7 +55,8 @@
         "dist/DiscordTranslator.js",
         "dist/DiscordTranslator.css",
         "vendor/*",
-        "guide.html"
+        "guide.html",
+        "guide.js"
     ],
     "browser_specific_settings": {
         "_comment": "gecko_android carries its own minimum because data_collection_permissions landed later on Android (142) than on desktop (140). Without it the Android minimum inherits 140 and the declaration is silently ignored on 140 and 141.",

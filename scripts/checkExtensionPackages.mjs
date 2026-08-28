@@ -646,6 +646,253 @@ const SECURITY_CRITICAL = [
 const GUIDE_FILE = "guide.html";
 const GUIDE_MIN_BYTES = 50_000;
 
+/*
+ * ---------------------------------------------------------------------------
+ * ...AND THE GUIDE CAN RUN, WHICH "PACKAGED" AND "REACHABLE" BOTH FAIL TO IMPLY
+ * ---------------------------------------------------------------------------
+ *
+ * The comment above says a guide that ships but cannot be OPENED looks exactly
+ * like a guide that works until someone clicks the button. This is that failure
+ * one layer deeper, and it shipped: the guide opened fine and every control on it
+ * was dead.
+ *
+ * An extension page is served under `script-src 'self'`. The guide's whole
+ * interactive layer — step ticking, the progress bar, the localStorage that
+ * remembers where you got to, the jump menu, the reset button — was one inline
+ * <script>, and inline script is exactly what that policy forbids. From the
+ * operator's console, on a shipped build:
+ *
+ *   Executing inline script violates the following Content Security Policy
+ *   directive "script-src 'self'". ... The action has been blocked.
+ *   Context: guide.html — Stack Trace: guide.html:1143
+ *
+ * v0.2.7 shipped it too, so it was never a regression and nothing was ever going
+ * to catch it: the page renders, the prose is all there, and only a click tells
+ * you. Every check above would have printed ok.
+ *
+ * THE POLICY CANNOT BE RELAXED, SO THE PAGE HAS TO CHANGE. Chromium validates MV3
+ * CSP on a different path from MV2. extensions/common/csp_validator.cc calls
+ * IsHashSource() only from GetSecureDirectiveValues(), the MV2 sanitiser; the MV3
+ * path, DoesCSPDisallowRemoteCode(), accepts a script source only if
+ *
+ *     source_lower == kSelfSource || source_lower == kNoneSource ||
+ *     IsLocalHostSource(source_lower) ||
+ *     source_lower == kWasmUnsafeEvalSource;
+ *
+ * — anything else, a 'sha256-...' hash included, is rejected with
+ * kInvalidCSPInsecureValueError and the extension will not load. So there is no
+ * manifest line that fixes this, and the only repair is to stop putting
+ * executable code in the markup. scripts/build/buildWeb.mjs splits the guide's
+ * inline block out into a sibling guide.js at package time, leaving the source a
+ * single self-contained file for the standalone and website copies.
+ *
+ * WHAT IS ASSERTED HERE, AND WHY IT IS DERIVED RATHER THAN NAMED. The scan reads
+ * the PACKAGED bytes and finds three things `script-src 'self'` will refuse:
+ * inline <script> bodies, inline on* handlers, and javascript: URLs. Extraction
+ * only fixes the first; the other two would be just as dead and just as invisible,
+ * so they are asserted rather than assumed.
+ *
+ * The <script src> targets are then read OUT OF THE PACKAGED HTML instead of being
+ * restated as "guide.js" — the same correction the provider host list needed above.
+ * A check that knows the filename can only ever verify the filename it knows; this
+ * one verifies whatever the page actually asks the browser to load, so renaming the
+ * extracted file, adding a second one, or pointing it at a CDN all fail here rather
+ * than in a user's console.
+ */
+
+/** Replace [start, end) with spaces, keeping the length so byte offsets stay true. */
+function blankRegion(s, start, end) {
+    return s.slice(0, start) + " ".repeat(end - start) + s.slice(end);
+}
+
+/**
+ * Index of the ">" that closes the tag opening at `open`, or -1.
+ *
+ * Quote-aware rather than a `[^>]*` regex: `<div title="a > b" onclick="x()">`
+ * would otherwise be cut at the first ">" and its handler never seen, which is a
+ * false PASS in a security-shaped check.
+ */
+function tagEnd(html, open) {
+    let quote = null;
+    for (let i = open + 1; i < html.length; i++) {
+        const c = html[i];
+        if (quote !== null) {
+            if (c === quote) quote = null;
+            continue;
+        }
+        if (c === '"' || c === "'") { quote = c; continue; }
+        if (c === ">") return i;
+    }
+    return -1;
+}
+
+/** [name, value] for every attribute in a tag's attribute region; names lowercased. */
+function parseAttributes(region) {
+    const ATTR = /([^\s"'>/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'`=<>]+)))?/g;
+    const out = [];
+    let m;
+    while ((m = ATTR.exec(region)) !== null) out.push([m[1].toLowerCase(), m[2] ?? m[3] ?? m[4] ?? ""]);
+    return out;
+}
+
+/*
+ * The `type` values the HTML spec actually EXECUTES. Everything else — a
+ * "application/json" config blob, a "text/template" chunk of markup — is inert
+ * data the CSP has no opinion about, and flagging it would fail a build over a
+ * block that was never going to run in the first place.
+ */
+const EXECUTABLE_SCRIPT_TYPES = new Set([
+    "", "module", "importmap",
+    "text/javascript", "application/javascript",
+    "text/ecmascript", "application/ecmascript"
+]);
+
+/**
+ * Everything on an extension page that `script-src 'self'` will refuse to run,
+ * plus every script the page loads from a file.
+ *
+ * @returns {{ blocked: string[], srcs: string[] }}
+ */
+function scanExtensionPageScripts(html) {
+    const blocked = [];
+    const srcs = [];
+
+    // HTML comments go first. A commented-out `onclick=` is not a handler, and a
+    // scanner that cannot tell the difference fails builds over prose — the
+    // vacuous-marker bug above, inverted.
+    let masked = html;
+    let at = masked.indexOf("<!--");
+    while (at !== -1) {
+        const close = masked.indexOf("-->", at + 4);
+        const stop = close === -1 ? masked.length : close + 3;
+        masked = blankRegion(masked, at, stop);
+        at = masked.indexOf("<!--", stop);
+    }
+
+    const OPEN = /<script\b/gi;
+    // Per the HTML spec a script element's text ends at the first "</script"
+    // followed by whitespace, "/" or ">" — not at every "</script" substring.
+    const CLOSE = /<\/script[\s/>]/i;
+    let m;
+    while ((m = OPEN.exec(masked)) !== null) {
+        const start = m.index;
+        const openEnd = tagEnd(masked, start);
+        if (openEnd === -1) {
+            blocked.push(`a <script> tag at byte ${start} that is never closed by a ">"`);
+            break;
+        }
+
+        const attrs = parseAttributes(masked.slice(start + "<script".length, openEnd));
+        const bodyStart = openEnd + 1;
+        const closeOffset = masked.slice(bodyStart).search(CLOSE);
+        const bodyEnd = closeOffset === -1 ? masked.length : bodyStart + closeOffset;
+        const closeTagEnd = closeOffset === -1 ? masked.length : masked.indexOf(">", bodyEnd) + 1;
+
+        const src = attrs.find(([n]) => n === "src")?.[1];
+        const type = (attrs.find(([n]) => n === "type")?.[1] ?? "").trim().toLowerCase();
+        const body = masked.slice(bodyStart, bodyEnd);
+
+        if (src !== undefined) {
+            srcs.push(src.trim());
+        } else if (EXECUTABLE_SCRIPT_TYPES.has(type) && body.trim() !== "") {
+            blocked.push(
+                `an inline <script> of ${body.length} bytes at byte ${start}` +
+                (type ? ` (type ${JSON.stringify(type)})` : "")
+            );
+        }
+
+        // The element's text is blanked before the attribute sweep below, so JS such
+        // as `if (a<b) el.onerror = f` cannot be read as markup and reported as an
+        // inline handler. blankRegion keeps the length, so OPEN.lastIndex — which
+        // indexes the string we are about to reassign — stays aligned.
+        masked = blankRegion(masked, bodyStart, bodyEnd);
+        OPEN.lastIndex = closeTagEnd;
+    }
+
+    const TAG = /<([a-zA-Z][^\s/>]*)/g;
+    let t;
+    while ((t = TAG.exec(masked)) !== null) {
+        const end = tagEnd(masked, t.index);
+        if (end === -1) break;
+        const name = t[1].toLowerCase();
+        for (const [attr, value] of parseAttributes(masked.slice(t.index + 1 + t[1].length, end))) {
+            if (/^on[a-z]+$/.test(attr)) {
+                blocked.push(`an inline "${attr}" handler on <${name}> at byte ${t.index}`);
+            }
+            // Deliberately literal. An entity-encoded "&#106;avascript:" would slip
+            // past this, and chasing that is a sanitiser's job on untrusted input —
+            // this file reads our own build output, where the question is whether we
+            // shipped dead code, not whether someone smuggled live code in.
+            if (/^\s*javascript:/i.test(value)) {
+                blocked.push(`a "javascript:" URL in ${attr}="..." on <${name}> at byte ${t.index}`);
+            }
+        }
+        TAG.lastIndex = end + 1;
+    }
+
+    return { blocked, srcs };
+}
+
+/*
+ * The scan is only worth its pass line if it can fail, and it is the kind of check
+ * that fails SILENTLY when it breaks: a scanner that returned nothing would print
+ * ok over the exact defect it was added for. So both directions are controlled, on
+ * fixtures whose expected answer is written out rather than computed by the code
+ * under test, and this runs before any package is read.
+ */
+function selfTestExtensionPageScan() {
+    /** @type {[string, number, string[]][]} — [html, blocked count, srcs] */
+    const cases = [
+        // --- must be caught ---
+        ["<script>alert(1)</script>", 1, []],
+        ['<script type="text/javascript">x()</script>', 1, []],
+        ['<script type="module">import "./a.js";</script>', 1, []],
+        ['<div onclick="x()"></div>', 1, []],
+        ["<body ONLOAD='x()'>", 1, []],
+        ['<a href="javascript:void 0">x</a>', 1, []],
+        ['<a href="  JavaScript:x()">x</a>', 1, []],
+        // Quote-aware tag scanning: the ">" inside the title must not end the tag
+        // and hide the handler after it.
+        ['<div title="a > b" onclick="x()"></div>', 1, []],
+        // Two problems are two findings, not one.
+        ['<script>a()</script><div onmouseover="b()"></div>', 2, []],
+
+        // --- must be clean ---
+        ['<script src="guide.js"></script>', 0, ["guide.js"]],
+        ['<script src="guide.js"></script><script src="guide.2.js"></script>', 0, ["guide.js", "guide.2.js"]],
+        ["<!-- <script>alert(1)</script> --><p>ok</p>", 0, []],
+        ['<!-- <div onclick="x()"></div> --><p>ok</p>', 0, []],
+        ['<script type="application/json">{"a":1}</script>', 0, []],
+        ['<script type="text/template"><div onclick="x()"></div></script>', 0, []],
+        ["<script src='a.js'>// <div onclick=\"y()\"> and if (a<b) el.onerror = f\n</script>", 0, ["a.js"]],
+        ["<p>the attribute is called onclick= in prose</p>", 0, []],
+        ['<div data-x="a > b">ok</div>', 0, []],
+        ["<p>plain markup with nothing executable</p>", 0, []],
+        // A remote src is not the scanner's verdict to make — it reports the source
+        // and the caller fails it. If this ever came back empty the caller would
+        // pass a page loading code off a CDN.
+        ['<script src="https://cdn.example.test/x.js"></script>', 0, ["https://cdn.example.test/x.js"]]
+    ];
+
+    for (const [html, wantBlocked, wantSrcs] of cases) {
+        const got = scanExtensionPageScripts(html);
+        if (got.blocked.length !== wantBlocked) {
+            throw new Error(
+                `extension-page scan self-test: expected ${wantBlocked} finding(s), got ` +
+                `${got.blocked.length} for ${JSON.stringify(html)}\n  ${got.blocked.join("\n  ")}`
+            );
+        }
+        if (got.srcs.length !== wantSrcs.length || got.srcs.some((s, i) => s !== wantSrcs[i])) {
+            throw new Error(
+                `extension-page scan self-test: expected srcs ${JSON.stringify(wantSrcs)}, got ` +
+                `${JSON.stringify(got.srcs)} for ${JSON.stringify(html)}`
+            );
+        }
+    }
+}
+
+selfTestExtensionPageScan();
+
 const ICON_SIZES = [16, 32, 48, 96, 128];
 
 const TARGETS = [
@@ -1069,6 +1316,93 @@ for (const target of TARGETS) {
             "array) and in browser/manifestv2.json (the MV2 flat array).");
     } else {
         pass(`${GUIDE_FILE} is declared web-accessible, so the page may open it`);
+    }
+
+    /*
+     * ...and it can RUN. See the long comment on scanExtensionPageScripts(): the
+     * guide shipped for two releases with its entire interactive layer in an inline
+     * <script>, which every extension page refuses to execute, and every check above
+     * printed ok the whole time.
+     *
+     * The ZIP is scanned rather than the directory. The two have just been proven
+     * byte-identical, so one scan answers for both, and the zip is what a user
+     * installs. latin1 because this is a byte-level scan at ASCII delimiters, not a
+     * text transformation — the guide carries base64 data URIs and a decode that
+     * could substitute U+FFFD has no business in a check that reports on bytes.
+     */
+    if (guidePackaged && guideInDir !== null && guideInZip !== null) {
+        const { blocked, srcs } = scanExtensionPageScripts(guideInZip.toString("latin1"));
+
+        if (blocked.length) {
+            fail(`${GUIDE_FILE} carries ${blocked.length} thing(s) an extension page will refuse ` +
+                `to run under \`script-src 'self'\`: ${blocked.join("; ")}. The page will open, ` +
+                "look complete, and do nothing when a control is used — which is how this went " +
+                "unnoticed through v0.2.7 and later. It cannot be fixed in the manifest: " +
+                "Chromium's MV3 path (DoesCSPDisallowRemoteCode in csp_validator.cc) accepts " +
+                "only 'self', 'none', 'wasm-unsafe-eval' and localhost in script-src, so neither " +
+                "'unsafe-inline' nor a 'sha256-...' hash may be declared in " +
+                "content_security_policy.extension_pages. Move the code into a file the page " +
+                "loads with <script src>, as scripts/build/buildWeb.mjs does when it packages " +
+                "the guide's own inline block.");
+        } else {
+            pass(`${GUIDE_FILE} has no inline script, no inline event handler and no ` +
+                "\"javascript:\" URL, so `script-src 'self'` blocks nothing on it");
+        }
+
+        if (!srcs.length) {
+            // Not a failure — a guide with no script of its own is a legitimately
+            // static page. Said out loud because the guide DOES have an interactive
+            // layer, and its silent disappearance would look exactly like this.
+            console.log(`  --    ${GUIDE_FILE} loads no script of its own, so it carries no ` +
+                "interactive layer. Expected only if the guide really is a static page.");
+        }
+
+        for (const src of srcs) {
+            if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(src) || src.startsWith("//")) {
+                fail(`${GUIDE_FILE} loads a script from ${JSON.stringify(src)}, which is not in ` +
+                    "the extension package. `script-src 'self'` blocks it, MV3 forbids declaring " +
+                    "a policy that would not, and remotely-hosted code is a store-policy " +
+                    "violation besides. Package the file and reference it relatively.");
+                continue;
+            }
+
+            // Query and fragment are stripped: the packaged name is what the archive
+            // holds, and "guide.js?v=2" resolves to the same file.
+            const name = src.replace(/^\.\//, "").split(/[?#]/)[0];
+            if (name === "") {
+                fail(`${GUIDE_FILE} has a <script src> with an empty target, which loads nothing.`);
+                continue;
+            }
+
+            const srcInDir = existsSync(join(dir, name)) ? readFileSync(join(dir, name)) : null;
+            const srcInZip = zipNames.has(name) ? zipfs.read(name, "buffer") : null;
+            const missingFrom = [
+                ...(srcInDir === null ? [target.dir] : []),
+                ...(srcInZip === null ? [target.zip] : [])
+            ];
+
+            if (missingFrom.length) {
+                fail(`${GUIDE_FILE} loads ${JSON.stringify(name)}, but it is missing from ` +
+                    `${missingFrom.join(" and ")}. A <script src> pointing at a file that was not ` +
+                    "packaged is the same dead interactive layer as the inline script it " +
+                    "replaced, one layer further down — the page 404s the script and carries on " +
+                    "looking fine. Add it to the entries written by buildExtension() in " +
+                    "scripts/build/buildWeb.mjs.");
+            } else if (!srcInDir.equals(srcInZip)) {
+                fail(`${JSON.stringify(name)} differs between ${target.dir} and ${target.zip} ` +
+                    `(dir sha256:${sha16(srcInDir)} ${srcInDir.length} bytes, ` +
+                    `zip sha256:${sha16(srcInZip)} ${srcInZip.length} bytes)`);
+            } else if (!guidePatterns.some(p => matchesResourcePattern(p, name))) {
+                fail(`${GUIDE_FILE} loads ${JSON.stringify(name)}, which is not declared ` +
+                    "web-accessible (declared: " + (guidePatterns.join(", ") || "nothing") + "). " +
+                    `Add ${JSON.stringify(name)} beside ${JSON.stringify(GUIDE_FILE)} in ` +
+                    "web_accessible_resources in browser/manifest.json (the MV3 object's " +
+                    "`resources` array) and in browser/manifestv2.json (the MV2 flat array).");
+            } else {
+                pass(`${GUIDE_FILE} loads ${name} (${(srcInZip.length / 1024).toFixed(1)} KB), ` +
+                    "which is packaged, identical in the archive and web-accessible");
+            }
+        }
     }
 
     console.log(`        ${(statSync(zipPath).size / 1024).toFixed(0)} KB packaged`);

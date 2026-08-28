@@ -51,7 +51,8 @@
             "resources": [
                 "dist/*",
                 "vendor/*",
-                "guide.html"
+                "guide.html",
+                "guide.js"
             ],
             "matches": [
                 "*://*.discord.com/*"
