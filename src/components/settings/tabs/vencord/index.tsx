@@ -22,7 +22,7 @@ import { QuickAction, QuickActionCard } from "@components/settings/QuickAction";
 import { GoatBanner } from "@plugins/channelTranslator/panel/goatBanner";
 import { guideTarget, settings as translatorSettings } from "@plugins/channelTranslator/settings";
 import { validateAppsScriptUrl } from "@plugins/channelTranslator/state";
-import { gitRemote } from "@shared/vencordUserAgent";
+import { gitHash, gitRemote } from "@shared/vencordUserAgent";
 import { IS_WINDOWS } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
 import { Margins } from "@utils/margins";
@@ -617,9 +617,73 @@ function TranslationApiKeySection() {
     );
 }
 
+/**
+ * "Which build am I actually running?", answered on the screen the user is
+ * already looking at.
+ *
+ * THE FORMAT IS COPIED FROM THE INSTALLER ON PURPOSE. The Discord Translator
+ * Installer's GUI prints `0.2.9 (a81a554)` — semver, space, seven-character
+ * short hash in parentheses. This line embeds that exact substring so the two
+ * can be compared by eye without translating between two notations, which is
+ * the whole point of the operator's request: "So I will know which version I
+ * loaded."
+ *
+ * BOTH HALVES ARE BUILD-TIME CONSTANTS, NOT LITERALS.
+ *   - `VERSION` is package.json's version, injected by esbuild `define` — see
+ *     `defines` in scripts/build/build.mjs and `commonOptions.define` in
+ *     scripts/build/buildWeb.mjs, both fed by `VERSION` from
+ *     scripts/build/common.mjs. It is declared for TypeScript in
+ *     src/globals.d.ts.
+ *   - `gitHash` is the virtual `~git-hash` module served by gitHashPlugin in
+ *     scripts/build/common.mjs, re-exported from @shared/vencordUserAgent.
+ * Typing either one as a literal here would silently rot at the next release,
+ * which is the single defect test/settingsTabVersion.test.ts exists to catch.
+ *
+ * SEVEN CHARACTERS, NOT `gitHashShort`. @shared/vencordUserAgent also exports
+ * `gitHashShort`, which is nine. Seven is what the installer shows and what the
+ * two nearest UI precedents already use — src/components/settings/tabs/updater/
+ * Components.tsx and the changelog tab both slice(0, 7).
+ *
+ * WHAT THE SUFFIX IS FOR. A release install is standalone and not a dev build,
+ * so the common case shows nothing extra and stays clean. The two cases where a
+ * bare semver would MISLEAD both get named:
+ *   - A dev build's version is whatever package.json said, and its hash is the
+ *     last commit — neither reflects the uncommitted working tree it was built
+ *     from. So a dev build also carries its build date, which is the only value
+ *     that actually distinguishes two dev builds of the same commit.
+ *   - A local (non-standalone) build was compiled on this machine rather than
+ *     downloaded, so its version says nothing about which release it matches.
+ *
+ * IS_UPDATER_DISABLED is deliberately NOT shown. It describes whether the build
+ * will CHANGE later, not which build is loaded, and it is forced true on web —
+ * it would be noise on the line that answers the operator's question.
+ */
+function BuildIdentity() {
+    const suffix = IS_DEV
+        ? ` — Dev Build, ${new Date(BUILD_TIMESTAMP).toISOString().slice(0, 10)}`
+        : IS_STANDALONE
+            ? ""
+            : " — Local Build";
+
+    return (
+        <Paragraph
+            className={Margins.top16}
+            color="text-muted"
+            // Selectable so a bug report can carry the exact string. `selectable`
+            // is BaseText's own prop (.vc-text-selectable -> user-select: text);
+            // an inline style would be inventing a second way to do it.
+            selectable
+        >
+            {`Version ${VERSION} (${gitHash.slice(0, 7)})${suffix}`}
+        </Paragraph>
+    );
+}
+
 function EquicordSettings() {
     return (
         <SettingsTab>
+            <BuildIdentity />
+
             <Heading className={Margins.top16}>Quick Actions</Heading>
             <Paragraph className={Margins.bottom16}>
                 Common actions you might want to perform. These shortcuts give you quick access to frequently used features without navigating through menus.
