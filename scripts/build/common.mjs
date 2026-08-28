@@ -57,9 +57,32 @@ export const IS_UPDATER_DISABLED = process.argv.includes("--disable-updater");
 export const sourcemap = watch ? "inline" : IS_DEV ? "external" : false;
 export const gitHash = process.env.DISCORD_TRANSLATOR_HASH || execSync("git rev-parse HEAD", { encoding: "utf-8" }).trim();
 
+// The banner is a contract with the installer (a separate Go repository), which
+// scrapes it out of the installed asar. Two markers, and they are NOT
+// interchangeable:
+//
+//   `// Discord Translator <sha>`   the update mechanism. The installer compares
+//       this against the SHA sliced out of the latest release's *name* and
+//       redownloads when they differ. Never change its shape: an older installer
+//       that only understands this line must keep working, and any drift between
+//       the two sides makes an up-to-date install look permanently outdated.
+//
+//   `// DiscordTranslatorVersion: <semver>`   display only. Added so the installer
+//       can show "0.2.8" instead of a 40-character hash. It deliberately does NOT
+//       start with "// Discord Translator " followed by a space, because that is
+//       exactly the prefix the old hash regex (`// Discord Translator (\w+)`)
+//       matches — a colliding marker could be found ahead of the real hash line
+//       and silently feed the update comparison the string "Version". The
+//       run-together token is also unique enough not to occur by accident in a
+//       bundled, minified JavaScript file.
+//
+// The version comes from package.json, and .github/workflows/release.yml refuses
+// to release unless the git tag matches it, so this line and the release tag
+// cannot disagree.
 export const banner = {
     js: `
 // Discord Translator ${gitHash}
+// DiscordTranslatorVersion: ${VERSION}
 // Standalone: ${IS_STANDALONE}
 // Platform: ${IS_STANDALONE === false ? process.platform : "Universal"}
 // Updater Disabled: ${IS_UPDATER_DISABLED}
