@@ -11,7 +11,7 @@ import { popNotice, showNotice } from "@api/Notices";
 
 import { registry, resolveProvider } from "./core/providers/registry";
 import type { HttpTransport, ProviderResolution } from "./core/providers/types";
-import { DEFAULT_PROVIDER_ID, PROVIDER_OPTIONS, settings } from "./settings";
+import { DEFAULT_PROVIDER_ID, providerName, PROVIDER_OPTIONS, settings } from "./settings";
 
 /**
  * The credential that belongs to this provider, and only to it.
@@ -117,14 +117,12 @@ export function warnProviderUnavailable(reason: string): void {
     showNotice(`Discord Translator: ${reason}`, "OK", () => popNotice());
 }
 
-/**
- * The dropdown's own wording for a provider id, or the bare id when the
- * dropdown has no entry for it. Read from PROVIDER_OPTIONS rather than written
- * out here so a reworded label reaches the notice below without a second edit.
- */
-function providerLabel(id: string): string {
-    return PROVIDER_OPTIONS.find(option => option.value === id)?.label ?? id;
-}
+// The dropdown's own wording for a provider id used to be looked up by a local
+// copy of this one-liner. It is settings.ts's providerName() now — the same
+// derivation, in the one place every other user-facing sentence in this plugin
+// also reads it from. Two identical lookups are two things to keep in step for
+// no gain, and the notice below is exactly the kind of sentence the single
+// spelling exists for.
 
 /**
  * The provider the user USED to have, in a form safe to put in a banner.
@@ -233,7 +231,7 @@ export function migrateUnavailableProvider(): void {
     // "Discord Translator: ", so this must not say it again.
     warnProviderUnavailable(
         `${formerProviderPhrase(current)} is no longer one this plugin offers, so translation ` +
-        `has been switched to ${providerLabel(target)}. That needs no key, no account and no ` +
+        `has been switched to ${providerName(target)}. That needs no key, no account and no ` +
         "card, and it cannot bill you. Nothing else in your settings was changed and nothing " +
         `you saved was deleted.${alternatives}`
     );

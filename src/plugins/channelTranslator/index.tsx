@@ -14,7 +14,7 @@ import { CHANNEL_TRANSLATOR_PATCHES, patchHit } from "./patches";
 import { migrateUnavailableProvider } from "./provider";
 import { transformMessage, wrapContent } from "./render";
 import { installSelectionHandler, removeSelectionHandler } from "./selection";
-import { settings } from "./settings";
+import { providerName, settings } from "./settings";
 import { hydrate } from "./state";
 
 // The billed-provider notice used to live here: a one-per-session banner that
@@ -61,12 +61,19 @@ export default definePlugin({
                 // wording therefore names both destinations rather than saying
                 // "free" and stopping, because "free" is an answer to a question
                 // nobody asked about their private messages.
+                //
+                // BOTH DESTINATIONS ARE NAMED THROUGH providerName(), NOT TYPED
+                // HERE. This sentence is the first thing a new install reads, and
+                // it told them to choose between "Google (free)" and "Google Apps
+                // Script" — two entries the dropdown stopped offering under those
+                // names. The notice names a setting, so it has to be able to name
+                // it the way the setting does.
                 "Discord Translator sends message text to the translation provider you choose. " +
-                "Both options are free and neither can bill you: Google (free) needs no key and " +
-                "no account, and Google Apps Script is a proxy you deploy into your own Google " +
-                "account. Message text still leaves this machine either way. Direct messages are " +
-                "excluded unless you opt in. Enable translation per-server from the panel at the " +
-                "top right.",
+                `Both options are free and neither can bill you: ${providerName("google")} needs ` +
+                `no key and no account, and ${providerName("apps-script")} is a Google Apps ` +
+                "Script proxy you deploy into your own Google account. Message text still leaves " +
+                "this machine either way. Direct messages are excluded unless you opt in. Enable " +
+                "translation per-server from the panel at the top right.",
                 "Understood",
                 () => {
                     settings.store.consentGiven = true;

@@ -378,12 +378,25 @@ const ACCESS_HINT =
     "icon, set \"Who has access\" to \"Anyone\", and deploy again. (\"Execute as\" should stay " +
     "\"Me\".) Note that editing a deployment gives you a NEW URL to paste back into the settings.";
 
-/** What the quota ceiling is, and what it is not — in particular, it is not a bill. */
+/**
+ * What the quota ceiling is, and what it is not — in particular, it is not a bill.
+ *
+ * 🔴 THE LAST SENTENCE NAMES A DROPDOWN ENTRY, AND NOTHING HERE CAN DERIVE IT.
+ * Nothing under core/ may import ../../settings — that is the isolation
+ * test/core-isolation.test.ts enforces, and it is also what keeps this module
+ * free of Discord — so the name below is HAND-WRITTEN, which is the very thing
+ * that let it rot: it said "Google (free)" for as long as the dropdown offered
+ * "Google (free, shared)", telling a user out of quota to switch to an entry
+ * that is not on their screen. test/pluginNamesLiveControls.test.ts is what
+ * replaces the derivation here — it drives this exact failure end to end and
+ * compares the message the user gets against the live PROVIDER_OPTIONS, so a
+ * rename fails the suite instead of shipping.
+ */
 const QUOTA_HINT =
     "your Apps Script daily quota is used up. A consumer Google account gets 5,000 translate " +
     "calls per day and this one has spent them. It costs nothing and it is not a bill — Apps " +
     "Script has no billing at all — and the allowance resets on Google's next daily rollover. " +
-    "Until then, switch Provider back to Google (free) if you need translation today.";
+    "Until then, switch Provider back to Google (free, shared) if you need translation today.";
 
 /** Statuses worth explaining rather than showing as a bare number. */
 const STATUS_HINT: Readonly<Record<number, string>> = {
@@ -511,7 +524,17 @@ export function createAppsScriptProvider(
 
     return {
         id: "apps-script",
-        label: "Google Apps Script (your own free proxy)",
+        // 🔴 THIS LABEL IS NOT AN ENGINEERING NAME. It is the first half of the
+        // sentence registry.ts refuses with when this provider is selected with
+        // no URL saved — the commonest first-run state there is — and that
+        // sentence reaches the user through state.ts and selection.ts. So it has
+        // to be what the dropdown calls this provider, not what the transport is
+        // called: it read "Google Apps Script (your own free proxy)" while the
+        // dropdown said "Google Free API", so the refusal named a choice the
+        // user could not find. Hand-written for the same reason QUOTA_HINT above
+        // is — core/ cannot import settings.ts — and pinned to the live
+        // PROVIDER_OPTIONS by test/pluginNamesLiveControls.test.ts.
+        label: "Google Free API",
         needsKey: true,
 
         async translate(texts: string[], from: string, to: string): Promise<TranslateResult[]> {

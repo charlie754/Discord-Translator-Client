@@ -50,6 +50,23 @@ import { isPermanent, Scheduler } from "../src/plugins/channelTranslator/core/sc
  * would let this harness keep passing after state.ts grew an import nobody here
  * had considered — including one that could restore the toggle by another route,
  * which is precisely the regression this file exists to catch.
+ *
+ * THERE ARE TWO ROUTES INTO start(), AND ONLY ONE OF THEM WAS EVER PINNED HERE.
+ * Deleting the load made the toggle empty on a CLIENT RESTART, because a restart
+ * re-evaluates the module and `toggle` is then a brand-new ToggleState. It did
+ * nothing whatsoever for the other route: stopPlugin() then startPlugin() on a
+ * plugin object that is already loaded — what the plugin list's own switch does —
+ * calls start() again WITHOUT reloading anything, so hydrate() met the previous
+ * run's ToggleState with the previous run's servers still in it, and had no line
+ * that took them out. The plugin came back up translating a server nobody had
+ * switched on since it was turned back on, while three comments claimed "OFF at
+ * every start".
+ *
+ * hydrate() now calls `toggle.clear()`. The two routes are asserted SEPARATELY
+ * below — the first describe models a restart (a second loadState()), the second
+ * models a stop/start (a second hydrate() on the SAME loaded module) — because
+ * they fail independently, and one test covering both cannot say which mechanism
+ * is carrying which.
  */
 
 const STATE_PATH = join(process.cwd(), "src", "plugins", "channelTranslator", "state.ts");
@@ -317,5 +334,144 @@ describe("translation is OFF after a restart", () => {
         const real = loadState({ store: { ...freshStore(), serverState: JSON.stringify(["g1"]) } });
         real.exports.hydrate();
         expect(real.exports.toggle.isOn("g1")).toBe(false);
+    });
+});
+
+/**
+ * THE SECOND ROUTE: stopPlugin() then startPlugin(), WITHOUT reloading anything.
+ *
+ * Every test above models a client restart by evaluating state.ts a second time,
+ * which hands hydrate() a brand-new empty ToggleState before it has done
+ * anything. That is the easy half, and it stayed green throughout the window in
+ * which this defect existed: not restoring the toggle is indistinguishable from
+ * clearing it when the object was empty to begin with.
+ *
+ * A stop/start is the case where the two come apart. `toggle` is a module-level
+ * singleton; the plugin list's switch calls stop() and start() on the plugin
+ * object it already holds, and nothing re-evaluates the module, so start() —
+ * and therefore hydrate() — runs against the SAME ToggleState the previous run
+ * left behind. ONE loadState() and TWO hydrate() calls is exactly that shape.
+ *
+ * The plugin's own stop() is deliberately not modelled: it calls
+ * removeSelectionHandler() and unmountPanel(), neither of which is in state.ts
+ * and neither of which touches the toggle — which is the whole reason the state
+ * survived. persist() stands in for it as the last thing the plugin does with
+ * state on the way down.
+ */
+describe("translation is OFF after a stop/start, with no reload in between", () => {
+    it("ToggleState.clear() empties it, and says nothing about a second call", () => {
+        const toggle = new ToggleState();
+        toggle.setOn("g1", true);
+        toggle.setOn("g2", true);
+        expect(toggle.isOn("g1"), "fixture never switched anything on").toBe(true);
+
+        toggle.clear();
+        expect(toggle.isOn("g1")).toBe(false);
+        expect(toggle.isOn("g2")).toBe(false);
+        expect(toggle.serialise(), "something was left in the server list").toBe("[]");
+
+        // Idempotent, because hydrate() runs on every start and the first one is
+        // against an already-empty object.
+        toggle.clear();
+        expect(toggle.serialise()).toBe("[]");
+        // …and it is not a one-way door: the user can switch a server on again in
+        // the run that follows.
+        toggle.setOn("g1", true);
+        expect(toggle.isOn("g1"), "clear() left the toggle unable to be switched on").toBe(true);
+    });
+
+    it("a server switched on before stop() is off after the next start()", () => {
+        const loaded = loadState();
+        loaded.exports.hydrate();                       // start #1
+        loaded.exports.toggle.setOn("g1", true);
+        expect(
+            loaded.exports.toggle.isOn("g1"),
+            "the fixture never switched the server on — the assertion below is vacuous"
+        ).toBe(true);
+        loaded.exports.persist();                       // …and down again
+
+        loaded.exports.hydrate();                       // start #2, SAME module
+
+        expect(
+            loaded.exports.toggle.isOn("g1"),
+            "the server came back ON when the plugin was switched back on — translation " +
+            "resumed on a decision made before the plugin was stopped"
+        ).toBe(false);
+    });
+
+    it("it is the SAME ToggleState across the two starts (control)", () => {
+        // Without this, the test above could be passing because the harness
+        // quietly handed out a fresh object, i.e. because it is modelling a
+        // restart again rather than the route it claims to model.
+        const loaded = loadState();
+        loaded.exports.hydrate();
+        const first = loaded.exports.toggle;
+        loaded.exports.hydrate();
+        expect(
+            loaded.exports.toggle,
+            "the harness replaced the toggle between starts — this describe is a second " +
+            "copy of the restart test, not the stop/start route"
+        ).toBe(first);
+    });
+
+    it("the CACHE is not cleared by the second start (negative control)", () => {
+        // clear() must reach the on/off decision and nothing else. A wipe that
+        // took the cache with it would throw away translations already paid for,
+        // every time the plugin was switched off and on.
+        const store = freshStore();
+        const loaded = loadState({ store });
+        loaded.exports.hydrate();
+        loaded.exports.cache.set("hash-1", "en", { text: "hello", sourceLanguage: "fr" } as any);
+        loaded.exports.persist();
+
+        loaded.exports.hydrate();
+
+        expect(
+            loaded.exports.cache.get("hash-1", "en"),
+            "restarting the plugin threw away the translation cache as well"
+        ).toBeDefined();
+    });
+
+    it("the toggle still works after the second start (negative control)", () => {
+        // "Off after a stop/start" must not be satisfied by a toggle that cannot
+        // be switched on any more, which would be a far larger defect and would
+        // pass every assertion above.
+        const loaded = loadState();
+        loaded.exports.hydrate();
+        loaded.exports.hydrate();
+        loaded.exports.toggle.setOn("g1", true);
+        expect(loaded.exports.toggle.isOn("g1"), "the toggle stopped accepting a switch-on").toBe(true);
+    });
+
+    it("M-CLEAR: without the clear the state survives the stop/start (mutation control)", () => {
+        // The instrument, proved, on the fix itself: take `toggle.clear();` back
+        // out of hydrate() and the second start must find the server still on. If
+        // this stops failing over, the assertions above are measuring nothing —
+        // and note that they would ALL still pass on the unpatched restart route,
+        // which is exactly how this shipped in the first place.
+        const withoutClear = (src: string) => src.replace("    toggle.clear();\n", "");
+        expect(
+            withoutClear(STATE_SOURCE),
+            "the substitution matched nothing — hydrate() no longer clears the toggle on " +
+            "the line this control removes, so it is removing nothing"
+        ).not.toContain("toggle.clear();");
+
+        const patched = loadState({ patchSource: withoutClear });
+        patched.exports.hydrate();
+        patched.exports.toggle.setOn("g1", true);
+        patched.exports.persist();
+        patched.exports.hydrate();
+        expect(
+            patched.exports.toggle.isOn("g1"),
+            "even with clear() removed the server came back off — this control cannot tell " +
+            "the two behaviours apart, so it proves nothing about the real file"
+        ).toBe(true);
+
+        // The restart route, on the SAME patched source, is still off — which is
+        // the point: deleting the load never covered this, and a test that only
+        // restarts cannot see the difference.
+        const restarted = loadState({ patchSource: withoutClear });
+        restarted.exports.hydrate();
+        expect(restarted.exports.toggle.isOn("g1")).toBe(false);
     });
 });

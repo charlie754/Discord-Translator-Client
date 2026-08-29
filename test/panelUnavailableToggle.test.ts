@@ -8,7 +8,14 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { PanelState, ToggleState, toggleShowsOn } from "../src/plugins/channelTranslator/core/modes";
+import {
+    PanelState,
+    selectionGate,
+    ToggleState,
+    toggleShowsOn,
+    UNAVAILABLE_FOOTER,
+    unavailableFooter
+} from "../src/plugins/channelTranslator/core/modes";
 
 /**
  * THE PANEL MAY NOT SAY "ON" WHILE IT SAYS TRANSLATION IS PAUSED.
@@ -189,5 +196,125 @@ describe("the panel is actually wired to it", () => {
         // does not use.
         expect(read(MODES)).toContain("export function toggleShowsOn(");
         expect(read(MODES)).toMatch(/if \(state === "unavailable"\) return false;/);
+    });
+});
+
+/**
+ * THE FOOTER MAY NOT PROMISE A PATH THAT WILL REFUSE.
+ *
+ * WHAT SHIPPED, and it is the other half of the contradiction pinned above. In
+ * the `unavailable` state the footer rendered one fixed sentence for everybody:
+ *
+ *     "Discord changed. Translation is paused; double-click still works."
+ *
+ * The second clause is a claim about the selection path, and that path is
+ * governed by selectionGate(), which refuses with SELECTION_REFUSAL.serverOff
+ * whenever this server's toggle is off. So a user who had never switched this
+ * server on was told a manual route still worked, tried it, and was told
+ * "translation is off for this server. Turn it on from the translator panel."
+ * The panel was open in front of them and its switch is `disabled` in exactly
+ * this state, so the instruction they were given could not be carried out.
+ *
+ * PRE-EXISTING, AND MADE MORE VISIBLE BY THE FIX ABOVE. Forcing the switch to
+ * read OFF is what puts a user in front of a control that looks switchable,
+ * reads off, and cannot be moved — with a sentence underneath promising the
+ * fallback still works.
+ *
+ * WHAT IS ASSERTED. The wording is chosen by unavailableFooter() in core/modes,
+ * which asks selectionGate() rather than re-deciding, so this file can pin the
+ * two things that matter as BEHAVIOUR: the promise is made only when the gate
+ * really allows, and the off wording points at no control at all. The wiring —
+ * that Panel.tsx renders the function rather than a literal — is the source scan
+ * at the end, for the reason the doc-block at the top of this file gives.
+ */
+describe("the panel's footer while Discord is unavailable", () => {
+    it("says double-click still works when this server IS switched on", () => {
+        expect(unavailableFooter(enabled(), "g1", false)).toBe(UNAVAILABLE_FOOTER.doubleClickWorks);
+    });
+
+    it("does NOT say it when this server was never switched on", () => {
+        expect(unavailableFooter(new ToggleState(), "g1", false)).toBe(UNAVAILABLE_FOOTER.serverOff);
+    });
+
+    it("the promise is made exactly when the double-click path would allow it", () => {
+        // The property, rather than the two cases: whatever the footer claims, it
+        // agrees with the function that actually decides the click. A second copy
+        // of the condition would pass the two tests above and drift the first time
+        // either side was reworded.
+        for (const toggle of [enabled(), new ToggleState()]) {
+            for (const includeDMs of [true, false, undefined]) {
+                for (const guildId of ["g1", null]) {
+                    const allowed = selectionGate(toggle, { guildId }, includeDMs).allowed;
+                    expect(
+                        unavailableFooter(toggle, guildId, includeDMs) === UNAVAILABLE_FOOTER.doubleClickWorks,
+                        `footer and gate disagree for guildId=${String(guildId)} includeDMs=${String(includeDMs)}`
+                    ).toBe(allowed);
+                }
+            }
+        }
+    });
+
+    it("the two sentences are genuinely different (control)", () => {
+        // Without this, every assertion above is satisfied by one string under two
+        // names, and the footer would be as unconditional as it ever was.
+        expect(UNAVAILABLE_FOOTER.serverOff).not.toBe(UNAVAILABLE_FOOTER.doubleClickWorks);
+    });
+
+    it("both still say translation is paused (control)", () => {
+        // The half of the original sentence that was always true must survive the
+        // fix. Losing it would leave a user in the outage with no explanation.
+        for (const sentence of Object.values(UNAVAILABLE_FOOTER)) {
+            expect(sentence, "a footer stopped saying translation is paused")
+                .toContain("Translation is paused");
+        }
+    });
+
+    it("the off wording points at no control, because there is none to point at", () => {
+        // SELECTION_REFUSAL.serverOff CAN say "turn it on from the translator
+        // panel" — the double-click path is reachable in states where the switch
+        // works. This footer cannot: it is rendered only while the state is
+        // `unavailable`, and the scan below pins that the switch is disabled
+        // there. Repeating the refusal's advice here would move the lie rather
+        // than remove it.
+        const off = UNAVAILABLE_FOOTER.serverOff.toLowerCase();
+        expect(off, "the footer tells the user to use a switch it has disabled").not.toContain("turn it on");
+        expect(off, "the footer still promises the double-click works").not.toContain("still works");
+        // …and it does say the two true things.
+        expect(off).toContain("not switched on");
+        expect(off).toContain("unavailable");
+    });
+
+    it("the switch really is unusable in this state, which is what makes it a lie (control)", () => {
+        // The premise of the test above, read off the panel rather than assumed.
+        expect(
+            read(PANEL),
+            "the switch is no longer disabled while unavailable — re-read the off wording, " +
+            "because pointing at the switch may now be honest"
+        ).toContain('disabled={state === "unavailable"}');
+    });
+
+    it("the panel renders the chosen sentence, not a literal one (wiring)", () => {
+        const source = read(PANEL);
+        expect(source).toMatch(/^import\s*\{[^}]*\bunavailableFooter\b[^}]*\}\s*from\s*"\.\.\/core\/modes";$/m);
+        expect(source).toContain("{unavailableFooter(toggle, guildId, settings.store.includeDMs)}");
+        // The exact JSX text node that shipped, as its own line. The doc-comment
+        // beside the fix quotes the same sentence across two lines on purpose, so
+        // this matches the rendered copy coming back and not the note explaining
+        // why it went.
+        expect(
+            source,
+            "the fixed sentence is back in the JSX — the footer promises double-click to " +
+            "users whose server is off again"
+        ).not.toMatch(/^\s+Discord changed\. Translation is paused; double-click still works\.\s*$/m);
+    });
+
+    it("the wording lives in core/, where it can be exercised (control)", () => {
+        // Same reason as toggleShowsOn() above: a sentence built inline in the JSX
+        // is a sentence this suite cannot reach, and the behaviour tests would be
+        // measuring a function the panel does not use.
+        const modes = read(MODES);
+        expect(modes).toContain("export function unavailableFooter(");
+        expect(modes, "the footer stopped asking the gate and decided for itself")
+            .toMatch(/return selectionGate\(toggle, \{ guildId \}, includeDMs\)\.allowed/);
     });
 });

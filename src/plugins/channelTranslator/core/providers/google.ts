@@ -111,6 +111,23 @@ export function chunkForUrl(text: string, from: string, to: string): string[] {
 export function createGoogleProvider(http: HttpTransport): TranslationProvider {
     return {
         id: "google",
+        // AN ENGINEERING NAME, AND IT STAYS ONE — TRACED, NOT ASSUMED. The
+        // dropdown calls this entry "Google (free, shared)" and appsScript.ts's
+        // label had to be realigned when the dropdown was reworded, so the
+        // obvious move is to realign this one too. It is not needed, and the
+        // reason is a property of THIS object: `TranslationProvider.label` has
+        // exactly one reader in the codebase — the refusal resolveProvider()
+        // builds in ./registry — and that branch is guarded by `provider.needsKey`,
+        // which is false one line below. Nothing else reads `.label` at all, so
+        // no string a user can see is built from this one. It is left as the name
+        // of the transport (Google's keyless gtx endpoint) because that is what a
+        // developer reading a stack trace or a log line needs it to say.
+        //
+        // IF needsKey EVER BECOMES TRUE HERE, THIS NAME IS ON A USER'S SCREEN.
+        // test/pluginNamesLiveControls.test.ts drives every registry entry
+        // through resolveProvider() with no credential and fails if a refusal
+        // ever carries a retired dropdown name — so that change goes red rather
+        // than shipping a name the dropdown does not have.
         label: "Google (free)",
         needsKey: false,
 

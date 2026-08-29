@@ -65,6 +65,26 @@ export class ToggleState {
         return state;
     }
 
+    /**
+     * Forget every server, leaving the object as newly constructed.
+     *
+     * THE DEFECT THIS CLOSES. state.ts's hydrate() stopped RESTORING the toggle,
+     * but "stopped restoring" is not "starts empty": this object is a module-level
+     * singleton, so it outlives a start()/stop() pair. Calling stopPlugin() and
+     * then startPlugin() on the already-loaded plugin — which the plugin list does,
+     * and which never reloads the module — left the previous run's switched-on
+     * servers switched on, and translation resumed on a server the user had not
+     * enabled since the plugin was turned back on. Only a whole-client restart
+     * genuinely emptied it, so "OFF at every start" was true of one of the two
+     * routes into start().
+     *
+     * hydrate() calls this, which makes being ON a per-START decision by every
+     * route rather than a per-PROCESS one.
+     */
+    clear(): void {
+        this.servers.clear();
+    }
+
     /** Repopulate from persisted JSON. Used to hydrate after plugin start. */
     loadFrom(json: string): void {
         this.servers.clear();
@@ -101,9 +121,11 @@ export class ToggleState {
  * the one being fixed, and invisible until the outage ended. `toggle` is taken
  * by value and only read; nothing in this function can write to it.
  *
- * (The choice is per SESSION, not per install: state.ts's hydrate() no longer
- * restores it across a restart, by operator ruling. That is a separate decision
- * and this function is indifferent to it — it never touches storage either way.)
+ * (The choice is per START, not per install: state.ts's hydrate() clears the
+ * toggle — see clear() above — so nothing carries across a restart OR across a
+ * stop/start of the plugin on its own. That is a separate decision and this
+ * function is indifferent to it: it never touches storage or the toggle either
+ * way, which is why the outage above can be survived while a start cannot.)
  *
  * A pure function over explicit arguments, in core/, for the reason recorded on
  * translationEnabled() above: Panel.tsx imports @webpack/common and cannot be
@@ -213,6 +235,55 @@ export function selectionGate(
             ? SELECTION_REFUSAL.directMessage
             : SELECTION_REFUSAL.serverOff
     };
+}
+
+/**
+ * THE PANEL'S FOOTER IN THE `unavailable` STATE, WHICH IS NOT ONE SENTENCE.
+ *
+ * THE DEFECT THIS CLOSES. The footer rendered one fixed line — "Discord changed.
+ * Translation is paused; double-click still works." — for every user in that
+ * state. The second half is a promise about the double-click path, and that path
+ * is governed by selectionGate(), which refuses with SELECTION_REFUSAL.serverOff
+ * whenever the per-server toggle is off. So a user whose server was never
+ * switched on was told a manual route still worked, tried it, and was refused —
+ * and could not repair it either, because Panel.tsx disables the switch while the
+ * state is `unavailable`. The panel named the one control that would have fixed
+ * it and then withheld it.
+ *
+ * DERIVED FROM selectionGate() RATHER THAN FROM toggle.isOn(). The claim the
+ * sentence makes is exactly "would the double-click path allow this?", so it is
+ * answered by the function that decides it. A second copy of the condition here
+ * would be a copy that can disagree with the path it describes — which is the
+ * defect being fixed, one layer down. It is also why DMs come out right for free:
+ * the gate already reads `includeDMs` for a null guild id.
+ *
+ * THE OFF WORDING PROMISES NOTHING. It says what is true (paused, and this server
+ * was never switched on) and then says the switch is unavailable, rather than
+ * pointing at a control that will refuse. Telling the user to "turn it on from
+ * the panel" here would be the same lie in a new place.
+ *
+ * A pure function over explicit arguments, in core/, for the reason recorded on
+ * toggleShowsOn() above: Panel.tsx imports @webpack/common and cannot be loaded
+ * by this suite at all, so core/ is the only layer where the wording can be
+ * pinned as BEHAVIOUR — see test/panelUnavailableToggle.test.ts.
+ */
+export const UNAVAILABLE_FOOTER = {
+    doubleClickWorks:
+        "Discord changed. Translation is paused; double-click still works.",
+    serverOff:
+        "Discord changed. Translation is paused, and this server was not switched on, " +
+        "so double-click will not translate it either. The switch is unavailable until " +
+        "translation works again."
+} as const;
+
+export function unavailableFooter(
+    toggle: ToggleState,
+    guildId: string | null,
+    includeDMs: boolean | undefined
+): string {
+    return selectionGate(toggle, { guildId }, includeDMs).allowed
+        ? UNAVAILABLE_FOOTER.doubleClickWorks
+        : UNAVAILABLE_FOOTER.serverOff;
 }
 
 export interface SelectionContext {

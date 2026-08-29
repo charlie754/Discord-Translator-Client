@@ -157,6 +157,44 @@ function Switches() {
 const SETUP_GUIDE_LABEL = "→ Setup Guide";
 
 /**
+ * What this section is called, once, for everyone who is told its name.
+ *
+ * The operator's own words (2026-08-29), replacing "Apps Script proxy — the free
+ * option, deployed to your own Google account".
+ *
+ * 🔴 IT IS A CONSTANT SO THE ACCESSIBLE NAME BELOW CAN BE THE SAME STRING RATHER
+ * THAN A SECOND ONE. The heading was renamed and the input's `aria-label` was
+ * not, so the two names for one control disagreed by exactly the thing that
+ * makes a control findable: a sighted user read "Setup Google Key" while a
+ * screen-reader user was told the field belonged to the "Apps Script proxy" —
+ * a section this build does not have any more. Two people describing the same
+ * screen to each other could not agree on what was on it.
+ *
+ * The same trick as SETUP_GUIDE_LABEL above, and readable by the same
+ * instrument: test/appsScriptRowSaveReset.test.ts reads the constant and checks
+ * the JSX renders THIS name rather than a copy of it, and
+ * test/guideNamesLiveControls.test.ts resolves it when it derives the set of
+ * headings the shipped setup guide is allowed to send a reader looking for.
+ */
+const SETTINGS_HEADING = "Setup Google Key";
+
+/**
+ * The credential input's accessible name — DERIVED from the heading above.
+ *
+ * A screen-reader user gets this string and nothing else: there is no visible
+ * `<label>`, and the placeholder is not an accessible name. So it has to do two
+ * jobs at once, and it used to do only the second. It must AGREE with the
+ * heading a sighted user is reading, or the same control has two names; and it
+ * must still say which values the box takes, because the row accepts a bare
+ * Deployment ID as well as a whole Web App URL and an accessible name saying
+ * "deployment URL" tells that user the shorter form is not allowed here.
+ *
+ * Written as a template over SETTINGS_HEADING rather than as a second literal
+ * for the obvious reason: a literal is what drifted last time.
+ */
+const ENDPOINT_INPUT_LABEL = `${SETTINGS_HEADING} — Deployment ID or Web App URL`;
+
+/**
  * Heading and guide link on ONE line, the link immediately to the right.
  *
  * `flexWrap` so a narrow settings pane drops the link under the heading instead
@@ -469,7 +507,7 @@ function TranslationApiKeySection() {
         <section className={Margins.top16}>
             <div style={HEADING_ROW_STYLE}>
                 <Heading style={{ marginBottom: 0 }}>
-                    Setup Google Key
+                    {SETTINGS_HEADING}
                 </Heading>
                 {guide
                     ? (
@@ -587,7 +625,11 @@ function TranslationApiKeySection() {
                 // Best effort, and only that — see the constant.
                 {...PASSWORD_MANAGER_OPT_OUTS}
                 spellCheck={false}
-                aria-label="Apps Script proxy Deployment ID or Web App URL"
+                // The heading's own words plus what the box takes — see
+                // ENDPOINT_INPUT_LABEL. Never a second spelling of the section's
+                // name: this said "Apps Script proxy Deployment ID or Web App
+                // URL" while the heading above said "Setup Google Key".
+                aria-label={ENDPOINT_INPUT_LABEL}
             />
             <Paragraph className={Margins.top8} style={{ color: "var(--text-muted)" }}>
                 Save checks what you pasted here first — an ID or a URL, the shape is verified

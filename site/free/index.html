@@ -893,9 +893,31 @@ function json(obj) {
   </div>
   <div class="act">
     <p>Two settings, both inside Discord:</p>
+    <!--
+      data-ui MARKS EVERY NAME BELOW THAT IS COPIED OFF A CONTROL IN THE PLUGIN,
+      and it is not decoration: this file is shipped HTML and nothing recompiles
+      it, so a rename in the TypeScript leaves these two lines telling the reader
+      to look for a menu entry that no longer exists. That is exactly what
+      happened here — the dropdown entry was renamed to "Google Free API" and the
+      settings section to "Setup Google Key", and this list went on naming
+      "Google Apps Script (your own free proxy)" and "Apps Script proxy" for as
+      long as nobody re-read it.
+
+      test/guideNamesLiveControls.test.ts reads each marked span out of this file
+      and looks the text up in the code that renders it — PROVIDER_OPTIONS for a
+      provider-label, the settings tab's own <Heading> elements for a
+      settings-heading, and so on. A rename now fails a test instead of
+      misdirecting a reader.
+
+      SO: any name you write here that a user has to FIND ON SCREEN gets a marker.
+      Names belonging to Google's own console (Deploy, Who has access, Anyone)
+      must NOT be marked — nothing in this repository renders them, so there is
+      nothing to check them against. Adding an unknown data-ui value fails the
+      test rather than being ignored.
+    -->
     <ol>
-      <li>In <strong>Settings &rarr; Plugins &rarr; ChannelTranslator &rarr; the cog</strong>, set the translation provider to <strong>Google Apps Script (your own free proxy)</strong>.</li>
-      <li>In <strong>Settings &rarr; Discord Translator</strong>, find the <strong>Apps Script proxy</strong> section, paste the <strong>Deployment ID</strong> you copied in step 5, and press <strong>Save</strong>. That box takes either form &mdash; the ID or the whole Web app URL &mdash; and expands an ID into the full URL for you. Save also tries it for real against your own deployment, so a bad paste is caught here rather than at your first message.</li>
+      <li>In <strong>Settings &rarr; <span data-ui="settings-tab">Plugins</span> &rarr; <span data-ui="plugin-name">ChannelTranslator</span> &rarr; the cog</strong>, set the translation provider to <strong data-ui="provider-label">Google Free API</strong>.</li>
+      <li>In <strong>Settings &rarr; <span data-ui="settings-tab">Discord Translator</span></strong>, find the <strong data-ui="settings-heading">Setup Google Key</strong> section, paste the <strong>Deployment ID</strong> you copied in step 5, and press <strong data-ui="settings-button">Save</strong>. That box takes either form &mdash; the ID or the whole Web app URL &mdash; and expands an ID into the full URL for you. Save also tries it for real against your own deployment, so a bad paste is caught here rather than at your first message.</li>
     </ol>
     <p class="note">The plugin cog has a box for the same value, and it takes either form too &mdash; both boxes ask the same question of the same checker. Whichever one you fill in, the other shows what you saved.</p>
     <p>Then translate one message. A reply comes back in a second or two.</p>

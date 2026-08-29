@@ -172,8 +172,30 @@ describe("includeDMs is read by the code, not just defined by it", () => {
         // Both-Language: one setting, two answers, decided by mode.
         //
         // If any of these drops off this list, one of the ways this plugin
-        // transmits text has stopped asking the user's DM decision.
-        expect(readers()).toEqual(["render.tsx", "selection.ts", "state.ts"]);
+        // transmits text has stopped asking the user's DM decision. Asserted as a
+        // required subset rather than as the whole list, because the whole list is
+        // now wider than "paths that transmit" — the next test pins the exact
+        // membership, so a new reader still cannot appear unnoticed.
+        for (const file of ["render.tsx", "selection.ts", "state.ts"]) {
+            expect(readers(), `${file} stopped reading the DM decision`).toContain(file);
+        }
+    });
+
+    it("and nothing else reads it except the one place that only DESCRIBES it", () => {
+        // THE EXACT MEMBERSHIP, kept exact so a new reader is a deliberate act
+        // with a reason written down rather than a line nobody notices.
+        //
+        // Panel.tsx TRANSMITS NOTHING, and that is why it is allowed here. It
+        // reads includeDMs for one purpose: the footer shown while Discord is
+        // unavailable says whether double-click still works, and "would the
+        // double-click path allow this?" is answered by selectionGate(), which
+        // takes includeDMs. Passing the real value rather than a narrowed
+        // stand-in is what keeps the sentence and the path ONE decision instead of
+        // two that can disagree — which is exactly the defect that footer had. The
+        // panel returns null without a guild id, so the DM branch is unreachable
+        // from it today; the value is passed anyway so that stops being
+        // load-bearing. See test/panelUnavailableToggle.test.ts.
+        expect(readers()).toEqual(["Panel.tsx", "render.tsx", "selection.ts", "state.ts"]);
     });
 
     it("it is still defined, and still ships OFF", () => {

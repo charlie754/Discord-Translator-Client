@@ -7,7 +7,7 @@
 // plugin/panel/Panel.tsx
 import { React, SelectedChannelStore, SelectedGuildStore, useStateFromStores } from "@webpack/common";
 
-import { PanelState, toggleShowsOn } from "../core/modes";
+import { PanelState, toggleShowsOn, unavailableFooter } from "../core/modes";
 import { patchesOk } from "../patches";
 import { settings } from "../settings";
 import { breakerOpen, pendingCount, persist,repaintChannel, subscribeProgress, toggle } from "../state";
@@ -288,10 +288,26 @@ export function Panel() {
 
                 <GoatBanner variant="panel" />
 
+                {/* THE SENTENCE IS CHOSEN, NOT FIXED, and that is the whole point.
+                    It used to read "Discord changed. Translation is paused;
+                    double-click still works." unconditionally — a promise about a
+                    path that selectionGate() refuses whenever this server's toggle
+                    is off, in a state where the switch above is disabled and so the
+                    user cannot make it true either. unavailableFooter() asks the
+                    gate itself, so the two can no longer disagree; see
+                    ../core/modes and test/panelUnavailableToggle.test.ts.
+
+                    settings.store rather than the `store` from settings.use()
+                    above: includeDMs is not one of the subscribed paths, and adding
+                    it would repaint this panel on a setting it cannot display.
+                    guildId is non-null by the early return at the top, so the DM
+                    branch of the gate is unreachable from here — it is passed
+                    anyway so this reads the same question the double-click path
+                    reads, rather than a narrowed copy of it. */}
                 {state === "unavailable" && (
                     <div className="row">
                         <span className="label">
-                            Discord changed. Translation is paused; double-click still works.
+                            {unavailableFooter(toggle, guildId, settings.store.includeDMs)}
                         </span>
                     </div>
                 )}

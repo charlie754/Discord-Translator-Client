@@ -248,6 +248,33 @@ function stringConst(src: string, name: string): string {
 }
 
 /**
+ * The value of a top-level `const NAME = \`…\`;` TEMPLATE, with every
+ * `${OTHER_CONST}` in it replaced by that constant's own text.
+ *
+ * WHY THIS EXISTS RATHER THAN A REGEX OVER THE JSX. The input's accessible name
+ * is deliberately not a literal any more — it is built from the heading's
+ * constant so the two cannot drift — and a matcher that could only read literals
+ * would have to be pointed at the template SOURCE, i.e. at `${SETTINGS_HEADING}`
+ * rather than at "Setup Google Key". Asserting on the source text of a
+ * substitution proves the substitution is written; it says nothing about what
+ * the user is told. This resolves it and the assertions stay about the sentence.
+ *
+ * STRICT ON PURPOSE: an unresolvable placeholder fails here rather than being
+ * left in the string, because a leftover `${…}` would silently make every
+ * `toContain` about the resolved text fail for the wrong reason, and every
+ * `not.toContain` pass for the wrong reason.
+ */
+function templateConst(src: string, name: string): string {
+    const pattern = new RegExp(`const ${name}\\s*=\\s*\`([^\`]*)\`;`);
+    const match = pattern.exec(src);
+    expect(match, `const ${name} = \`…\`; was removed, renamed or is no longer a template`)
+        .not.toBeNull();
+
+    return match![1].replace(/\$\{([A-Za-z_$][\w$]*)\}/g, (_whole, referenced: string) =>
+        stringConst(src, referenced));
+}
+
+/**
  * Every `message:` expression in the section, continuation lines included.
  *
  * This is how "the deployment URL is never put on screen" is actually measured.
@@ -1056,9 +1083,7 @@ describe("the row edits the FREE credential, and only it", () => {
      * Operator instruction 2026-08-29: the heading is now exactly "Setup Google
      * Key". So two of the three properties are gone by decision:
      *
-     *   - the provider is no longer named on the heading. The only rendered
-     *     strings that still say "Apps Script proxy" are the input's aria-label
-     *     and the Save button's, which a sighted user never sees;
+     *   - the provider is no longer named on the heading;
      *   - "free" is no longer said anywhere in the section at all.
      *
      * And the third is now uncomfortable rather than satisfied: the row still
@@ -1069,11 +1094,15 @@ describe("the row edits the FREE credential, and only it", () => {
      * test failure, and it is recorded here rather than argued.
      *
      * WHAT IS STILL PINNED: the exact operator-specified text, so a later "clean
-     * up" cannot drift it, and the paid key's old heading staying gone.
+     * up" cannot drift it, and the paid key's old heading staying gone. The text
+     * is now read out of the SETTINGS_HEADING constant rather than out of the
+     * JSX, and the JSX is separately required to render that constant — the same
+     * two-part shape this file already uses for SETUP_GUIDE_LABEL, and for the
+     * same reason: one string, checked once, used everywhere it is claimed.
      */
     it("the heading is exactly the text the operator specified", () => {
-        const heading = headingRow(section(read(TAB)));
-        expect(heading).toContain("Setup Google Key");
+        const heading = stringConst(read(TAB), "SETTINGS_HEADING");
+        expect(heading).toBe("Setup Google Key");
         expect(heading, "the paid key's old heading is back").not.toContain("API Key");
         expect(
             heading,
@@ -1081,16 +1110,69 @@ describe("the row edits the FREE credential, and only it", () => {
         ).not.toContain("Google Cloud");
     });
 
-    it("the provider is still named somewhere a screen reader will reach it", () => {
-        // The consolation for the heading above, and the reason it is a separate
-        // test: if this one ever goes red as well, NOTHING on the screen says
-        // which of the credentials this box holds.
-        const src = codeOf(section(read(TAB)));
+    it("that constant is what the heading actually renders", () => {
+        // Without this the assertion above is about a constant nothing uses, and
+        // the visible heading could say anything at all.
+        expect(headingRow(section(read(TAB)))).toContain("{SETTINGS_HEADING}");
+    });
+
+    /**
+     * 🔴 THE SCREEN READER IS TOLD THE SAME NAME THE SIGHTED USER READS.
+     *
+     * THIS TEST REPLACES ONE THAT REQUIRED THE OPPOSITE, and the replacement is
+     * the point rather than a casualty of it. The old assertion was "the
+     * provider is still named somewhere a screen reader will reach it": when the
+     * heading stopped saying "Apps Script proxy", the input's `aria-label` was
+     * the last rendered string that did, so it was pinned as the consolation.
+     *
+     * That made the defect permanent. A sighted user read "Setup Google Key" and
+     * a screen-reader user was told "Apps Script proxy" — two names for one
+     * control, one of them naming a section this build does not have — and the
+     * suite REQUIRED the second one to stay. An accessible name is not a place
+     * to keep copy that was cut from the screen; it is the name of the thing,
+     * for the people who cannot see the heading.
+     *
+     * WHAT IS PINNED INSTEAD, and it is strictly stronger: the accessible name
+     * is DERIVED from the heading, so the two cannot disagree by construction,
+     * and it still has to say which values the box takes — the concern that
+     * assertion was originally written for, which was never about the provider's
+     * name at all.
+     */
+    it("the input's accessible name is the heading's own words, not a second name", () => {
+        const tab = read(TAB);
+        const heading = stringConst(tab, "SETTINGS_HEADING");
+        const label = templateConst(tab, "ENDPOINT_INPUT_LABEL");
+
         expect(
-            src,
-            "nothing in the section names the Apps Script proxy any more — not even the " +
-            "accessible names — so the box no longer says what it is for"
-        ).toContain("Apps Script proxy");
+            label,
+            "the accessible name no longer starts with the heading a sighted user reads — " +
+            "one control, two names, and the screen-reader user gets the one nobody can see"
+        ).toContain(heading);
+        // The half the old assertion was really protecting: the box takes either
+        // form, and an accessible name that says "URL" alone tells a
+        // screen-reader user the shorter one is refused here.
+        expect(label).toContain("Deployment ID");
+        expect(label).toContain("Web App URL");
+
+        // Built from the constant, not spelled twice — a second literal is what
+        // drifted last time.
+        expect(
+            codeOf(section(tab)),
+            "the input stopped rendering ENDPOINT_INPUT_LABEL, so nothing ties its accessible " +
+            "name to the heading any more"
+        ).toContain("aria-label={ENDPOINT_INPUT_LABEL}");
+        expect(
+            tab,
+            "the accessible name is a literal again instead of being derived from the heading"
+        ).toContain("const ENDPOINT_INPUT_LABEL = `${SETTINGS_HEADING}");
+
+        // And the retired section name is gone from everything this screen
+        // renders, accessible names included — the direction the old assertion
+        // had inverted.
+        expect(
+            codeOf(section(tab)),
+            "the row renders the retired section name \"Apps Script proxy\" again"
+        ).not.toContain("Apps Script proxy");
     });
 });
 
@@ -1653,8 +1735,18 @@ describe("the credential box takes a Deployment ID as well as a URL, and says so
     it("the accessible names cover both forms, not the URL alone", () => {
         // A screen-reader user gets the aria-label and nothing else. Leaving it
         // saying "deployment URL" tells them the ID is not allowed here.
-        const src = codeOf(section(read(TAB)));
-        expect(src).toContain('aria-label="Apps Script proxy Deployment ID or Web App URL"');
+        //
+        // The input's name is RESOLVED rather than matched as a source string:
+        // it is a template over the section's heading now, so the literal this
+        // used to pin no longer exists in the file. See the describe above for
+        // why it is derived, and templateConst() for why resolving it is what
+        // keeps this assertion about the sentence the user hears.
+        const tab = read(TAB);
+        const src = codeOf(section(tab));
+        const inputLabel = templateConst(tab, "ENDPOINT_INPUT_LABEL");
+        expect(inputLabel).toContain("Deployment ID");
+        expect(inputLabel).toContain("Web App URL");
+        expect(src).toContain("aria-label={ENDPOINT_INPUT_LABEL}");
         expect(src).toContain("Check this Apps Script Deployment ID or Web App URL and apply it");
     });
 
@@ -1760,7 +1852,7 @@ describe("the credential box takes a Deployment ID as well as a URL, and says so
         const OLD_BODY = "The Web App URL of the Apps Script proxy you deploy once into your own " +
             "Google account. It looks like https://script.google.com/macros/s/<DEPLOYMENT_ID>/exec";
         expect(OLD_BODY).not.toContain("Paste the Deployment ID");
-        expect(OLD_BODY).not.toContain('aria-label="Apps Script proxy Deployment ID or Web App URL"');
+        expect(OLD_BODY).not.toContain("aria-label={ENDPOINT_INPUT_LABEL}");
 
         const OLD_INPUT = '<TextInput placeholder="https://script.google.com/macros/s/…/exec" />';
         const oldPh = placeholderOf(OLD_INPUT);
@@ -1982,11 +2074,17 @@ describe("what the row kept from before", () => {
             .toContain("maxLength={null}");
         expect(src).toContain('autoComplete="off"');
         expect(src).toContain("spellCheck={false}");
-        // UPDATED, NOT WEAKENED. Still an exact-string pin on the input's
-        // accessible name; only the name changed, because the box now takes a
-        // Deployment ID as well as a URL and an aria-label saying "deployment URL"
-        // tells a screen-reader user the shorter form is not allowed here.
-        expect(src).toContain('aria-label="Apps Script proxy Deployment ID or Web App URL"');
+        // UPDATED TWICE, NEVER WEAKENED. Still a pin on the input's accessible
+        // name. It first changed because the box began taking a Deployment ID as
+        // well as a URL, and an aria-label saying "deployment URL" tells a
+        // screen-reader user the shorter form is not allowed here. It changed
+        // again because the name it carried — "Apps Script proxy …" — was not the
+        // one on the heading a sighted user reads, so the control had two names.
+        // The pin is now on the wiring, and the resolved text is asserted where
+        // that describe can explain itself.
+        expect(src).toContain("aria-label={ENDPOINT_INPUT_LABEL}");
+        expect(templateConst(read(TAB), "ENDPOINT_INPUT_LABEL"))
+            .toContain(stringConst(read(TAB), "SETTINGS_HEADING"));
     });
 
     it("every button is this codebase's own Button component", () => {

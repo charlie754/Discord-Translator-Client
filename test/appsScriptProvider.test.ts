@@ -42,7 +42,15 @@ describe("apps script provider — identity", () => {
     it("declares the id and label the settings, the registry and the guide all use", () => {
         const p = createAppsScriptProvider(okHttp, { apiKey: URL_OK });
         expect(p.id).toBe("apps-script");
-        expect(p.label).toBe("Google Apps Script (your own free proxy)");
+        // UPDATED WITH THE DROPDOWN, NOT WEAKENED. This label used to read
+        // "Google Apps Script (your own free proxy)" and was pinned here as an
+        // engineering name — but it is the first thing the registry's refusal
+        // says to the user (see the assertion below), so it has to be the name
+        // the provider dropdown carries. That name lives in settings.ts's
+        // PROVIDER_OPTIONS, which nothing under core/ may import; the two are
+        // held together by test/pluginNamesLiveControls.test.ts, which compares
+        // this string against the live array rather than against a literal.
+        expect(p.label).toBe("Google Free API");
     });
 
     it("declares that it needs a key — the key being the deployment URL", () => {
@@ -55,11 +63,18 @@ describe("apps script provider — no URL configured", () => {
         const resolution = resolveProvider("apps-script", okHttp, {});
         expect(resolution.ok).toBe(false);
         if (resolution.ok) throw new Error("unreachable");
-        expect(resolution.reason).toContain("Google Apps Script (your own free proxy)");
+        // The refusal opens with the provider's name, and that name is what the
+        // user has to find in a dropdown — so it is the dropdown's spelling,
+        // not the transport's. It said "Google Apps Script (your own free
+        // proxy)" while the control offered "Google Free API".
+        expect(resolution.reason).toContain("Google Free API");
         // The refusal names the thing the user must actually go and find. "API key"
         // here would send them looking for a field that does not exist.
         expect(resolution.reason).toContain("Web App URL");
         expect(resolution.reason).not.toContain("API key");
+        // And the way OUT that it offers is a dropdown entry too. This is the
+        // second name in the same sentence and it rotted the same way.
+        expect(resolution.reason).toContain("Google (free, shared)");
     });
 
     it("is refused for a URL that is only whitespace", () => {
