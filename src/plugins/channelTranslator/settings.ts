@@ -63,13 +63,39 @@ export const TARGET_LANGUAGES: Array<{ value: string; label: string; default?: b
 /**
  * The providers the `provider` dropdown offers, and the wording it offers them in.
  *
- * EXPORTED BECAUSE THERE IS A SECOND READER. provider.ts's
+ * EXPORTED BECAUSE THERE ARE TWO OTHER READERS. provider.ts's
  * migrateUnavailableProvider() has to tell a user which provider it moved them
  * TO, and the only human-readable name a provider id has anywhere in this
  * codebase is the label sitting right here — core/providers/registry.ts is keyed
  * by id and knows nothing about UI copy. A second copy of these labels over
  * there would drift the first time one is reworded, and the user would be told
- * they had been switched to something the dropdown does not call that.
+ * they had been switched to something the dropdown does not call that. The
+ * second reader is panel/EndpointModal.tsx, the small window the rate-limited
+ * panel opens; it renders this array itself rather than listing the two
+ * providers again, for the same reason.
+ *
+ * THE TWO NAMES ARE THE OPERATOR'S OWN WORDS, given verbatim and not to be
+ * "improved": "Google (free, shared)" and "Google Free API". They replace
+ * "Google (free)" and "Google Apps Script (your own free proxy)". Only the UI
+ * copy moved — the ids below are untouched, so nothing a user has on disk, and
+ * nothing core/providers/registry.ts is keyed by, changed with them. The
+ * registry's own `label` fields (core/providers/google.ts, appsScript.ts) still
+ * carry the old engineering names and are deliberately left alone: they name the
+ * transport in developer-facing refusal text, not the choice on a dropdown.
+ *
+ * WHY THE FIRST NAME IS NO LONGER "Google Default Public Key". It named a key
+ * that does not exist. That entry posts the message to the shared public
+ * translate.googleapis.com gtx endpoint with NO key of any kind — not the
+ * user's, not one baked into this bundle, not a "default" one belonging to
+ * anybody — so a reader of the old name had to conclude a credential was in play
+ * and go looking for where it was kept, and there is nowhere, because there is
+ * none. "shared" replaces it because shared is the property that actually
+ * predicts what the user will run into: that endpoint's allowance belongs to
+ * everyone hitting it at once, which is WHY it rate-limits, which is why
+ * panel/EndpointModal.tsx — the window the "Use your own free endpoint" button
+ * opens — exists at all. The name now states the cause of the condition the rest
+ * of this UI is built to get the user out of. The id is untouched, so nothing on
+ * disk moved with the name.
  *
  * THIS IS NOT THE SET OF PROVIDERS THAT WORK, and nothing may treat it as one.
  * That set is core/providers/registry.ts's map and only that map. This array is
@@ -85,8 +111,8 @@ export const TARGET_LANGUAGES: Array<{ value: string; label: string; default?: b
  * is merely a provider with no dropdown entry yet, which is inert.
  */
 export const PROVIDER_OPTIONS: Array<{ value: string; label: string; default?: boolean; }> = [
-    { label: "Google (free)", value: "google", default: true },
-    { label: "Google Apps Script (your own free proxy)", value: "apps-script" }
+    { label: "Google (free, shared)", value: "google", default: true },
+    { label: "Google Free API", value: "apps-script" }
 ];
 
 /**
@@ -142,8 +168,18 @@ const GUIDE_FILE = "guide.html";
 export const HOSTED_GUIDE_URL = "";
 
 /**
- * The project's own page, and the fallback the desktop build actually uses
- * today.
+ * The project's own page, and the LAST RESORT for a build that carries no copy
+ * of the guide anywhere.
+ *
+ * IT USED TO BE WHAT THE DESKTOP BUILD ALWAYS GOT, AND THAT WAS THE DEFECT.
+ * With HOSTED_GUIDE_URL deliberately empty, every desktop click on "Setup Guide"
+ * resolved here and opened the whole repository page — a repo, not a guide.
+ * Operator: "In desktop version, Setup Guide should always link to a page which
+ * dedicated on Setup Guide only, not entire repo page." The desktop build now
+ * ships the guide beside itself and opens it in its own window (see the
+ * "desktop" kind below), so this is reached only when there is genuinely nothing
+ * else: no packaged copy, no bundled copy, no hosted address. Its wording is
+ * still honest FOR THAT CASE, and must stay honest only about that case.
  *
  * NOT A URL TYPED INTO THIS FILE. `gitRemote` is the origin remote baked in at
  * build time by gitRemotePlugin in scripts/build/common.mjs, and
@@ -162,19 +198,36 @@ export const HOSTED_GUIDE_URL = "";
  */
 export const PROJECT_REPO_URL = gitRemote ? `https://github.com/${gitRemote}` : "";
 
-/** Which of the three possible sources a resolved guide target came from. */
+/** Which of the four possible sources a resolved guide target came from. */
 export type GuideKind =
     /** The copy packaged inside the browser extension. The real guide. */
     | "packaged"
+    /**
+     * The copy bundled beside the desktop client, opened by the main process in
+     * a window of its own. The real guide, and the only one that needs no
+     * network at all.
+     */
+    | "desktop"
     /** HOSTED_GUIDE_URL, once the operator has set it. The real guide. */
     | "hosted"
     /** The project page. Where the guide LIVES, not the guide itself. */
     | "repo";
 
-export interface GuideTarget {
-    url: string;
-    kind: GuideKind;
-}
+/**
+ * What the control opens.
+ *
+ * A UNION RATHER THAN `url: string | null`, so that "there is no address" is a
+ * state the type system enforces instead of a null every caller has to remember
+ * to check. Three of the four kinds are addresses the renderer opens itself. The
+ * fourth is not an address at all: the desktop guide is a file inside the
+ * bundle, the main process is the only thing that knows where, and the renderer
+ * is deliberately never told — see openGuide() below and the handler comment in
+ * src/main/ipcMain.ts. Writing that as a string the renderer holds would be the
+ * beginning of the renderer constructing a path.
+ */
+export type GuideTarget =
+    | { url: string; kind: "packaged" | "hosted" | "repo"; }
+    | { url: null; kind: "desktop"; };
 
 /** RFC 6761 special-use names that are guaranteed never to resolve. */
 const RESERVED_TLDS = new Set(["invalid", "test", "example", "localhost"]);
@@ -235,6 +288,63 @@ export function resolveHostedOrRepo(hostedUrl: string, repoUrl: string): GuideTa
 }
 
 /**
+ * The main-process bridge, or undefined on a build — or at a moment — that has
+ * none.
+ *
+ * `typeof` rather than a truthiness test, because VencordNative is a global that
+ * may never have been DECLARED, not one that is merely undefined: `VencordNative?.x`
+ * on an unbound identifier throws a ReferenceError, which optional chaining does
+ * not protect against. This runs inside a render, so it must not throw.
+ */
+function nativeBridge(): typeof VencordNative.native | undefined {
+    const bridge = typeof VencordNative === "undefined" ? undefined : VencordNative;
+    return bridge?.native;
+}
+
+/**
+ * Whether THIS build carries its own copy of the guide and can open it in a
+ * window of its own.
+ *
+ * ASKED OF THE MAIN PROCESS, NOT INFERRED FROM A BUILD FLAG. IS_DISCORD_DESKTOP
+ * would answer a different question — "is this the desktop mod?" — and the two
+ * come apart: site/ is untracked, so a desktop build made on a machine without
+ * it is a working client with no guide inside it (scripts/build/build.mjs warns
+ * and carries on rather than failing). Deriving this from the flag would put an
+ * "Open the setup guide" button on that build whose only possible outcome is
+ * nothing happening, which is the dead example.invalid link's defect wearing
+ * different clothes.
+ *
+ * THE RENDERER NEVER LEARNS A PATH. The question is a yes/no and the open is a
+ * no-argument call; src/main/ipcMain.ts owns the filename for both. That is the
+ * same posture as the host allow-list in this plugin's native.ts — a capability
+ * reachable from the page world is only safe while the page cannot aim it.
+ *
+ * MEMOISED ONLY ONCE THE BRIDGE EXISTS. Whether the bundle carries a file is a
+ * fact about the process, so one answer is enough. But a "no" produced because
+ * the bridge was not there yet is not that answer, and caching it would repeat
+ * the EXTENSION_BASE_URL mistake documented on guideTarget() below in a new
+ * place. A missing bridge is therefore re-asked; a real answer is kept.
+ */
+let bundledGuideAnswer: boolean | undefined;
+
+function bundledGuideAvailable(): boolean {
+    if (bundledGuideAnswer !== undefined) return bundledGuideAnswer;
+
+    const native = nativeBridge();
+    if (!native || typeof native.hasSetupGuide !== "function") return false;
+
+    try {
+        return bundledGuideAnswer = native.hasSetupGuide() === true;
+    } catch (err) {
+        // sendSync throws outright when the main process has no handler for the
+        // channel — a renderer bundle newer than the main bundle, which is the
+        // same partial-install case state.ts documents for pluginHelpers.
+        console.error("[ChannelTranslator] Could not ask whether this build bundles the setup guide", err);
+        return false;
+    }
+}
+
+/**
  * What the button below opens, or null when nothing reachable exists.
  *
  * IS_EXTENSION is a build-time constant (src/globals.d.ts) and is tested here on
@@ -253,27 +363,98 @@ export function guideTarget(): GuideTarget | null {
     if (IS_EXTENSION && EXTENSION_BASE_URL) {
         return { url: new URL(GUIDE_FILE, EXTENSION_BASE_URL).toString(), kind: "packaged" };
     }
+
+    // BEFORE the hosted address, not after it, and not merely because desktop is
+    // the build that had no guide. A copy sitting in the bundle is the version
+    // this exact build shipped with, it opens with no network at all, and it
+    // cannot 404 the way a site can once it has been pointed somewhere. A hosted
+    // URL is the fallback for builds that carry nothing, which is what
+    // HOSTED_GUIDE_URL's own comment describes it as.
+    if (bundledGuideAvailable()) {
+        return { url: null, kind: "desktop" };
+    }
+
     return resolveHostedOrRepo(HOSTED_GUIDE_URL, PROJECT_REPO_URL);
 }
 
-/**
- * The address alone. Null, never "" — an empty string is a value a caller can
- * hand to window.open by accident, and null is one it cannot.
+/*
+ * THERE IS DELIBERATELY NO ADDRESS-ONLY ACCESSOR HERE.
+ *
+ * This file used to export guideUrl(), which returned `guideTarget()?.url ?? null`.
+ * It was dead in both shipped bundles — tree-shaken out of dist/desktop/renderer.js
+ * and dist/browser/browser.js, with its only remaining callers in this repo's own
+ * tests — and it was a trap for the next caller who found it, because null is its
+ * answer to TWO opposite states: nothing to open at all, and the desktop build's
+ * bundled guide, whose url is null BY DESIGN because the renderer is never told
+ * where the file is. Reading that null as "no guide" would hide the control on the
+ * one build that definitely has a guide — the same defect the "desktop" kind exists
+ * to fix, one accessor further out.
+ *
+ * So the address is only ever read off a target whose kind is in hand: take the
+ * whole thing from guideTarget() and give it to openGuide() below, which is what
+ * knows the two apart.
  */
-export function guideUrl(): string | null {
-    return guideTarget()?.url ?? null;
-}
 
 /**
- * Opened with the same options the floating panel already uses for external
- * links (panel/Panel.tsx). `noopener` is the load-bearing half: without it the
- * opened document gets a `window.opener` handle back into the logged-in
- * discord.com page.
+ * THE ONE WAY THE GUIDE IS OPENED, from either of the two screens that offer it.
  *
- * Takes the target it was rendered with rather than re-resolving, so the button
+ * EXPORTED BECAUSE THERE IS A SECOND CALLER.
+ * src/components/settings/tabs/vencord/index.tsx renders its own "→ Setup Guide"
+ * link and used to do its own `window.open(guide.url, …)`. That stopped being
+ * possible when a target gained the ability not to have a url at all, and it
+ * should not have been duplicated in the first place: two call sites are two
+ * places for the desktop branch to be forgotten.
+ *
+ * Takes the target it was rendered with rather than re-resolving, so the control
  * can never open something other than what its own label promised.
+ *
+ * The web kinds are opened with the same options the floating panel already uses
+ * for external links (panel/Panel.tsx). `noopener` is the load-bearing half:
+ * without it the opened document gets a `window.opener` handle back into the
+ * logged-in discord.com page.
+ *
+ * NOTHING HERE MAY THROW. It runs inside an onClick handler, where an exception
+ * is an unhandled rejection in the middle of Discord's own React tree, so the
+ * missing-bridge case is logged rather than raised and the promise is caught.
  */
-function openGuide(target: GuideTarget): void {
+export function openGuide(target: GuideTarget): void {
+    if (target.kind === "desktop") {
+        const native = nativeBridge();
+        if (!native || typeof native.openSetupGuide !== "function") {
+            console.error("[ChannelTranslator] The setup guide cannot be opened: no native bridge");
+            return;
+        }
+
+        // THE try/catch IS NOT REDUNDANT WITH THE .catch BELOW — they catch two
+        // different failures, and only one of them is a rejected promise.
+        // .catch handles openSetupGuide() REJECTING. This handles it THROWING
+        // SYNCHRONOUSLY, or returning something that is not a promise at all: in
+        // either case there is no promise to attach .catch to yet, so the
+        // exception escapes past these lines and out of openGuide() into
+        // Discord's own onClick handler — an unhandled rejection in the middle
+        // of a React tree this plugin does not own. The contract above says
+        // NOTHING HERE MAY THROW, and until this was added that held only for a
+        // bridge that misbehaved politely. The sibling question hasSetupGuide()
+        // is already known to throw for real when no handler is registered.
+        try {
+            native.openSetupGuide()
+                .then(opened => {
+                    // The main process answers false whenever the guide was not
+                    // actually SHOWN: the file is not in this build, it was
+                    // deleted from the bundle while the client was running, or
+                    // it was found and then failed to load. Rare, and silent
+                    // otherwise.
+                    if (!opened) {
+                        console.error("[ChannelTranslator] The setup guide could not be shown; nothing was opened");
+                    }
+                })
+                .catch(err => console.error("[ChannelTranslator] Failed to open the setup guide", err));
+        } catch (err) {
+            console.error("[ChannelTranslator] The setup guide bridge threw when it was called", err);
+        }
+        return;
+    }
+
     window.open(target.url, "_blank", "noopener,noreferrer");
 }
 
@@ -342,6 +523,10 @@ export function appsScriptUrlProblem(value: string): string | null {
  */
 const GUIDE_BUTTON_LABEL: Record<GuideKind, string> = {
     packaged: "Open the setup guide",
+    // The bundled copy IS the guide, so it is called the guide. The label makes
+    // no promise about where it opens, because unlike the other three it does
+    // not leave the app at all — it opens a window this client owns.
+    desktop: "Open the setup guide",
     hosted: "Open the setup guide",
     repo: "Open the project page on GitHub"
 };
@@ -356,16 +541,27 @@ const GUIDE_BUTTON_LABEL: Record<GuideKind, string> = {
 function guideBlurb(kind: GuideKind | null): string {
     switch (kind) {
         case "packaged":
+        case "desktop":
         case "hosted":
             return "";
+        // BOTH SENTENCES BELOW USED TO NAME THE EXTENSION AS THE ONLY BUILD THAT
+        // CARRIES THE GUIDE, and both were shown on every desktop client, where
+        // they were the reason the button opened a repository page. That is no
+        // longer what a desktop build does: it bundles the guide and opens it in
+        // its own window. These two are now reached only by a build that shipped
+        // without the guide — an extension or desktop package built from a
+        // checkout with no site/ directory, since site/ is untracked — so they
+        // say that instead of blaming the build's shape.
         case "repo":
-            return "This build carries no copy of the guide, so that opens the project page " +
-                "instead — the guide is site/free/index.html there, and the browser-extension " +
-                "build opens it directly.";
+            return "This build shipped without a copy of the guide, so that opens the project " +
+                "page instead — the guide is site/free/index.html there. The browser extension " +
+                "and the desktop client both carry it when they are built from a checkout that " +
+                "has it.";
         default:
             return "The setup guide is not reachable from this build: it ships inside the " +
-                "browser extension, and this one has no packaged or hosted copy. Its source is " +
-                "site/free/index.html in the project's repository.";
+                "browser extension and beside the desktop client, and this one carries no copy " +
+                "and has no hosted address. Its source is site/free/index.html in the project's " +
+                "repository.";
     }
 }
 
@@ -430,10 +626,20 @@ export const settings = definePluginSettings({
     provider: {
         type: OptionType.SELECT,
         description:
+            // The two names below are the two labels in PROVIDER_OPTIONS, spelled the
+            // same way here so this paragraph describes the entries the dropdown
+            // above it actually shows. Each also carries the engineering name it
+            // used to be listed under, because that is still what the setup guide,
+            // Google's own console and this plugin's refusal messages call it — a
+            // reader who arrived from any of those has to be able to tell which
+            // entry is which.
             "Translation provider. Both are free and neither can bill you — the two paid " +
             "options that used to be here, DeepL and Google Cloud Translation, have been " +
-            "removed. Google (free) is Google's unofficial gtx endpoint: no key, no signup, no " +
-            "guarantee, and it can rate-limit you. Google Apps Script is a proxy you deploy once " +
+            "removed. Google (free, shared), listed as Google (free) in earlier builds, is " +
+            "Google's unofficial gtx endpoint: no key of any kind, no signup, no " +
+            "guarantee, and the allowance is shared with everyone else using it — which is why " +
+            "it can rate-limit you. Google Free API is a Google Apps Script " +
+            "proxy you deploy once " +
             "into your own Google account — still no key and no card, but the daily allowance is " +
             "yours rather than shared with everyone else using the free endpoint. Pick Apps " +
             "Script and you must fill in its Web App URL in the credentials section below.",

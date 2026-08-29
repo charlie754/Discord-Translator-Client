@@ -59,6 +59,15 @@ window.VencordNative = {
         getVersions: () => ({}),
         supportsWindowsMaterial: () => false,
         openExternal: async (url) => void open(url, "_blank"),
+        // There is no main process here, so there is no window for it to open a
+        // bundled file in. The browser builds reach the guide a different way
+        // entirely — scripts/build/buildWeb.mjs packages it as guide.html inside
+        // the extension, and guideTarget() in
+        // src/plugins/channelTranslator/settings.ts returns that first. Saying
+        // "false" out loud is what makes that resolver skip the desktop branch
+        // instead of drawing a button wired to a function that cannot work here.
+        hasSetupGuide: () => false,
+        openSetupGuide: async () => false,
         getRendererCss: async () => {
             if (IS_USERSCRIPT)
                 // need to wait for next tick for _vcUserScriptRendererCss to be set

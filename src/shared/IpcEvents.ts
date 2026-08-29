@@ -39,6 +39,16 @@ export const enum IpcEvents {
     OPEN_MONACO_EDITOR = "VencordOpenMonacoEditor",
     GET_MONACO_THEME = "VencordGetMonacoTheme",
 
+    // The setup guide, bundled beside the desktop client. Two channels rather
+    // than one, because the renderer has to draw the control BEFORE anybody
+    // clicks it: HAS_SETUP_GUIDE answers "did this build ship a guide at all",
+    // which is what decides whether a button appears and what its label is
+    // allowed to promise, and OPEN_SETUP_GUIDE takes no arguments whatsoever so
+    // that a page script reaching VencordNative cannot aim it at another file.
+    // Both are handled in src/main/ipcMain.ts, which owns the path.
+    HAS_SETUP_GUIDE = "VencordHasSetupGuide",
+    OPEN_SETUP_GUIDE = "VencordOpenSetupGuide",
+
     GET_PLUGIN_IPC_METHOD_MAP = "VencordGetPluginIpcMethodMap",
 
     CSP_IS_DOMAIN_ALLOWED = "VencordCspIsDomainAllowed",

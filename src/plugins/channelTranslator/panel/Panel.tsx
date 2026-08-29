@@ -5,15 +5,13 @@
  */
 
 // plugin/panel/Panel.tsx
-import { plugins } from "@api/PluginManager";
-import { openPluginModal } from "@components/settings";
-import type { Plugin } from "@utils/types";
 import { React, SelectedChannelStore, SelectedGuildStore, useStateFromStores } from "@webpack/common";
 
 import { PanelState } from "../core/modes";
 import { patchesOk } from "../patches";
 import { settings } from "../settings";
 import { breakerOpen, pendingCount, persist,repaintChannel, subscribeProgress, toggle } from "../state";
+import { openEndpointModal } from "./EndpointModal";
 import { GoatBanner } from "./goatBanner";
 
 const STATE_LABEL: Record<PanelState, string> = {
@@ -43,14 +41,19 @@ const LANGUAGES: Array<{ value: string; label: string; }> = [
     { value: "ar", label: "AR - العربية" }
 ];
 
-/**
- * Must match the `name` given to definePlugin in ../index.tsx. It is the key
- * under which the plugin registry stores this plugin's own Plugin object, which
- * is what openPluginModal needs. test/panelRateLimitEscape.test.ts fails if the
- * two ever drift apart, because a mismatch is silent at build time and only
- * shows up as a button that does nothing.
+/*
+ * A PLUGIN_NAME CONSTANT USED TO LIVE HERE, and its absence is deliberate.
+ *
+ * It was "ChannelTranslator" — the key under which the plugin registry stores
+ * this plugin's own Plugin object, which is what openPluginModal() needed. The
+ * escape button below no longer opens the plugin cog, so nothing here looks a
+ * plugin up by name any more, and the whole failure that constant existed to
+ * guard — a name that drifts from definePlugin's, a registry lookup that
+ * returns undefined, a button that silently does nothing, none of it visible at
+ * build time — is designed out rather than merely tested for. Do not
+ * reintroduce the constant to "keep the two in step": there is no second copy
+ * of the name in this file to keep in step with any more.
  */
-const PLUGIN_NAME = "ChannelTranslator";
 
 const KOFI_URL = "https://ko-fi.com/irp_hongkong";
 /** TODO: confirm once the repo is pushed — one line to change. */
@@ -89,24 +92,6 @@ export function Panel() {
         repaintChannel(channelId);
     };
 
-    /**
-     * The way out of "Rate limited".
-     *
-     * The panel used to name the failure and stop there. The remedy — point the
-     * plugin at a free endpoint of your own — lives in this plugin's settings,
-     * which is two screens away and which nobody looking at a stuck panel has
-     * any reason to open. This opens that screen directly.
-     *
-     * Guarded rather than asserted: openPluginModal dereferences the plugin
-     * immediately, so a missing registry entry would throw out of an onClick
-     * handler and take the panel's React tree with it. Doing nothing is a worse
-     * button and a better failure.
-     */
-    const openOwnSettings = () => {
-        const self: Plugin | undefined = plugins[PLUGIN_NAME];
-        if (self) openPluginModal(self);
-    };
-
     return (
         <div className="shell" data-state={state}>
             <div className="pill">
@@ -143,12 +128,21 @@ export function Panel() {
                     test/panelRateLimitEscape.test.ts, which fails if this guard is
                     removed. Note that in this state the .row siblings below shift by
                     one, so their nth-child stagger delays step 50ms later; that is
-                    cosmetic and only ever visible while rate limited. */}
+                    cosmetic and only ever visible while rate limited.
+
+                    WHERE IT GOES, AND WHERE IT USED TO GO. This used to call
+                    openPluginModal() on this plugin's own registry entry, i.e. the
+                    whole cog — every setting the plugin has, in a screen the user
+                    had not asked for, with the two controls that answer a rate
+                    limit somewhere inside it. It now opens ./EndpointModal, which
+                    holds exactly the provider choice, the endpoint box and the
+                    setup guide. The button's markup, class names and aria-label
+                    are unchanged: only what it opens moved. */}
                 {state === "degraded" && (
                     <button
                         className="escape"
                         aria-label="Use your own free endpoint"
-                        onClick={openOwnSettings}
+                        onClick={openEndpointModal}
                     >
                         <svg className="escape__icon" viewBox="0 0 24 24" fill="none"
                              stroke="currentColor" strokeWidth="2" strokeLinecap="round"

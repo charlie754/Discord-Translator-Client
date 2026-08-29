@@ -20,7 +20,7 @@
 // @ts-check
 
 import { createPackage } from "@electron/asar";
-import { copyFile, cp, readdir, rm, writeFile } from "fs/promises";
+import { copyFile, cp, readdir, readFile, rm, writeFile } from "fs/promises";
 import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
 
@@ -281,6 +281,112 @@ await Promise.all([
     emitEditorAssets("desktop"),
     emitEditorAssets("equibop")
 ]);
+
+/*
+ * THE SETUP GUIDE SHIPS INSIDE THE DESKTOP BUNDLE, AND THIS IS WHY.
+ *
+ * The plugin's "Setup Guide" control had exactly one destination on the desktop
+ * before this: https://github.com/<slug>, the whole repository page. The
+ * extension build has never had that problem — scripts/build/buildWeb.mjs packages
+ * this same file as guide.html and the plugin opens it out of the extension origin
+ * — so the desktop was the one build with no guide to open, and it fell all the
+ * way through to the project page. The operator's words: "Setup Guide should
+ * always link to a page which dedicated on Setup Guide only, not entire repo page."
+ *
+ * Copied beside the bundle rather than inlined into it. The alternative pattern in
+ * this repo is src/main/trayMenu.ts's `import aboutHtml from "file://about.html?minify"`,
+ * which turns the page into a string in the main bundle and opens it as a
+ * data: URL. That is right for a 5 KB About box and wrong for this: the guide is
+ * ~363 KB carrying four inlined base64 PNGs, so inlining it would grow patcher.js
+ * and main.js by that much and pay for it on every startup, for a window most
+ * users never open; and base64-ing the whole document again to fit it in a URL
+ * would push most of a megabyte through loadURL. This follows monacoWin.html
+ * instead — a real file next to the bundle, loaded with loadFile.
+ *
+ * THE NAME IS A CONTRACT with SETUP_GUIDE_PATH in src/main/ipcMain.ts, which is
+ * the only thing that ever opens it. It deliberately matches GUIDE_PACKAGED_NAME
+ * in buildWeb.mjs so that both builds carry the guide under one filename.
+ *
+ * ABSENT IS A HARD BUILD FAILURE. This comment used to say the exact opposite, and
+ * justified warning-and-continuing with "site/ is untracked, so a checkout that does
+ * not carry it still has to build". THAT PREMISE IS FALSE: the guide source is
+ * tracked — `git ls-files site` lists five entries, site/free/index.html among them
+ * — and .gitignore says nothing about site/. There is no ordinary checkout that
+ * legitimately lacks the guide, so a tree that cannot read it is broken, and the
+ * right response to a broken tree is to stop rather than to ship around it.
+ *
+ * WHAT THE OLD BEHAVIOUR BOUGHT WAS A SILENTLY GUIDE-LESS CLIENT. The operator's
+ * instruction is that the Setup Guide always opens a page dedicated to it, so a build
+ * that quietly drops that page ships the feature broken while reporting success. No
+ * layer downstream catches it, because every one of them behaves "honestly" about the
+ * absence: src/main/ipcMain.ts answers HAS_SETUP_GUIDE with false and the plugin's
+ * guideTarget() falls back to the project page. The defect therefore surfaces days
+ * later, as a user clicking Setup Guide and landing on the whole repo. Failing here
+ * costs one build and names the missing file.
+ *
+ * A PRESENT BUT UNDERSIZED source is a hard failure for the same reason, and always
+ * was: that is a truncated write, and shipping half a guide is worse than shipping
+ * none.
+ *
+ * SCOPE, DELIBERATE. scripts/build/buildWeb.mjs and scripts/checkExtensionPackages.mjs
+ * still treat an absent guide as survivable, and still carry the same false premise in
+ * their own comments. Whether the EXTENSION build should become strict too is a
+ * separate decision that has not been taken; this change is the desktop build only.
+ */
+const SETUP_GUIDE_SOURCE = join(REPO_ROOT, "site/free/index.html");
+const SETUP_GUIDE_BUNDLED_NAME = "guide.html";
+/** Matches GUIDE_MIN_BYTES in buildWeb.mjs and checkExtensionPackages.mjs. */
+const SETUP_GUIDE_MIN_BYTES = 50_000;
+
+/**
+ * The guide's bytes. Throws rather than returning empty-handed: there is no
+ * "built without the guide" outcome on the desktop any more.
+ *
+ * Read once and written twice rather than copyFile'd twice: the size floor has
+ * to be measured on the bytes that actually get written, and a separate stat
+ * would be describing a file the copy never read.
+ *
+ * @returns {Promise<Buffer>}
+ */
+async function loadSetupGuide() {
+    let content;
+    try {
+        content = await readFile(SETUP_GUIDE_SOURCE);
+    } catch (err) {
+        const why = /** @type {NodeJS.ErrnoException} */ (err).code ?? String(err);
+        throw new Error(
+            `Refusing to build the desktop client without the setup guide: ${SETUP_GUIDE_SOURCE} ` +
+            `could not be read (${why}). That file is TRACKED IN GIT, so a tree that cannot read ` +
+            "it is broken rather than ordinary - restore it and build again. Continuing would " +
+            `produce a client carrying no ${SETUP_GUIDE_BUNDLED_NAME}, whose "Setup Guide" control ` +
+            "falls back to the whole project page on GitHub: the feature silently broken, by a " +
+            "build that reported success."
+        );
+    }
+
+    if (content.length < SETUP_GUIDE_MIN_BYTES) {
+        throw new Error(
+            `Refusing to bundle ${SETUP_GUIDE_SOURCE}: ${content.length} bytes is below the ` +
+            `${SETUP_GUIDE_MIN_BYTES}-byte floor. The guide is a single self-contained page of ` +
+            "several hundred KB, so a file this small is a truncated write rather than the " +
+            "guide. Restore the full file; deleting it is no longer a way to get a build."
+        );
+    }
+
+    return content;
+}
+
+// Unconditional. loadSetupGuide() either returns the bytes or throws, so there is no
+// longer a branch in which this build continues without writing the guide.
+const setupGuide = await loadSetupGuide();
+await Promise.all([
+    writeFile(join("dist", "desktop", SETUP_GUIDE_BUNDLED_NAME), setupGuide),
+    writeFile(join("dist", "equibop", SETUP_GUIDE_BUNDLED_NAME), setupGuide)
+]);
+console.log(
+    `Setup guide bundled as ${SETUP_GUIDE_BUNDLED_NAME} in both desktop variants ` +
+    `(${(setupGuide.length / 1024).toFixed(0)} KB from ${SETUP_GUIDE_SOURCE}).`
+);
 
 await Promise.all([
     writeFile("dist/desktop/package.json", JSON.stringify({

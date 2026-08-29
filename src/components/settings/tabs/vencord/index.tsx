@@ -20,7 +20,7 @@ import { Paragraph } from "@components/Paragraph";
 import { openPluginModal, SettingsTab, wrapTab } from "@components/settings";
 import { QuickAction, QuickActionCard } from "@components/settings/QuickAction";
 import { GoatBanner } from "@plugins/channelTranslator/panel/goatBanner";
-import { guideTarget, settings as translatorSettings } from "@plugins/channelTranslator/settings";
+import { guideTarget, openGuide, settings as translatorSettings } from "@plugins/channelTranslator/settings";
 import { validateAppsScriptUrl } from "@plugins/channelTranslator/state";
 import { gitHash, gitRemote } from "@shared/vencordUserAgent";
 import { IS_WINDOWS } from "@utils/constants";
@@ -192,22 +192,37 @@ const SETUP_GUIDE_LINK_STYLE: CSSProperties = {
 /**
  * Where the link actually goes, said for a screen reader and on hover.
  *
- * Both destinations now show the SAME visible text, which the operator asked
- * for. That is only honest if the difference is still available somewhere — a
- * user clicking "→ Setup Guide" and landing on a GitHub repository page has been
- * surprised by a control that promised something else. guideTarget() returns
- * "repo" precisely when this build carries no copy of the guide.
+ * Every destination shows the SAME visible text, which the operator asked for.
+ * That is only honest if the difference is still available somewhere — a user
+ * clicking "→ Setup Guide" and landing on a GitHub repository page has been
+ * surprised by a control that promised something else.
+ *
+ * THE "repo" WORDING IS NO LONGER WHAT THE DESKTOP GETS, AND THAT WAS THE BUG.
+ * With no hosted address set, guideTarget() used to resolve every desktop click
+ * to the project page, so this sentence was what every desktop user was told the
+ * "Setup Guide" control did — and it was right about the control and wrong about
+ * what the control should have been. The desktop build now bundles the guide and
+ * opens it in a window of its own ("desktop" below). "repo" survives for the one
+ * case it is still true of: a package built from a checkout with no site/
+ * directory, which carries no guide to open.
  */
 const SETUP_GUIDE_TITLE: Record<string, string> = {
     packaged: "Opens the setup guide bundled with this build",
+    desktop: "Opens the setup guide bundled with this build, in its own window",
     hosted: "Opens the setup guide (opens in a new tab)",
     repo: "Opens the project page on GitHub, where the guide lives (opens in a new tab)"
 };
 
-/** The sentence shown INSTEAD of the link when this build can reach no guide. */
+/**
+ * The sentence shown INSTEAD of the link when this build can reach no guide.
+ *
+ * It used to name the browser extension as the only build that carries the
+ * guide, which stopped being true when the desktop client started bundling it.
+ */
 const NO_GUIDE_SENTENCE =
     "The setup guide is not reachable from this build — it ships inside the browser " +
-    "extension, and its source is site/free/index.html in the project's repository.";
+    "extension and beside the desktop client, and this one carries no copy. Its source is " +
+    "site/free/index.html in the project's repository.";
 
 /**
  * Best-effort opt-outs for the third-party password managers.
@@ -461,7 +476,12 @@ function TranslationApiKeySection() {
                     ? (
                         <a
                             role="button"
-                            onClick={() => window.open(guide.url, "_blank", "noopener,noreferrer")}
+                            // openGuide(), not a window.open() of guide.url. A
+                            // "desktop" target has no url at all — the renderer
+                            // is never told where the bundled file is — so the
+                            // one opener in the plugin's settings module is the
+                            // only thing that knows how to open all four kinds.
+                            onClick={() => openGuide(guide)}
                             style={SETUP_GUIDE_LINK_STYLE}
                             title={SETUP_GUIDE_TITLE[guide.kind]}
                             aria-label={SETUP_GUIDE_TITLE[guide.kind]}

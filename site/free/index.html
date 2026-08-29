@@ -425,7 +425,7 @@ footer{color:var(--muted);font-size:.82rem;margin-top:26px;}
   <div class="fact"><b>Cost</b><span>Nothing. No card, ever.</span></div>
 </div>
 
-<p class="crosslink">This page uses <strong>Google Apps Script</strong>, which runs inside the Google account you already have. The paid alternative is Google Cloud Translation, which needs a project, a billing account and a card: <a href="../index.html">Get a Google Cloud Translation key</a>.</p>
+<p class="crosslink">This page uses <strong>Google Apps Script</strong>, which runs inside the Google account you already have. That is the whole of what Discord Translator needs: the plugin&rsquo;s two paid providers were removed, so there is no key to buy and no billing account to open.</p>
 
 <section class="truth" aria-labelledby="truth">
 <h2 id="truth">What you are actually deploying</h2>
@@ -447,7 +447,7 @@ footer{color:var(--muted);font-size:.82rem;margin-top:26px;}
   <div class="dbody">
     <p>Cloud Translation refuses to run without a billing account attached. The dialog is explicit: <strong>Billing required &mdash; Cloud Translation API requires a project with a billing account</strong>. There is no way past it without a card.</p>
     <p>Apps Script has no such wall. Same company, same translation engine underneath, different product, different rules.</p>
-    <p>If you want the paid path anyway &mdash; it has a real SLA and higher ceilings &mdash; the sibling guide walks it: <a href="../index.html">Get a Google Cloud Translation key</a>.</p>
+    <p>It is not a choice this plugin still offers, either: Discord Translator&rsquo;s two paid providers were removed, and there is no field left to paste a Cloud key into. This page is the path.</p>
   </div>
 </details>
 
@@ -931,7 +931,7 @@ function json(obj) {
       <li><strong>Slightly slower.</strong> There is an extra hop through Apps Script, and the first call after a quiet period is slower still.</li>
       <li><strong>You are the operator.</strong> When it breaks, you are the one who fixes it.</li>
     </ul>
-    <p>For one person translating a Discord server, those are cheap trade-offs. For anything you depend on, read the sibling guide.</p>
+    <p>For one person translating a Discord server, those are cheap trade-offs. There is no paid tier behind this plugin to move up to, so they are the trade you are making.</p>
   </div>
 </details>
 
@@ -1097,7 +1097,6 @@ if (body.secret !== SHARED_SECRET) {
     <a href="https://developers.google.com/apps-script/guides/web" target="_blank" rel="noopener noreferrer">Web apps</a> &middot;
     <a href="https://developers.google.com/apps-script/reference/language/language-app" target="_blank" rel="noopener noreferrer">LanguageApp reference</a>
   </p>
-  <p>Paying instead: <a href="../index.html">Get a Google Cloud Translation key</a>.</p>
 </footer>
 
 </div>

@@ -23,7 +23,7 @@ import "./settings";
 import { debounce } from "@shared/debounce";
 import { IpcEvents } from "@shared/IpcEvents";
 import { app, BrowserWindow, dialog, ipcMain, nativeTheme, shell, systemPreferences } from "electron";
-import { FSWatcher, mkdirSync, readFileSync, watch, writeFileSync } from "fs";
+import { existsSync, FSWatcher, mkdirSync, readFileSync, watch, writeFileSync } from "fs";
 import { open, readdir, readFile, unlink } from "fs/promises";
 import { release } from "os";
 import { join } from "path";
@@ -181,6 +181,186 @@ ipcMain.handle(IpcEvents.OPEN_MONACO_EDITOR, async () => {
     // reads from it. src/preload.ts keys off this pathname to tell the editor window
     // apart from Discord's - change one and you must change the other.
     await monacoWin.loadFile(join(__dirname, "monacoWin.html"));
+});
+
+/**
+ * The setup guide, under the name scripts/build/build.mjs copies it into the
+ * bundle as.
+ *
+ * ONE spelling on this side of the boundary, exactly as GUIDE_FILE in
+ * src/plugins/channelTranslator/settings.ts is the one spelling for the
+ * extension package. It must not drift from SETUP_GUIDE_BUNDLED_NAME in that
+ * build script; if it does, HAS_SETUP_GUIDE below answers "no" and the settings
+ * screen quietly falls back to the project page, which is the failure being
+ * fixed here rather than a new one.
+ *
+ * __dirname is inside the asar, and Electron's asar layer serves file reads
+ * from it — the same reason monacoWin.html above is loaded with loadFile.
+ */
+const SETUP_GUIDE_PATH = join(__dirname, "guide.html");
+
+/**
+ * Whether this build actually carries the guide. Answered ONCE, at startup.
+ *
+ * IT IS NOT ALWAYS THERE, AND THAT IS THE POINT OF ASKING. site/ is untracked,
+ * so a machine that does not have site/free/index.html builds a perfectly good
+ * client with no guide inside it — scripts/build/build.mjs prints a warning and
+ * carries on rather than failing the build, exactly as scripts/build/buildWeb.mjs
+ * already does for the extension package. The renderer has to be able to tell
+ * those two builds apart BEFORE it draws anything, because a control labelled
+ * "Open the setup guide" whose only outcome is nothing happening is the same
+ * defect as the dead example.invalid link that HOSTED_GUIDE_URL's comment is
+ * written about, one layer further down.
+ *
+ * Read once because it is a fact about the bundle rather than about the moment,
+ * and because the renderer asks it synchronously on every render of the
+ * settings screen — including on every keystroke in the Apps Script URL field.
+ */
+const HAS_SETUP_GUIDE = existsSync(SETUP_GUIDE_PATH);
+
+ipcMain.on(IpcEvents.HAS_SETUP_GUIDE, e => {
+    e.returnValue = HAS_SETUP_GUIDE;
+});
+
+let setupGuideWin: BrowserWindow | null = null;
+
+/**
+ * Open the bundled setup guide in a window of its own.
+ *
+ * IT TAKES NO ARGUMENTS, AND THAT IS THE WHOLE OF ITS SECURITY DESIGN. This
+ * handler is reachable from Discord's own page world through VencordNative,
+ * precisely like the translation transport in
+ * src/plugins/channelTranslator/native.ts — which carries a hostname allow-list
+ * for that reason and says so at length. A handler that accepted a path or a
+ * URL would hand every script running on discord.com a "render any local file
+ * in a window we opened" primitive; a handler with no parameters can only ever
+ * open the one file this build shipped with. Do not add a parameter to it to
+ * save a line somewhere else.
+ *
+ * Returns whether the guide was actually SHOWN — not merely whether a window was
+ * constructed. A window that was created and then failed to load is reported as
+ * false, because a caller told true would say nothing while the user looks at
+ * either nothing or a blank frame.
+ */
+ipcMain.handle(IpcEvents.OPEN_SETUP_GUIDE, async () => {
+    // Not merely defensive: the file can be deleted out from under a running
+    // client, and answering false here is what stops a blank window appearing
+    // in place of the guide.
+    if (!HAS_SETUP_GUIDE || !existsSync(SETUP_GUIDE_PATH)) return false;
+
+    if (setupGuideWin && !setupGuideWin.isDestroyed()) {
+        setupGuideWin.show();
+        setupGuideWin.focus();
+        return true;
+    }
+
+    setupGuideWin = new BrowserWindow({
+        title: "Discord Translator Setup Guide",
+        center: true,
+        autoHideMenuBar: true,
+        width: 1100,
+        height: 850,
+        backgroundColor: nativeTheme.shouldUseDarkColors ? "#1e1e1e" : "white",
+        // NO preload, NO node integration, and the sandbox left on. The guide is
+        // a static page of documentation that wants nothing from this process,
+        // so it is given nothing. Leaving the preload off has a second effect
+        // worth naming: src/preload.ts classifies the window it was loaded into
+        // by pathname, to tell the QuickCSS editor apart from Discord, and a
+        // third kind of window would be a third way for that classification to
+        // go wrong — as it already did once when the editor stopped being a
+        // data: URL.
+        webPreferences: {
+            contextIsolation: true,
+            nodeIntegration: false,
+            sandbox: true
+        }
+    });
+
+    // A local handle to the window THIS call created. Every cleanup below
+    // compares against it rather than trusting setupGuideWin to still point
+    // here: a "closed" arriving late from a window the user already dismissed
+    // would otherwise null out a window a later click had since opened and
+    // stored, orphaning a live window that nothing can focus again.
+    const win = setupGuideWin;
+
+    win.once("closed", () => {
+        if (setupGuideWin === win) setupGuideWin = null;
+    });
+
+    /**
+     * Every link in the guide leaves this window, and only a web address leaves
+     * it at all.
+     *
+     * The shape is the About window's (src/main/trayMenu.ts), with one
+     * deliberate difference: that page is a string this repo generates, and this
+     * one is not. site/free/index.html is hand-authored documentation, and it
+     * demonstrably grows relative links: it carried three
+     * `<a href="../index.html">` cross-links to a sibling guide that was never
+     * bundled, which under a file:// document resolve to a real path on this
+     * machine. Those three are gone — the paid provider they advertised was
+     * removed from the plugin — but THIS FILTER IS NOT CONDITIONAL ON THEM AND
+     * MUST NOT BE DELETED WITH THEM. shell.openExternal() on a file:// URL asks
+     * the OS to open a local file with whatever is registered for its extension,
+     * so handing it every url the way the About window does would turn the next
+     * stale relative link into a shell invocation. The protocol is therefore
+     * checked first and anything that is not http(s) is dropped on the floor —
+     * the navigation is still prevented either way, so the guide window can
+     * never be steered off the guide.
+     *
+     * In-page anchors (the guide's own table of contents, href="#…") are
+     * same-document navigations and do not raise will-navigate at all, so they
+     * keep working.
+     */
+    const openExternally = (url: string) => {
+        let protocol: string;
+        try {
+            ({ protocol } = new URL(url));
+        } catch {
+            return;
+        }
+
+        if (protocol !== "http:" && protocol !== "https:") return;
+
+        shell.openExternal(url)
+            .catch(err => console.error("[Discord Translator] Failed to open a link from the setup guide", url, err));
+    };
+
+    win.webContents.setWindowOpenHandler(({ url }) => {
+        openExternally(url);
+        return { action: "deny" };
+    });
+
+    win.webContents.on("will-navigate", (e, url) => {
+        e.preventDefault();
+        openExternally(url);
+    });
+
+    // loadFile, not a data: URL. The guide is 363 KB of HTML carrying four
+    // inlined base64 images; base64-ing the whole document a second time to fit
+    // it in a URL would push most of a megabyte through loadURL for no benefit,
+    // and it would have to be inlined into the main bundle at build time to be
+    // available here at all — paid on every startup, for a window most users
+    // never open. A real file URL is also what gives the page a document URL to
+    // resolve against, which is the same reason monacoWin.html is emitted as a
+    // file above.
+    try {
+        await win.loadFile(SETUP_GUIDE_PATH);
+    } catch (err) {
+        // A CONSTRUCTED-BUT-UNLOADED WINDOW IS THE WORST OUTCOME AVAILABLE HERE,
+        // which is why this is not merely logged. Left in place it is a blank
+        // frame that still satisfies the "already open?" test at the top of this
+        // handler, so every later click would show() and focus() the blank
+        // window and answer true — the guide would be permanently unopenable for
+        // the rest of the session, and the plugin would report success each
+        // time. Tearing it down and forgetting it is what makes the next click a
+        // clean retry.
+        console.error("[Discord Translator] Failed to load the setup guide", SETUP_GUIDE_PATH, err);
+        if (setupGuideWin === win) setupGuideWin = null;
+        if (!win.isDestroyed()) win.destroy();
+        return false;
+    }
+
+    return true;
 });
 
 app.on("before-quit", async event => {
