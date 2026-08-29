@@ -81,6 +81,25 @@ export default {
         getVersions: () => process.versions as Partial<NodeJS.ProcessVersions>,
         supportsWindowsMaterial: () => sendSync<boolean>(IpcEvents.SUPPORTS_WINDOWS_MATERIAL),
         openExternal: (url: string) => invoke<void>(IpcEvents.OPEN_EXTERNAL, url),
+        /**
+         * Whether this build shipped a copy of the setup guide, and the request
+         * to open it.
+         *
+         * NEITHER TAKES A PATH AND NEITHER RETURNS ONE. The main process owns
+         * the filename (src/main/ipcMain.ts); all that crosses to this side is a
+         * yes/no and a no-argument request, because everything exposed on this
+         * object is reachable from a script running on discord.com — the same
+         * reasoning that gives src/plugins/channelTranslator/native.ts its host
+         * allow-list.
+         *
+         * hasSetupGuide is SYNCHRONOUS on purpose. Its caller,
+         * src/plugins/channelTranslator/settings.ts, has to decide what a button
+         * may promise while that button is being rendered, and an unresolved
+         * promise cannot label a control. The main process answers it from a
+         * value it computed once at startup.
+         */
+        hasSetupGuide: () => sendSync<boolean>(IpcEvents.HAS_SETUP_GUIDE),
+        openSetupGuide: () => invoke<boolean>(IpcEvents.OPEN_SETUP_GUIDE),
         getRendererCss: () => invoke<string>(IpcEvents.GET_RENDERER_CSS),
         onRendererCssUpdate: (cb: (newCss: string) => void) => {
             if (!IS_DEV) return;

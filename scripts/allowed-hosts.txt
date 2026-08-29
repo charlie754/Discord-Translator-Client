@@ -113,6 +113,21 @@ codeberg.org
 # The Goat Project campaign banner in the translator panel and the settings tab.
 # An <a href> only: the lockup beside it is inline SVG, so nothing is fetched.
 dagoat.io
+# Google's own Apps Script documentation, in three <a href> links at the foot of the bundled setup
+# guide (site/free/index.html, shipped as guide.html): the quotas page, the Web Apps guide and the
+# LanguageApp reference. They document the script.google.com provider listed above - what its free
+# ceiling is, what a Web App deployment is, what the script the user pastes actually calls - so this
+# is reading material about a host already on this list, not a new destination.
+#
+# NOTHING FETCHES THEM, and the guide window cannot navigate itself to them either. The guide is a
+# local file the main process opens with loadFile, and every link in that window is intercepted
+# before a navigation happens: setWindowOpenHandler denies the open and will-navigate is prevented,
+# so the only way out is openExternally() in src/main/ipcMain.ts, which drops anything that is not
+# http(s) and hands the rest to shell.openExternal. An explicit click therefore opens the page in
+# the user's own browser, outside the client entirely, and nothing else can reach this host at all.
+#
+# Added after the enumeration stamped in the header above, so that run's count predates this line.
+developers.google.com
 discord.gg
 github.com
 gitlab.com
@@ -163,6 +178,19 @@ app.asar
 # the git updater instead and never references either name.
 desktop.asar
 equibop.asar
+# SETUP_GUIDE_PATH in src/main/ipcMain.ts - join(__dirname, "guide.html"), which is the name
+# scripts/build/build.mjs copies site/free/index.html into the bundle under. A file the main process
+# reads out of the asar, not somewhere anything connects to; the renderer never even learns the
+# name, because it asks a yes/no question and calls a no-argument open.
+#
+# Its twin needs no line, and the reason is worth writing down rather than rediscovering:
+# monacoWin.html is loaded the same way, in the same file, and never reaches this list because
+# BARE_HOST_RE in checkHosts.mjs is deliberately case-SENSITIVE - the property that keeps
+# React.Fragment and WebpackPatcher.patchedBy out - and that filename has a capital W. So the two
+# filenames are treated differently by an accident of spelling, not because one is more host-shaped
+# than the other. If guide.html is ever renamed to something camelCased, this line goes dead and
+# should be removed with the rename.
+guide.html
 index.js
 main.js
 main.js.map
@@ -178,6 +206,12 @@ renderer.js.map
 settings.json
 blahaj.zip
 example.user
+# A CSS SELECTOR, not a host. The bundled setup guide's own inline script calls
+# document.querySelectorAll("figure.shot") to collect the page's three <figure class="shot">
+# screenshots. Being a quoted argument is the whole reason it is here: the matching rules in that
+# page's stylesheet (.shot, .shot-img, .shot-note) are unquoted and the bare-hostname pass never
+# sees them. .shot is not a TLD, so this resolves to nothing.
+figure.shot
 luca.beyer
 m.shl
 notifications.position

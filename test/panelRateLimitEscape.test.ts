@@ -11,18 +11,31 @@ import { describe, expect, it } from "vitest";
 /**
  * The panel's "Rate limited" state used to be a dead end: it named the failure
  * and offered nothing. The remedy — point the plugin at a free endpoint of your
- * own — lives in this plugin's settings modal, which a user staring at a stuck
- * panel has no reason to open. Panel.tsx now renders one button that opens it.
+ * own — is two screens away, and a user staring at a stuck panel has no reason
+ * to go looking for it. Panel.tsx renders one button that opens it directly.
  *
  * Two things have to stay true and neither is checked by the compiler:
  *
  *   1. The button appears ONLY in the degraded state. A button offering to fix
  *      a rate limit, shown while nothing is rate limited, is noise in a panel
  *      that already carries a Ko-fi button and a banner.
- *   2. PLUGIN_NAME in Panel.tsx matches the `name` given to definePlugin. That
- *      string is the key into the plugin registry; if it drifts, the lookup
- *      returns undefined, the guard swallows it, and the button silently does
- *      nothing. That failure is invisible at build time.
+ *   2. It opens the FOCUSED window, not the plugin cog. It used to call
+ *      openPluginModal(plugins["ChannelTranslator"]) — the whole settings sheet,
+ *      every control the plugin has, in a screen the user did not ask for.
+ *      Operator: the button should "pop-up a window ONLY SHOW Provider … and
+ *      provide a fill box". panel/EndpointModal.tsx is that window, and what is
+ *      INSIDE it is pinned by test/panelEndpointModal.test.ts; this file pins
+ *      only that the button reaches it and reaches nothing else.
+ *
+ * WHAT ITEM 2 REPLACED, AND WHY THE OLD ASSERTION IS GONE RATHER THAN MOVED.
+ * This file used to assert that PLUGIN_NAME in Panel.tsx matched the `name`
+ * given to definePlugin, because that string was the key into the plugin
+ * registry: if it drifted, the lookup returned undefined, the guard swallowed
+ * it, and the button silently did nothing — invisible at build time. Panel.tsx
+ * no longer looks a plugin up by name at all, so there is no longer a second
+ * copy of that name to keep in step. The failure is designed out, not merely
+ * untested, and the assertion below that Panel.tsx contains no plugin-registry
+ * lookup is what keeps it that way.
  *
  * A SOURCE SCAN rather than a render test, for the reason recorded in
  * test/core-isolation.test.ts: Panel.tsx imports @webpack/common, @api/* and
@@ -35,9 +48,31 @@ const PLUGIN = join(process.cwd(), "src", "plugins", "channelTranslator");
 const PANEL = join(PLUGIN, "panel", "Panel.tsx");
 const STYLES = join(PLUGIN, "panel", "styles.ts");
 const INDEX = join(PLUGIN, "index.tsx");
+const MODAL = join(PLUGIN, "panel", "EndpointModal.tsx");
 
 function read(file: string): string {
     return readFileSync(file, "utf8");
+}
+
+/**
+ * The file with every comment removed — both block comments (a JSX comment is
+ * one of those) and `//` line comments.
+ *
+ * NEEDED BECAUSE ONE ASSERTION BELOW FORBIDS TOKENS THIS FILE'S OWN COMMENTS
+ * QUOTE, which is the same problem test/panelSettingsOverlap.test.ts records for
+ * its own comment filter: a source file must stay free to explain the mistake it
+ * no longer makes.
+ *
+ * DELIBERATELY DUMB, AND ITS LIMITS ARE CHECKED RATHER THAN ASSUMED. It does not
+ * understand string literals, so a `/*` inside one would confuse it; the `://`
+ * case DOES occur in Panel.tsx (two https URLs) and is the reason the line-comment
+ * pattern refuses a `//` preceded by a colon. The controls in the describe below
+ * exercise it on text that must survive and text that must not.
+ */
+function strippedCode(source: string): string {
+    return source
+        .replace(/\/\*[\s\S]*?\*\//g, " ")
+        .replace(/(^|[^:])\/\/.*$/gm, "$1");
 }
 
 function countOccurrences(source: string, needle: string): number {
@@ -84,7 +119,7 @@ function inDegradedBlock(source: string, needle: string): boolean {
 
 describe("the rate-limited panel offers a way out", () => {
     it("the files it claims to scan exist and are not empty", () => {
-        for (const file of [PANEL, STYLES, INDEX]) {
+        for (const file of [PANEL, STYLES, INDEX, MODAL]) {
             expect(existsSync(file), `not found: ${file}`).toBe(true);
             expect(read(file).length, `empty: ${file}`).toBeGreaterThan(0);
         }
@@ -117,21 +152,60 @@ describe("the rate-limited panel offers a way out", () => {
         }
     });
 
-    it("the button opens this plugin's own settings modal", () => {
+    it("the button opens the focused endpoint window", () => {
         const source = read(PANEL);
-        expect(source).toMatch(/^import\s*\{[^}]*\bopenPluginModal\b[^}]*\}\s*from\s*"@components\/settings";$/m);
-        expect(source).toMatch(/^import\s*\{[^}]*\bplugins\b[^}]*\}\s*from\s*"@api\/PluginManager";$/m);
-        expect(source).toContain("openPluginModal(self)");
-        expect(source).toContain("onClick={openOwnSettings}");
+        expect(source).toMatch(/^import\s*\{[^}]*\bopenEndpointModal\b[^}]*\}\s*from\s*"\.\/EndpointModal";$/m);
+        expect(source).toContain("onClick={openEndpointModal}");
     });
 
-    it("PLUGIN_NAME matches the name definePlugin actually registers", () => {
-        const panelName = /const PLUGIN_NAME = "([^"]+)"/.exec(read(PANEL))?.[1];
-        const registered = /\bname:\s*"([^"]+)"/.exec(read(INDEX))?.[1];
+    it("the endpoint window exports the opener the panel imports", () => {
+        // The import above is satisfied by a file that exports nothing of that
+        // name only at runtime, and this suite never runs Panel.tsx. Checked
+        // here so a rename on one side is a red test rather than a dead button.
+        expect(read(MODAL)).toContain("export function openEndpointModal()");
+    });
 
-        expect(panelName, "no PLUGIN_NAME constant in Panel.tsx").toBeTruthy();
-        expect(registered, "no name: \"…\" in the plugin's index.tsx").toBeTruthy();
-        expect(panelName).toBe(registered);
+    /**
+     * THE DELETION, pinned.
+     *
+     * The escape button used to open the entire plugin cog through the plugin
+     * registry — `plugins[PLUGIN_NAME]` handed to openPluginModal(). That is the
+     * defect the operator asked to have removed ("pop-up a window ONLY SHOW
+     * Provider…"), and it is the kind of thing a future reader would reasonably
+     * add back while wiring up "let the user see the rest of the settings too".
+     * A test that only checks the NEW call site cannot notice the old one coming
+     * back beside it.
+     *
+     * Measured against the CODE, not the comments: Panel.tsx explains what the
+     * button used to open and names openPluginModal while doing it, and a
+     * matcher that cannot tell an explanation from an instruction would forbid
+     * the source from warning the next reader off the mistake.
+     */
+    it("the panel no longer reaches the plugin registry or the whole settings sheet", () => {
+        const code = strippedCode(read(PANEL));
+        for (const gone of ["openPluginModal", "@api/PluginManager", "@components/settings", "PLUGIN_NAME"]) {
+            expect(code, `Panel.tsx still uses ${gone} in code`).not.toContain(gone);
+        }
+    });
+
+    it("the comment stripper removes comments and keeps code (controls)", () => {
+        // Without these two the assertion above could pass because the stripper
+        // deleted the whole file, or fail because it deleted nothing.
+        expect(strippedCode("/* openPluginModal is gone */\nconst a = 1;")).not.toContain("openPluginModal");
+        expect(strippedCode("// openPluginModal is gone\nconst a = 1;")).not.toContain("openPluginModal");
+        expect(strippedCode("const x = openPluginModal(self);")).toContain("openPluginModal");
+        // A URL is not a line comment. Panel.tsx has two of them, and a stripper
+        // that ate everything after "https:" would silently shorten the file.
+        expect(strippedCode('const KOFI = "https://ko-fi.com/irp_hongkong";')).toContain("ko-fi.com");
+        expect(strippedCode(read(PANEL)).length).toBeGreaterThan(1000);
+    });
+
+    it("the plugin still registers the name the panel used to look up (control)", () => {
+        // Not a requirement on Panel.tsx any more — it is the evidence that the
+        // assertion above measures a real deletion rather than a renamed plugin.
+        // definePlugin still registers a name; Panel.tsx simply no longer wants it.
+        const registered = /\bname:\s*"([^"]+)"/.exec(read(INDEX))?.[1];
+        expect(registered, "no name: \"…\" in the plugin's index.tsx").toBe("ChannelTranslator");
     });
 
     it("the escape button is styled and is not a bare unstyled element", () => {

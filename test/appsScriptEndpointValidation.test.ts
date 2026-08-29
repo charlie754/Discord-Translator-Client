@@ -154,8 +154,8 @@ const STUBS: Readonly<Record<string, string>> = {
         // settings.ts and are pinned, against the real file, by
         // test/providerMigration.test.ts.
         "export const PROVIDER_OPTIONS = [" +
-        "    { label: \"Google (free)\", value: \"google\", default: true }," +
-        "    { label: \"Google Apps Script (your own free proxy)\", value: \"apps-script\" }" +
+        "    { label: \"Google (free, shared)\", value: \"google\", default: true }," +
+        "    { label: \"Google Free API\", value: \"apps-script\" }" +
         "];" +
         "export const DEFAULT_PROVIDER_ID = \"google\";"
 };
