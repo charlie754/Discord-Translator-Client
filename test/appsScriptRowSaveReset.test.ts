@@ -209,6 +209,22 @@ function placeholderOf(sectionCode: string): string {
 }
 
 /**
+ * The dropdown's label for a provider id, read out of settings.ts.
+ *
+ * STRICT — a missing array or a missing id throws. A lookup that returned ""
+ * would delete a provider's name from every reconstructed sentence below, which
+ * is the direction that passes vacuously.
+ */
+function providerLabelFor(pluginSrc: string, id: string): string {
+    const array = sliceBetween(pluginSrc, "export const PROVIDER_OPTIONS", "\n];");
+    const entry = new RegExp(`\\{[^}]*value:\\s*"${id}"[^}]*\\}`).exec(array);
+    expect(entry, `no PROVIDER_OPTIONS entry has value "${id}"`).not.toBeNull();
+    const label = /label:\s*"([^"]*)"/.exec(entry![0]);
+    expect(label, `the PROVIDER_OPTIONS entry for "${id}" has no label`).not.toBeNull();
+    return label![1];
+}
+
+/**
  * The plugin cog's `appsScriptUrl` description, flattened.
  *
  * The description is written as `"…" + "…"` across a dozen lines to stay inside
@@ -216,9 +232,40 @@ function placeholderOf(sectionCode: string): string {
  * sentence that happens to straddle a break — it would report a perfectly good
  * sentence as missing, or worse, pass because the fragment it happened to pick
  * fits on one line. Slice the block, join its literals, then match.
+ *
+ * 🔴 IT ALSO HAS TO READ TEMPLATES NOW, AND MISSING THAT IS SILENT. The
+ * description names the provider dropdown's entry through providerName() instead
+ * of spelling it — the fix for this plugin's copy having gone on naming entries
+ * the dropdown had renamed. A double-quoted-literal scan reads the id inside
+ * `${providerName("apps-script")}` as prose and drops the sentence around it, so
+ * the reconstruction gains a stray "apps-script" and silently loses "Read only
+ * when Provider is …". Templates are therefore matched as whole units, ahead of
+ * quoted literals, and their substitutions resolved against PROVIDER_OPTIONS.
  */
 function cogDescription(pluginSrc: string): string {
-    return stringLiterals(sliceBetween(pluginSrc, "    appsScriptUrl: {", "        default: \"\",")).join("");
+    const block = sliceBetween(pluginSrc, "    appsScriptUrl: {", "        default: \"\",");
+    return literalsAndTemplates(block, pluginSrc).join("");
+}
+
+/**
+ * Every string literal AND template in a fragment, in order, with
+ * `${providerName("id")}` resolved.
+ *
+ * Ordering is the whole trick: a template is consumed as one unit, so the quoted
+ * id inside a substitution cannot be mistaken for a piece of the sentence.
+ */
+function literalsAndTemplates(fragment: string, pluginSrc: string): string[] {
+    return [...(fragment.match(/`(?:[^`\\]|\\.)*`|"(?:[^"\\]|\\.)*"/g) ?? [])].map(literal => {
+        const body = literal.slice(1, -1);
+        if (!literal.startsWith("`")) return body.replace(/\\"/g, "\"");
+        const resolved = body.replace(
+            /\$\{providerName\("([^"]+)"\)\}/g,
+            (_whole, id: string) => providerLabelFor(pluginSrc, id)
+        );
+        expect(resolved, "a substitution in the cog description could not be resolved, so this " +
+            "scan is not reading what the user is shown").not.toMatch(/\$\{/);
+        return resolved;
+    });
 }
 
 /** The body of `function onReset()`. */
@@ -1829,7 +1876,8 @@ describe("the credential box takes a Deployment ID as well as a URL, and says so
     });
 
     it("cogDescription() flattens the block and stops at it (controls)", () => {
-        const description = cogDescription(read(PLUGIN_SETTINGS));
+        const plugin = read(PLUGIN_SETTINGS);
+        const description = cogDescription(plugin);
         // A sentence that straddles a concatenation break in the source: proof
         // the flattening is doing something a raw file scan could not.
         expect(description).toContain("There is no API key and no card");
@@ -1837,6 +1885,29 @@ describe("the credential box takes a Deployment ID as well as a URL, and says so
         // The next setting down must be outside the slice.
         expect(description).not.toContain("Also translate direct messages");
         expect(() => cogDescription("const x = 1;")).toThrow();
+
+        // AND IT RESOLVES A SUBSTITUTION RATHER THAN READING ITS ID. Without
+        // this, the description reconstructs with a stray "apps-script" in it and
+        // silently LOSES the sentence that names which dropdown entry this box
+        // belongs to — an assertion about the copy would then be an assertion
+        // about the source's punctuation.
+        const appsScript = providerLabelFor(plugin, "apps-script");
+        expect(description, "the description no longer says which Provider value reads this box")
+            .toContain(`only when Provider is ${appsScript}`);
+        expect(
+            description,
+            "the substitution is being read as its id — the scan is not template-aware"
+        ).not.toContain("Provider is apps-script");
+    });
+
+    it("providerLabelFor reads the live array and refuses an unknown id (controls)", () => {
+        const plugin = read(PLUGIN_SETTINGS);
+        // A positive control that is itself derived: whatever the entry is
+        // called, it is what the dropdown hands out, and it is not an id.
+        const label = providerLabelFor(plugin, "apps-script");
+        expect(label.length).toBeGreaterThan(0);
+        expect(label).not.toBe("apps-script");
+        expect(() => providerLabelFor(plugin, "no-such-provider")).toThrow();
     });
 
     it("placeholderOf() reads a literal, and refuses a dynamic one (controls)", () => {
