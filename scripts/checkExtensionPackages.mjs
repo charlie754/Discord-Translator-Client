@@ -936,6 +936,30 @@ function walk(dir) {
 }
 
 /*
+ * Every key path in a parsed manifest whose last segment starts with "_comment",
+ * written the way Firefox writes it when it complains about one.
+ *
+ * Recurses through arrays as well as objects: content_scripts and
+ * web_accessible_resources are arrays of objects in one manifest shape or the
+ * other, so a documentation key added inside either would be invisible to an
+ * object-only walk and would ship.
+ */
+function manifestCommentPaths(value, path = "") {
+    if (Array.isArray(value)) {
+        return value.flatMap((element, i) => manifestCommentPaths(element, `${path}[${i}]`));
+    }
+    if (value === null || typeof value !== "object") return [];
+
+    return Object.keys(value).flatMap(key => {
+        const here = path === "" ? key : `${path}.${key}`;
+        return [
+            ...(key.startsWith("_comment") ? [here] : []),
+            ...manifestCommentPaths(value[key], here)
+        ];
+    });
+}
+
+/*
  * Whether a packaged file can be OPENED, which is a different question from
  * whether it was packaged.
  *
@@ -1136,6 +1160,40 @@ for (const target of TARGETS) {
     if (/equicord|vencord/i.test(JSON.stringify(manifest))) {
         fail("upstream branding present in manifest.json");
     } else pass("no upstream branding in the manifest");
+
+    /*
+     * THE DEFECT THIS EXISTS TO KEEP FIXED. The source manifests document their own
+     * decisions in "_comment"-prefixed keys — why the add-on id changed in v0.2.8
+     * and must never change again, why strict_min_version is 140.0, what each
+     * declared data collection permission covers. Those belong in the source. They
+     * were also being copied straight into the package, and Firefox validates
+     * browser_specific_settings against a schema, so loading
+     * dist/extension-firefox.zip in about:debugging printed three of these:
+     *
+     *   Reading manifest: Warning processing
+     *   browser_specific_settings.gecko.data_collection_permissions._comment:
+     *   An unexpected property was found in the WebExtension manifest.
+     *
+     * A manifest warning is not a load failure — the extension installs and runs —
+     * so nothing else in this pipeline would ever have said a word about it, and
+     * AMO review reads the same warnings. stripManifestComments() in
+     * scripts/build/buildWeb.mjs removes them at package time; this is the check
+     * that it actually ran, on the bytes that shipped rather than on the source
+     * that is supposed to produce them.
+     *
+     * Every offending path is named, not just the first: there were four, and a
+     * message that reports one turns a single fix into four build-and-look rounds.
+     */
+    const commentPaths = manifestCommentPaths(manifest);
+    if (commentPaths.length) {
+        fail(`manifest.json ships ${commentPaths.length} documentation key(s) Firefox warns on: ` +
+            `${commentPaths.join(", ")}. Keep them in browser/manifest.json and ` +
+            "browser/manifestv2.json — they are the only record of why those settings are what " +
+            "they are — and strip them from the package instead. stripManifestComments() in " +
+            "the f.startsWith(\"manifest\") branch of buildExtension() in scripts/build/buildWeb.mjs " +
+            "is what does that, so this failing means it was removed, renamed, or is no longer " +
+            "reached for this target.");
+    } else pass("no _comment documentation keys survived into the packaged manifest");
 
     for (const size of ICON_SIZES) {
         if (!manifest.icons?.[String(size)]) fail(`manifest declares no ${size}px icon`);

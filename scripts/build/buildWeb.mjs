@@ -430,6 +430,58 @@ let guideOnce;
 const getGuide = () => (guideOnce ??= loadGuide());
 
 /**
+ * Delete every documentation key from a parsed manifest, in place.
+ *
+ * The source manifests explain themselves in "_comment"-prefixed keys: why the
+ * add-on id changed in v0.2.8 and must never change again after publication, why
+ * strict_min_version is 140.0 rather than 128, what each declared data collection
+ * permission actually covers. That knowledge is worth more than the warnings it
+ * causes and it stays in browser/manifestv2.json and browser/manifest.json.
+ *
+ * It must not SHIP. Firefox validates browser_specific_settings against a schema
+ * and warns on every property it does not recognise, so loading
+ * dist/extension-firefox.zip in about:debugging printed, verbatim:
+ *
+ *   Reading manifest: Warning processing
+ *   browser_specific_settings.gecko.data_collection_permissions._comment:
+ *   An unexpected property was found in the WebExtension manifest.
+ *
+ * ...once per key nested inside `gecko`. The one sitting directly under
+ * browser_specific_settings did not warn, which is a property of Mozilla's schema
+ * and not a rule to design around — every _comment goes, at every depth.
+ *
+ * Same shape as the guide's inline-script extraction above: the source stays one
+ * self-contained, documented file and the ARTIFACT is what the store validates.
+ *
+ * Named stripManifestComments rather than stripComments on purpose.
+ * scripts/checkExtensionPackages.mjs already has a stripComments() that blanks
+ * JavaScript comments out of source text, and two same-named helpers doing
+ * different jobs in one build system is a trap for whoever greps next.
+ *
+ * @type {(value: any) => void}
+ */
+function stripManifestComments(value) {
+    // Arrays are walked too. Nothing in either manifest today holds an object
+    // inside an array that could carry one — content_scripts and
+    // web_accessible_resources are the candidates — but "not today" is exactly the
+    // condition that changes without anyone re-reading this function.
+    if (Array.isArray(value)) {
+        for (const element of value) stripManifestComments(element);
+        return;
+    }
+
+    if (value === null || typeof value !== "object") return;
+
+    // Object.keys() is own + enumerable, which is precisely the set JSON.parse
+    // produces, and it is a snapshot — so deleting during the walk cannot skip a
+    // sibling the way mutating a live iterator would.
+    for (const key of Object.keys(value)) {
+        if (key.startsWith("_comment")) delete value[key];
+        else stripManifestComments(value[key]);
+    }
+}
+
+/**
   * @type {(target: string, files: string[]) => Promise<void>}
  */
 async function buildExtension(target, files) {
@@ -462,6 +514,11 @@ async function buildExtension(target, files) {
             if (f.startsWith("manifest")) {
                 const json = JSON.parse(content.toString("utf-8"));
                 json.version = VERSION;
+                // Both manifests, not just the MV2 one that warns today.
+                // browser/manifest.json carries no _comment keys right now; running
+                // it through anyway is what stops the first one added there from
+                // ever reaching a package.
+                stripManifestComments(json);
                 content = Buffer.from(new TextEncoder().encode(JSON.stringify(json)));
             }
 
