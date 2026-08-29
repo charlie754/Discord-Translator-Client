@@ -106,6 +106,14 @@ function restoreRegistry(): void {
 interface SettingsConstants {
     PROVIDER_OPTIONS: Array<{ value: string; label: string; default?: boolean; }>;
     DEFAULT_PROVIDER_ID: string;
+    /**
+     * The dropdown's own wording for a provider id. provider.ts's banner and
+     * index.tsx's first-run notice both build their sentences with it, so the
+     * stubs below hand out the REAL one rather than a second implementation —
+     * a stub that returned the id would make "names the provider they are on
+     * now, in the dropdown's own words" pass on a sentence saying "google".
+     */
+    providerName(id: string): string;
 }
 
 /**
@@ -240,7 +248,8 @@ function makeHarness(opts: HarnessOptions = {}): Harness {
         "./settings": {
             settings: { store },
             PROVIDER_OPTIONS: REAL.PROVIDER_OPTIONS,
-            DEFAULT_PROVIDER_ID: REAL.DEFAULT_PROVIDER_ID
+            DEFAULT_PROVIDER_ID: REAL.DEFAULT_PROVIDER_ID,
+            providerName: REAL.providerName
         }
     };
     const providerModule = { exports: {} as { migrateUnavailableProvider(): void; } };
@@ -265,7 +274,11 @@ function makeHarness(opts: HarnessOptions = {}): Harness {
         "./provider": providerModule.exports,
         "./render": { transformMessage: () => undefined, wrapContent: () => undefined },
         "./selection": { installSelectionHandler: () => undefined, removeSelectionHandler: () => undefined },
-        "./settings": { settings: { store } },
+        // providerName is the REAL one for the same reason provider.ts gets the
+        // real one above: the first-run notice names both dropdown entries
+        // through it, and a stub would let the notice assertions pass on a
+        // sentence that says "google" and "apps-script".
+        "./settings": { settings: { store }, providerName: REAL.providerName },
         "./state": { hydrate: () => void hydrateSawProvider.push(store.provider) }
     };
     const indexModule = { exports: {} as { default: { start(): void; stop(): void; }; } };
@@ -880,9 +893,15 @@ describe("instrument controls", () => {
     });
 
     it("the ALARMING battery does not fire on ordinary reassurance (negative control)", () => {
+        // The provider is named the way the live banner names it — through
+        // PROVIDER_OPTIONS — rather than with a spelling typed here. This string
+        // is synthetic, so nothing forces it to stay in step with the product;
+        // deriving it means the control keeps resembling the sentence it is a
+        // control for. It said "Google (free)" for as long as the dropdown had
+        // stopped offering that name.
         const kind =
-            "You have been switched to Google (free). It needs no key, no account and no card, " +
-            "and it cannot bill you. Nothing you saved was deleted.";
+            `You have been switched to ${REAL.providerName("google")}. It needs no key, no ` +
+            "account and no card, and it cannot bill you. Nothing you saved was deleted.";
         expect(ALARMING.some(rx => rx.test(kind))).toBe(false);
     });
 

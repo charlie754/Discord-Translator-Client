@@ -249,10 +249,52 @@ describe("the first-run notice is honest about both providers", () => {
      * either a weakened assertion or a reflow of the shipped notice to suit the
      * test. Both are the wrong fix: the claim is about what the user is told, so
      * the literals are rejoined and the claim is checked against that.
+     *
+     * 🔴 IT NOW HAS TO RESOLVE A SUBSTITUTION AS WELL, and getting that wrong is
+     * silent. The notice names both providers through settings.ts's
+     * providerName() rather than spelling them — that is the fix for the copy
+     * having gone on naming dropdown entries the dropdown no longer had. A
+     * quoted-literal scan alone reads `${providerName("google")}` as the literal
+     * "google", so it reported the notice as saying "googleapps-script" and
+     * every claim about the sentence became a claim about the source's
+     * punctuation. Templates are therefore matched as WHOLE units first — which
+     * is what stops the id inside one being read as prose — and their
+     * substitutions are resolved against the live PROVIDER_OPTIONS.
      */
+    const STRING_OR_TEMPLATE = /`(?:[^`\\]|\\.)*`|"(?:[^"\\]|\\.)*"/g;
+
+    /**
+     * The dropdown's labels, read out of settings.ts by id.
+     *
+     * STRICT: an anchor that has moved, or a `providerName("…")` naming an id
+     * this cannot find, throws. A lenient lookup returning "" would delete the
+     * provider's name from the reconstructed notice and leave every
+     * `.not.toContain` below passing for the wrong reason.
+     */
+    const providerLabelFor = (id: string): string => {
+        const settingsSrc = read(join(PLUGIN, "settings.ts"));
+        const start = settingsSrc.indexOf("export const PROVIDER_OPTIONS");
+        expect(start, "PROVIDER_OPTIONS is gone from settings.ts").toBeGreaterThan(-1);
+        const end = settingsSrc.indexOf("\n];", start);
+        expect(end, "PROVIDER_OPTIONS is unterminated").toBeGreaterThan(start);
+
+        const entry = new RegExp(`\\{[^}]*value:\\s*"${id}"[^}]*\\}`).exec(settingsSrc.slice(start, end));
+        expect(entry, `no PROVIDER_OPTIONS entry has value "${id}"`).not.toBeNull();
+        const label = /label:\s*"([^"]*)"/.exec(entry![0]);
+        expect(label, `the PROVIDER_OPTIONS entry for "${id}" has no label`).not.toBeNull();
+        return label![1];
+    };
+
     const noticeText = (): string =>
-        (consentNotice().match(/"((?:[^"\\]|\\.)*)"/g) ?? [])
-            .map(literal => literal.slice(1, -1))
+        (consentNotice().match(STRING_OR_TEMPLATE) ?? [])
+            .map(literal => {
+                const body = literal.slice(1, -1);
+                if (!literal.startsWith("`")) return body;
+                return body.replace(
+                    /\$\{providerName\("([^"]+)"\)\}/g,
+                    (_whole, id: string) => providerLabelFor(id)
+                );
+            })
             .join("");
 
     it("the rejoin really does bridge a concatenation boundary (positive control)", () => {
@@ -262,10 +304,36 @@ describe("the first-run notice is honest about both providers", () => {
         expect(noticeText().length).toBeGreaterThan(200);
         const split = '"Direct messages are " +\n"excluded unless you opt in."';
         expect(split).not.toContain("Direct messages are excluded");
-        const rejoined = (split.match(/"((?:[^"\\]|\\.)*)"/g) ?? [])
+        const rejoined = (split.match(STRING_OR_TEMPLATE) ?? [])
             .map(literal => literal.slice(1, -1))
             .join("");
         expect(rejoined).toContain("Direct messages are excluded unless you opt in");
+    });
+
+    it("a provider substitution is resolved, not read as its id (positive control)", () => {
+        // The failure this control exists for: with a quoted-literal scan the
+        // notice reconstructed as "…you choose. googleapps-scriptScript proxy…",
+        // which contains neither provider's name and no complete sentence, while
+        // looking enough like prose to be believed.
+        const sample = '"choose: " +\n`${providerName("google")} needs no key`';
+        const resolved = (sample.match(STRING_OR_TEMPLATE) ?? [])
+            .map(literal => {
+                const body = literal.slice(1, -1);
+                if (!literal.startsWith("`")) return body;
+                return body.replace(/\$\{providerName\("([^"]+)"\)\}/g,
+                    (_w, id: string) => providerLabelFor(id));
+            })
+            .join("");
+        expect(resolved).toBe(`choose: ${providerLabelFor("google")} needs no key`);
+        // …and the raw source really did NOT contain the label, so the
+        // resolution is doing work rather than agreeing with a literal.
+        expect(sample).not.toContain(providerLabelFor("google"));
+    });
+
+    it("providerLabelFor refuses an id the dropdown does not have (negative control)", () => {
+        // A lenient lookup would return "" and quietly delete a provider's name
+        // from every reconstructed sentence below.
+        expect(() => providerLabelFor("no-such-provider")).toThrow();
     });
 
     it("no longer claims the destination is Google Translate", () => {
@@ -279,9 +347,15 @@ describe("the first-run notice is honest about both providers", () => {
     });
 
     it("names BOTH destinations, because which third party receives the text is a setting", () => {
+        // BOTH NAMES ARE DERIVED. They used to be written here as "Google (free)"
+        // and "Apps Script", which is how this assertion kept passing while the
+        // notice sent a brand-new user looking for two dropdown entries that had
+        // been renamed out from under it. What is asserted is which CONTROLS the
+        // notice has to name; what those controls are called is read off
+        // PROVIDER_OPTIONS.
         const notice = noticeText();
-        expect(notice).toContain("Google (free)");
-        expect(notice).toContain("Apps Script");
+        expect(notice).toContain(providerLabelFor("google"));
+        expect(notice).toContain(providerLabelFor("apps-script"));
     });
 
     it("makes the disclosure that survived dropping the paid providers", () => {

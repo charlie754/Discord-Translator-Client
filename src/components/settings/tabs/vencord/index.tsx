@@ -7,7 +7,6 @@
 import "./VencordTab.css";
 
 import { openNotificationLogModal } from "@api/Notifications/notificationLog";
-import { plugins } from "@api/PluginManager";
 import { useSettings } from "@api/Settings";
 import { Button } from "@components/Button";
 import { Divider } from "@components/Divider";
@@ -17,7 +16,7 @@ import { Heading } from "@components/Heading";
 import { FolderIcon, GithubIcon, LogIcon, PaintbrushIcon, RestartIcon } from "@components/Icons";
 import { Notice } from "@components/Notice";
 import { Paragraph } from "@components/Paragraph";
-import { openPluginModal, SettingsTab, wrapTab } from "@components/settings";
+import { SettingsTab, wrapTab } from "@components/settings";
 import { QuickAction, QuickActionCard } from "@components/settings/QuickAction";
 import { GoatBanner } from "@plugins/channelTranslator/panel/goatBanner";
 import { guideTarget, openGuide, settings as translatorSettings } from "@plugins/channelTranslator/settings";
@@ -156,6 +155,44 @@ function Switches() {
  * capitalisation is a defect rather than a variation.
  */
 const SETUP_GUIDE_LABEL = "→ Setup Guide";
+
+/**
+ * What this section is called, once, for everyone who is told its name.
+ *
+ * The operator's own words (2026-08-29), replacing "Apps Script proxy — the free
+ * option, deployed to your own Google account".
+ *
+ * 🔴 IT IS A CONSTANT SO THE ACCESSIBLE NAME BELOW CAN BE THE SAME STRING RATHER
+ * THAN A SECOND ONE. The heading was renamed and the input's `aria-label` was
+ * not, so the two names for one control disagreed by exactly the thing that
+ * makes a control findable: a sighted user read "Setup Google Key" while a
+ * screen-reader user was told the field belonged to the "Apps Script proxy" —
+ * a section this build does not have any more. Two people describing the same
+ * screen to each other could not agree on what was on it.
+ *
+ * The same trick as SETUP_GUIDE_LABEL above, and readable by the same
+ * instrument: test/appsScriptRowSaveReset.test.ts reads the constant and checks
+ * the JSX renders THIS name rather than a copy of it, and
+ * test/guideNamesLiveControls.test.ts resolves it when it derives the set of
+ * headings the shipped setup guide is allowed to send a reader looking for.
+ */
+const SETTINGS_HEADING = "Setup Google Key";
+
+/**
+ * The credential input's accessible name — DERIVED from the heading above.
+ *
+ * A screen-reader user gets this string and nothing else: there is no visible
+ * `<label>`, and the placeholder is not an accessible name. So it has to do two
+ * jobs at once, and it used to do only the second. It must AGREE with the
+ * heading a sighted user is reading, or the same control has two names; and it
+ * must still say which values the box takes, because the row accepts a bare
+ * Deployment ID as well as a whole Web App URL and an accessible name saying
+ * "deployment URL" tells that user the shorter form is not allowed here.
+ *
+ * Written as a template over SETTINGS_HEADING rather than as a second literal
+ * for the obvious reason: a literal is what drifted last time.
+ */
+const ENDPOINT_INPUT_LABEL = `${SETTINGS_HEADING} — Deployment ID or Web App URL`;
 
 /**
  * Heading and guide link on ONE line, the link immediately to the right.
@@ -470,7 +507,7 @@ function TranslationApiKeySection() {
         <section className={Margins.top16}>
             <div style={HEADING_ROW_STYLE}>
                 <Heading style={{ marginBottom: 0 }}>
-                    Apps Script proxy — the free option, deployed to your own Google account
+                    {SETTINGS_HEADING}
                 </Heading>
                 {guide
                     ? (
@@ -491,25 +528,47 @@ function TranslationApiKeySection() {
                     )
                     : null}
             </div>
-            <Paragraph className={Margins.bottom8}>
-                The Apps Script proxy you deploy once into your own Google account, named in
-                either of the two forms its Deploy dialog hands you. Paste the Deployment ID —
-                the short code with its own copy button — or the whole Web App URL, which looks
-                like https://script.google.com/macros/s/&lt;DEPLOYMENT_ID&gt;/exec. Both name the
-                same deployment: an ID is expanded into that URL before anything is sent, so the
-                box shows the full URL once it has been checked. Either way it is read only when
-                the translator's provider is Google Apps Script. A Google Workspace account has
-                to paste the whole URL — its address carries the organisation's domain, and that
-                cannot be recovered from the ID on its own. There is
-                no API key and no card: a consumer Google account allows about 5,000 translation
-                calls a day, and going past that fails the request rather than charging you,
-                because Apps Script has no billing at all. Stored locally in this client's settings,
-                sent only to script.google.com, and never shared. This is the same setting as the
-                Apps Script URL in the translator plugin's own settings, at Settings &gt; Plugins
-                &gt; ChannelTranslator &gt; the cog, so a value entered in either place shows up in
-                the other.
-                {guide ? null : " " + NO_GUIDE_SENTENCE}
-            </Paragraph>
+            {/*
+             * THE EXPLANATORY PARAGRAPH THAT USED TO SIT HERE IS GONE, on operator
+             * instruction (2026-08-29: "The whole paragraph goes"). It is worth knowing
+             * what it carried, because several of the things it said are now said
+             * NOWHERE on this screen:
+             *
+             *   - that both the Deployment ID and the whole Web App URL are accepted,
+             *     and that either will do. Only the placeholder and the aria-label name
+             *     the two forms now, and neither says "either";
+             *   - the Workspace caveat, which those accounts need: their address carries
+             *     the organisation's domain, so the ID form is no use to them and this
+             *     screen no longer says so;
+             *   - that there is no API key, no card, and no billing on this path;
+             *   - that this is the same value as the cog's own appsScriptUrl, so editing
+             *     it in one place changes the other.
+             *
+             * test/appsScriptRowSaveReset.test.ts pinned every one of those sentences.
+             * Those assertions were inverted rather than deleted when the copy went —
+             * each one names what was lost, so this is a recorded trade rather than a
+             * silent gap. Do not re-add prose here without re-reading them.
+             *
+             * WRITTEN WITH A LEADING `*` ON EVERY LINE ON PURPOSE. codeLines() in that
+             * suite strips a line only when it starts with `//`, `*` or `/*`, and the
+             * copy guards run over what survives — so a JSX comment written in the
+             * usual indented style is read as rendered prose, and this note's own
+             * description of the deleted sentences trips the guards it is describing.
+             * Measured: it did, on the first run.
+             *
+             * WHAT SURVIVED, AND WHY IT IS CONDITIONAL. NO_GUIDE_SENTENCE was inside
+             * that paragraph. It is the sentence shown INSTEAD of the "→ Setup Guide"
+             * link when this build carries no guide, and the operator asked for that
+             * link to stay — so the sentence stays with it rather than being deleted
+             * along with the prose around it. On every shipped build (the extension and
+             * the desktop client both bundle the guide) `guide` is non-null and this
+             * renders nothing at all.
+             */}
+            {guide ? null : (
+                <Paragraph className={Margins.bottom8}>
+                    {NO_GUIDE_SENTENCE}
+                </Paragraph>
+            )}
             <TextInput
                 // A PLAIN TEXT INPUT, AND IT IS NOT ALLOWED TO STOP BEING ONE.
                 //
@@ -566,7 +625,11 @@ function TranslationApiKeySection() {
                 // Best effort, and only that — see the constant.
                 {...PASSWORD_MANAGER_OPT_OUTS}
                 spellCheck={false}
-                aria-label="Apps Script proxy Deployment ID or Web App URL"
+                // The heading's own words plus what the box takes — see
+                // ENDPOINT_INPUT_LABEL. Never a second spelling of the section's
+                // name: this said "Apps Script proxy Deployment ID or Web App
+                // URL" while the heading above said "Setup Google Key".
+                aria-label={ENDPOINT_INPUT_LABEL}
             />
             <Paragraph className={Margins.top8} style={{ color: "var(--text-muted)" }}>
                 Save checks what you pasted here first — an ID or a URL, the shape is verified
@@ -757,17 +820,6 @@ function EquicordSettings() {
             <Paragraph className={Margins.bottom16}>
                 Configure how Discord Translator behaves and integrates with Discord. These settings affect the Discord client's appearance and behavior.
             </Paragraph>
-            <Notice.Info className={Margins.bottom20} style={{ width: "100%" }}>
-                You can customize where this settings section appears in Discord's settings menu by configuring the{" "}
-                <a
-                    role="button"
-                    onClick={() => openPluginModal(plugins.Settings)}
-                    style={{ cursor: "pointer", color: "var(--text-link)" }}
-                >
-                    Settings Plugin
-                </a>.
-            </Notice.Info>
-
             <TranslationApiKeySection />
 
             <Switches />

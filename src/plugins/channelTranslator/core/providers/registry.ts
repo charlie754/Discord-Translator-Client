@@ -83,9 +83,20 @@ export function resolveProvider(
         const noun = CREDENTIAL_NOUN[provider.id] ?? DEFAULT_CREDENTIAL_NOUN;
         return {
             ok: false,
+            // BOTH NAMES IN THIS SENTENCE ARE DROPDOWN ENTRIES, and a user acts on
+            // them: one says which choice is refusing, the other says which choice
+            // works right now. `provider.label` carries the first — see the note on
+            // appsScript.ts's label for why that field is user-facing rather than
+            // an engineering name — and the second is written out, because nothing
+            // under core/ may import settings.ts to look it up. It said
+            // "Google (free)" while the dropdown offered "Google (free, shared)",
+            // which is an instruction to select something that is not there.
+            // test/pluginNamesLiveControls.test.ts checks this exact sentence
+            // against the live PROVIDER_OPTIONS.
             reason:
                 `${provider.label} needs ${noun} of your own before it can translate. ` +
-                "Add it under Settings → Plugins → ChannelTranslator, or switch Provider back to Google (free)."
+                "Add it under Settings → Plugins → ChannelTranslator, or switch Provider back " +
+                "to Google (free, shared)."
         };
     }
 

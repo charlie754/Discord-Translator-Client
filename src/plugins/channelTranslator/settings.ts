@@ -78,10 +78,35 @@ export const TARGET_LANGUAGES: Array<{ value: string; label: string; default?: b
  * "improved": "Google (free, shared)" and "Google Free API". They replace
  * "Google (free)" and "Google Apps Script (your own free proxy)". Only the UI
  * copy moved — the ids below are untouched, so nothing a user has on disk, and
- * nothing core/providers/registry.ts is keyed by, changed with them. The
- * registry's own `label` fields (core/providers/google.ts, appsScript.ts) still
- * carry the old engineering names and are deliberately left alone: they name the
- * transport in developer-facing refusal text, not the choice on a dropdown.
+ * nothing core/providers/registry.ts is keyed by, changed with them.
+ *
+ * 🔴 THIS BLOCK USED TO CALL BOTH REGISTRY `label` FIELDS DEVELOPER-FACING, AND
+ * ONE OF THEM WAS NOT. It said they "name the transport in developer-facing
+ * refusal text, not the choice on a dropdown", and both were left at their old
+ * names on that reasoning. Traced instead of assumed:
+ * `TranslationProvider.label` has exactly ONE reader in this codebase — the
+ * refusal resolveProvider() builds in core/providers/registry.ts — and that
+ * string is put in front of the user by state.ts (warnProviderUnavailable, and
+ * the settings tab's Save status via validateAppsScriptUrl) and by
+ * selection.ts's popover. So the claim was true of one label and false of the
+ * other:
+ *
+ *   - core/providers/appsScript.ts's label IS user-facing. That provider
+ *     declares `needsKey`, so the refusal fires the moment it is selected with
+ *     no URL saved — the commonest first-run state there is — and it was
+ *     showing the retired dropdown name to the user. It now carries the live
+ *     one, and test/pluginNamesLiveControls.test.ts pins it to this array.
+ *   - core/providers/google.ts's label "Google (free)" is genuinely
+ *     unreachable: `needsKey` is false there, so resolveProvider() never takes
+ *     the branch that reads it, and nothing else reads `.label` at all. It
+ *     stays as the engineering name, and the same test fails if it ever
+ *     becomes reachable.
+ *
+ * Neither of those files may import this one — nothing under core/ may, which
+ * is what test/core-isolation.test.ts enforces — so the strings under core/ are
+ * the ONLY copies of these names allowed to be hand-written anywhere, and that
+ * test is what holds them to it. Every module that CAN import this one derives
+ * its wording from providerName() below instead of spelling a name again.
  *
  * WHY THE FIRST NAME IS NO LONGER "Google Default Public Key". It named a key
  * that does not exist. That entry posts the message to the shared public
@@ -127,6 +152,28 @@ export const PROVIDER_OPTIONS: Array<{ value: string; label: string; default?: b
  */
 export const DEFAULT_PROVIDER_ID: string =
     PROVIDER_OPTIONS.find(option => option.default)?.value ?? PROVIDER_OPTIONS[0].value;
+
+/**
+ * A provider's name AS THE DROPDOWN SPELLS IT, by id.
+ *
+ * 🔴 THE ONE SPELLING. Every sentence this plugin puts in front of a user that
+ * names a provider calls this rather than typing the name again — the copy in
+ * this file, the first-run notice in index.tsx, and the settings tab's own row.
+ * That is not tidiness. Hand-copying was the defect: PROVIDER_OPTIONS was
+ * reworded and six shipped strings went on naming controls the dropdown no
+ * longer had, so the product told users to look for entries it does not show.
+ * A rename now reaches every one of them by construction, and
+ * test/pluginNamesLiveControls.test.ts fails on any that stops deriving.
+ *
+ * FALLS BACK TO THE BARE ID rather than throwing, the same way provider.ts's
+ * migration notice does: this is called while building a sentence, and a
+ * settings screen that fails to render because a label lookup missed is worse
+ * than one that says "google". An id with no dropdown entry is a bug the test
+ * above reports; it is not a reason to take the UI down at runtime.
+ */
+export function providerName(id: string): string {
+    return PROVIDER_OPTIONS.find(option => option.value === id)?.label ?? id;
+}
 
 /**
  * The setup guide, under the name the extension package carries it as.
@@ -573,22 +620,28 @@ function CredentialsSection() {
         "section",
         { style: { marginBottom: 16 } },
         React.createElement(Heading, { tag: "h5" }, "Your own provider credentials"),
+        // BOTH PARAGRAPHS NAME THE DROPDOWN ENTRIES THROUGH providerName(), never
+        // by spelling them again. They used to say "Google Apps Script" and
+        // "Google (free)" — the names those entries had before the dropdown was
+        // reworded — so this section sent the reader looking for two choices the
+        // control above it does not offer.
         React.createElement(
             Paragraph,
             null,
             "One setting below, and it belongs to the one provider that needs something of yours: " +
-            "Google Apps Script. It is read only when you have picked that provider, is stored " +
-            "locally in this client's own settings, is sent only to script.google.com, and is " +
-            "never shared with anyone — this app ships no key, no URL and no account of its own."
+            `${providerName("apps-script")}. It is read only when you have picked that provider, ` +
+            "is stored locally in this client's own settings, is sent only to script.google.com, " +
+            "and is never shared with anyone — this app ships no key, no URL and no account of " +
+            "its own."
         ),
         React.createElement(
             Paragraph,
             null,
-            "Both options are free and neither can bill you. Google (free) needs nothing at all. " +
-            "Google Apps Script is a small proxy you deploy once into your own Google account, " +
-            "with no API key and no card on file — its daily allowance is yours rather than " +
-            "shared with everyone using the free endpoint. It is more setup than picking the " +
-            "default, which is what the guide is for."
+            `Both options are free and neither can bill you. ${providerName("google")} needs ` +
+            `nothing at all. ${providerName("apps-script")} is a small Google Apps Script proxy ` +
+            "you deploy once into your own Google account, with no API key and no card on file — " +
+            "its daily allowance is yours rather than shared with everyone using the free " +
+            "endpoint. It is more setup than picking the default, which is what the guide is for."
         ),
         // No target, no button. A control whose only outcome is a failure is
         // worse than the sentence that replaces it.
@@ -626,23 +679,29 @@ export const settings = definePluginSettings({
     provider: {
         type: OptionType.SELECT,
         description:
-            // The two names below are the two labels in PROVIDER_OPTIONS, spelled the
-            // same way here so this paragraph describes the entries the dropdown
-            // above it actually shows. Each also carries the engineering name it
-            // used to be listed under, because that is still what the setup guide,
-            // Google's own console and this plugin's refusal messages call it — a
-            // reader who arrived from any of those has to be able to tell which
-            // entry is which.
+            // THE TWO NAMES BELOW ARE READ OUT OF PROVIDER_OPTIONS, NOT SPELLED AGAIN.
+            // They used to be typed here, "spelled the same way" as the array by
+            // hand — which is exactly how this paragraph came to describe entries
+            // the dropdown does not show. providerName() makes the description and
+            // the options it belongs to one fact.
+            //
+            // ONE OLD NAME IS STILL WRITTEN OUT, DELIBERATELY: "Google (free)",
+            // as a name this entry USED to be listed under. That is a historical
+            // fact about earlier builds, so there is nothing live to derive it
+            // from, and a reader who arrived from an older screenshot, the setup
+            // guide or a refusal message has to be able to tell which entry is
+            // which.
             "Translation provider. Both are free and neither can bill you — the two paid " +
             "options that used to be here, DeepL and Google Cloud Translation, have been " +
-            "removed. Google (free, shared), listed as Google (free) in earlier builds, is " +
+            `removed. ${providerName("google")}, listed as Google (free) in earlier builds, is ` +
             "Google's unofficial gtx endpoint: no key of any kind, no signup, no " +
             "guarantee, and the allowance is shared with everyone else using it — which is why " +
-            "it can rate-limit you. Google Free API is a Google Apps Script " +
+            `it can rate-limit you. ${providerName("apps-script")} is a Google Apps Script ` +
             "proxy you deploy once " +
             "into your own Google account — still no key and no card, but the daily allowance is " +
-            "yours rather than shared with everyone else using the free endpoint. Pick Apps " +
-            "Script and you must fill in its Web App URL in the credentials section below.",
+            "yours rather than shared with everyone else using the free endpoint. Pick " +
+            `${providerName("apps-script")} and you must fill in its Web App URL in the ` +
+            "credentials section below.",
         options: PROVIDER_OPTIONS
     },
     // The credential setting below is a section, not a loose box. The component
@@ -663,7 +722,11 @@ export const settings = definePluginSettings({
             "box takes whichever one you have. A Google Workspace account must use the URL " +
             "either way, because its address carries the organisation's domain and that cannot " +
             "be recovered from the ID on its own. Read " +
-            "only when Provider is Google Apps Script, and deployed with " +
+            // The dropdown entry, by its live name. "Provider is Google Apps
+            // Script" was an instruction to look for a value that entry no
+            // longer carries — the same defect as the two names above, one
+            // sentence further down.
+            `only when Provider is ${providerName("apps-script")}, and deployed with ` +
             "\"Execute as: Me\" and \"Who has access: Anyone\". There is no API key and no card: a " +
             "consumer Google account allows about 5,000 translation calls a day, and going past " +
             "that fails the request rather than charging you, because Apps Script has no billing " +
@@ -705,12 +768,27 @@ export const settings = definePluginSettings({
         default: false,
         hidden: true
     },
-    serverState: {
-        type: OptionType.STRING,
-        description: "Which servers have translation on (managed by the panel)",
-        default: "[]",
-        hidden: true
-    },
+    /*
+     * `serverState` USED TO BE DECLARED HERE and is deliberately not any more.
+     *
+     * It held a JSON array of the guild ids with translation switched on, written
+     * by persist() and read back by hydrate(). Operator ruling 2026-08-29:
+     * "Default off shall persist across restart" — so the on/off decision is now
+     * per session and lives only in the in-memory ToggleState. Both the read and
+     * the write are gone from state.ts; this declaration went with them, because
+     * a hidden setting nothing reads or writes is an invitation to wire it back up.
+     *
+     * WHAT HAPPENS TO THE VALUE ALREADY IN AN EXISTING USER'S CONFIG. Nothing, and
+     * nothing needs to. The saved settings file is a plain object; a key with no
+     * matching declaration is simply never read — definePluginSettings only ever
+     * reaches for the ids it declares, and the plugin cog renders from the same
+     * declarations, so a leftover `"serverState": "[\"123…\"]"` is inert rather
+     * than an error. It is not migrated or deleted either: removing it would mean
+     * writing a migration whose only effect is to make a file marginally tidier,
+     * and this setting was `hidden: true`, so nobody ever sees it. The practical
+     * consequence for such a user is exactly the intended one — the servers they
+     * had on last session start off.
+     */
     cacheBlob: {
         type: OptionType.STRING,
         description: "Persisted translation cache (managed automatically)",

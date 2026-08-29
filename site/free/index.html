@@ -262,6 +262,35 @@ code,kbd{
 .valrow code{background:none;padding:0;font-size:.95rem;font-weight:650;flex:1 1 auto;min-width:0;}
 .valrow .copy{padding:6px 11px;font-size:.8rem;}
 
+/* ---------- a drawing of the plugin's own endpoint box ----------
+ * Not a screenshot and not a control: a picture of an empty text field, so a
+ * reader who has just copied a value can recognise where it goes.
+ *
+ * IT IS NOT AN <input>, DELIBERATELY. A real input here would be reachable by
+ * Tab, focusable, and typeable into — a box on a tutorial page that silently
+ * swallows the credential the reader has on their clipboard, saves nothing and
+ * tells nobody. The wrapper carries role="img" with the hint text in its
+ * aria-label, which is the HTML equivalent of the <title>/<desc> the wireframe
+ * SVGs above use, and the span itself is aria-hidden so the text is announced
+ * once rather than twice.
+ *
+ * COLOURS COME FROM THE PAGE'S OWN TOKENS rather than from Discord's palette,
+ * so this reads as a dark rounded field in dark mode and a light one in light
+ * mode, exactly like .valrow directly above it. A permanently-dark box would
+ * match one Discord theme and look like a rendering fault in a light page. */
+.fieldshot{margin:0 0 12px;}
+.fieldshot figcaption{font-size:.79rem;color:var(--muted);margin:0 0 6px;}
+.fieldshot-box{
+  background:var(--code-bg);
+  border:1px solid var(--border-strong);border-radius:8px;
+  padding:10px 12px;min-height:40px;
+  display:flex;align-items:center;
+}
+.fieldshot-ph{
+  color:var(--muted);font-size:.92rem;line-height:1.35;
+  overflow-wrap:anywhere;
+}
+
 /* ---------- details ---------- */
 details{
   border:1px solid var(--border);border-radius:10px;
@@ -864,9 +893,31 @@ function json(obj) {
   </div>
   <div class="act">
     <p>Two settings, both inside Discord:</p>
+    <!--
+      data-ui MARKS EVERY NAME BELOW THAT IS COPIED OFF A CONTROL IN THE PLUGIN,
+      and it is not decoration: this file is shipped HTML and nothing recompiles
+      it, so a rename in the TypeScript leaves these two lines telling the reader
+      to look for a menu entry that no longer exists. That is exactly what
+      happened here — the dropdown entry was renamed to "Google Free API" and the
+      settings section to "Setup Google Key", and this list went on naming
+      "Google Apps Script (your own free proxy)" and "Apps Script proxy" for as
+      long as nobody re-read it.
+
+      test/guideNamesLiveControls.test.ts reads each marked span out of this file
+      and looks the text up in the code that renders it — PROVIDER_OPTIONS for a
+      provider-label, the settings tab's own <Heading> elements for a
+      settings-heading, and so on. A rename now fails a test instead of
+      misdirecting a reader.
+
+      SO: any name you write here that a user has to FIND ON SCREEN gets a marker.
+      Names belonging to Google's own console (Deploy, Who has access, Anyone)
+      must NOT be marked — nothing in this repository renders them, so there is
+      nothing to check them against. Adding an unknown data-ui value fails the
+      test rather than being ignored.
+    -->
     <ol>
-      <li>In <strong>Settings &rarr; Plugins &rarr; ChannelTranslator &rarr; the cog</strong>, set the translation provider to <strong>Google Apps Script (your own free proxy)</strong>.</li>
-      <li>In <strong>Settings &rarr; Discord Translator</strong>, find the <strong>Apps Script proxy</strong> section, paste the <strong>Deployment ID</strong> you copied in step 5, and press <strong>Save</strong>. That box takes either form &mdash; the ID or the whole Web app URL &mdash; and expands an ID into the full URL for you. Save also tries it for real against your own deployment, so a bad paste is caught here rather than at your first message.</li>
+      <li>In <strong>Settings &rarr; <span data-ui="settings-tab">Plugins</span> &rarr; <span data-ui="plugin-name">ChannelTranslator</span> &rarr; the cog</strong>, set the translation provider to <strong data-ui="provider-label">Google Free API</strong>.</li>
+      <li>In <strong>Settings &rarr; <span data-ui="settings-tab">Discord Translator</span></strong>, find the <strong data-ui="settings-heading">Setup Google Key</strong> section, paste the <strong>Deployment ID</strong> you copied in step 5, and press <strong data-ui="settings-button">Save</strong>. That box takes either form &mdash; the ID or the whole Web app URL &mdash; and expands an ID into the full URL for you. Save also tries it for real against your own deployment, so a bad paste is caught here rather than at your first message.</li>
     </ol>
     <p class="note">The plugin cog has a box for the same value, and it takes either form too &mdash; both boxes ask the same question of the same checker. Whichever one you fill in, the other shows what you saved.</p>
     <p>Then translate one message. A reply comes back in a second or two.</p>
@@ -877,6 +928,12 @@ function json(obj) {
     <div class="valrow">
       <code>https://script.google.com/macros/s/AKfycb.../exec</code>
     </div>
+    <figure class="fieldshot">
+      <figcaption>This is the box in the plugin, before you paste anything. The grey line is a hint, not a value &mdash; it disappears as soon as you type.</figcaption>
+      <div class="fieldshot-box" role="img" aria-label="A drawing of the plugin's endpoint box, empty, showing the grey hint text: &quot;AKfycb&hellip; (Deployment ID) or https://script.google.com/macros/s/&hellip;/exec&quot;">
+        <span class="fieldshot-ph" aria-hidden="true">AKfycb&hellip; (Deployment ID) or https://script.google.com/macros/s/&hellip;/exec</span>
+      </div>
+    </figure>
   </div>
   <details>
     <summary>Checking it by hand before you trust it</summary>

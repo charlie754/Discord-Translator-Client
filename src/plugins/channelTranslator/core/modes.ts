@@ -65,6 +65,26 @@ export class ToggleState {
         return state;
     }
 
+    /**
+     * Forget every server, leaving the object as newly constructed.
+     *
+     * THE DEFECT THIS CLOSES. state.ts's hydrate() stopped RESTORING the toggle,
+     * but "stopped restoring" is not "starts empty": this object is a module-level
+     * singleton, so it outlives a start()/stop() pair. Calling stopPlugin() and
+     * then startPlugin() on the already-loaded plugin — which the plugin list does,
+     * and which never reloads the module — left the previous run's switched-on
+     * servers switched on, and translation resumed on a server the user had not
+     * enabled since the plugin was turned back on. Only a whole-client restart
+     * genuinely emptied it, so "OFF at every start" was true of one of the two
+     * routes into start().
+     *
+     * hydrate() calls this, which makes being ON a per-START decision by every
+     * route rather than a per-PROCESS one.
+     */
+    clear(): void {
+        this.servers.clear();
+    }
+
     /** Repopulate from persisted JSON. Used to hydrate after plugin start. */
     loadFrom(json: string): void {
         this.servers.clear();
@@ -76,6 +96,50 @@ export class ToggleState {
     serverIds(): IterableIterator<string> {
         return this.servers.values();
     }
+}
+
+/**
+ * WHAT THE PANEL'S SWITCH SHOWS — which is not always what the user chose.
+ *
+ * THE DEFECT THIS CLOSES. In the `unavailable` state the panel says three
+ * things at once, and one of them used to be a lie: the pill reads "Discord
+ * updated", the footer reads "Discord changed. Translation is paused;
+ * double-click still works." — and the switch stayed GREEN and
+ * `aria-checked="true"`, because it rendered `toggle.isOn(guildId)` directly.
+ * Nothing is being translated in that state; `.track[aria-checked="true"]` is
+ * the only thing that paints the track with the accent colour and slides the
+ * thumb across (panel/styles.ts), so the one control on the panel was
+ * announcing "on" to sighted users and to a screen reader while the two
+ * sentences beside it said translation had stopped.
+ *
+ * COSMETIC, AND DELIBERATELY ONLY COSMETIC. This does NOT clear the toggle and
+ * must never be made to. The session's choice outlives the outage, so when
+ * Discord is patched and `patchesOk()` goes true again the user's servers come
+ * back on by themselves, in the same sitting, with nothing to re-do. A "fix"
+ * that called `setOn(guildId, false)` here would make a transient outage
+ * silently forget every server the user had enabled — a far worse defect than
+ * the one being fixed, and invisible until the outage ended. `toggle` is taken
+ * by value and only read; nothing in this function can write to it.
+ *
+ * (The choice is per START, not per install: state.ts's hydrate() clears the
+ * toggle — see clear() above — so nothing carries across a restart OR across a
+ * stop/start of the plugin on its own. That is a separate decision and this
+ * function is indifferent to it: it never touches storage or the toggle either
+ * way, which is why the outage above can be survived while a start cannot.)
+ *
+ * A pure function over explicit arguments, in core/, for the reason recorded on
+ * translationEnabled() above: Panel.tsx imports @webpack/common and cannot be
+ * loaded by this suite at all, so core/ is the only layer where the decision can
+ * be pinned as BEHAVIOUR rather than as a string search over JSX — see
+ * test/modes.test.ts.
+ */
+export function toggleShowsOn(
+    toggle: ToggleState,
+    guildId: string | null,
+    state: PanelState
+): boolean {
+    if (state === "unavailable") return false;
+    return toggle.isOn(guildId);
 }
 
 /**
@@ -171,6 +235,55 @@ export function selectionGate(
             ? SELECTION_REFUSAL.directMessage
             : SELECTION_REFUSAL.serverOff
     };
+}
+
+/**
+ * THE PANEL'S FOOTER IN THE `unavailable` STATE, WHICH IS NOT ONE SENTENCE.
+ *
+ * THE DEFECT THIS CLOSES. The footer rendered one fixed line — "Discord changed.
+ * Translation is paused; double-click still works." — for every user in that
+ * state. The second half is a promise about the double-click path, and that path
+ * is governed by selectionGate(), which refuses with SELECTION_REFUSAL.serverOff
+ * whenever the per-server toggle is off. So a user whose server was never
+ * switched on was told a manual route still worked, tried it, and was refused —
+ * and could not repair it either, because Panel.tsx disables the switch while the
+ * state is `unavailable`. The panel named the one control that would have fixed
+ * it and then withheld it.
+ *
+ * DERIVED FROM selectionGate() RATHER THAN FROM toggle.isOn(). The claim the
+ * sentence makes is exactly "would the double-click path allow this?", so it is
+ * answered by the function that decides it. A second copy of the condition here
+ * would be a copy that can disagree with the path it describes — which is the
+ * defect being fixed, one layer down. It is also why DMs come out right for free:
+ * the gate already reads `includeDMs` for a null guild id.
+ *
+ * THE OFF WORDING PROMISES NOTHING. It says what is true (paused, and this server
+ * was never switched on) and then says the switch is unavailable, rather than
+ * pointing at a control that will refuse. Telling the user to "turn it on from
+ * the panel" here would be the same lie in a new place.
+ *
+ * A pure function over explicit arguments, in core/, for the reason recorded on
+ * toggleShowsOn() above: Panel.tsx imports @webpack/common and cannot be loaded
+ * by this suite at all, so core/ is the only layer where the wording can be
+ * pinned as BEHAVIOUR — see test/panelUnavailableToggle.test.ts.
+ */
+export const UNAVAILABLE_FOOTER = {
+    doubleClickWorks:
+        "Discord changed. Translation is paused; double-click still works.",
+    serverOff:
+        "Discord changed. Translation is paused, and this server was not switched on, " +
+        "so double-click will not translate it either. The switch is unavailable until " +
+        "translation works again."
+} as const;
+
+export function unavailableFooter(
+    toggle: ToggleState,
+    guildId: string | null,
+    includeDMs: boolean | undefined
+): string {
+    return selectionGate(toggle, { guildId }, includeDMs).allowed
+        ? UNAVAILABLE_FOOTER.doubleClickWorks
+        : UNAVAILABLE_FOOTER.serverOff;
 }
 
 export interface SelectionContext {

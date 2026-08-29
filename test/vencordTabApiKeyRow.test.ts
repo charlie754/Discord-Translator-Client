@@ -298,7 +298,7 @@ describe("Discord Translator tab: the credential row and the plugin share one se
         }
     });
 
-    it("the row shows its value in clear, and its heading names the provider unambiguously", () => {
+    it("the row shows its value in clear, and names its section with one name only", () => {
         const src = read(TAB_PATH);
         const code = codeOf(src);
 
@@ -336,15 +336,37 @@ describe("Discord Translator tab: the credential row and the plugin share one se
             "that is what a browser password manager autofills"
         ).toBe(false);
 
-        // CODE DIRECTION. The heading has to NAME the provider on screen. A
-        // whole-file scan would be satisfied by the comment above the component,
-        // which discusses the Apps Script proxy at length — so this asserts on
-        // rendered text, where it means something.
+        // CODE DIRECTION, AND ITS SUBJECT HAS MOVED TWICE. It was written about
+        // the HEADING, which read "Apps Script proxy — the free option, deployed
+        // to your own Google account": the heading had to NAME the provider on
+        // screen, and a whole-file scan would have been satisfied by the comment
+        // above the component, which discusses the Apps Script proxy at length —
+        // hence a scan of rendered text.
+        //
+        // 2026-08-29, first move: the heading became "Setup Google Key" by
+        // operator instruction, and this assertion was kept alive by the input's
+        // aria-label, which still said "Apps Script proxy Deployment ID or Web
+        // App URL".
+        //
+        // 🔴 SECOND MOVE, AND IT REVERSES THE ASSERTION. Keeping the retired name
+        // in the accessible name was not a consolation, it was the defect: a
+        // sighted user read "Setup Google Key" and a screen-reader user was told
+        // "Apps Script proxy", so one control had two names and the one only
+        // blind users heard named a section that no longer exists. The
+        // accessible name is now derived from the heading, so what is required
+        // here is the OPPOSITE — the retired name must be gone from everything
+        // this file renders, accessible names included.
+        //
+        // The property this used to protect — that the row says which credential
+        // it edits — did not go with it. It moved to
+        // test/appsScriptRowSaveReset.test.ts, which requires the accessible name
+        // to contain the heading AND to name both accepted forms.
         expect(
             code,
-            'nothing rendered names the "Apps Script proxy" — the row would not say ' +
-            "which of the three credentials it edits"
-        ).toContain("Apps Script proxy");
+            'the retired section name "Apps Script proxy" is rendered again — a sighted user ' +
+            "reads the heading, so an accessible name that says anything else gives one " +
+            "control two names"
+        ).not.toContain("Apps Script proxy");
 
         // ABSENCE DIRECTION — WHOLE FILE. The row is no longer the paid key's,
         // so its old heading must be gone everywhere: a screen that names a

@@ -470,6 +470,32 @@ describe("Provider — exactly two choices, in the operator's own words", () => 
     });
 });
 
+/**
+ * The setup guide's source. The desktop build bundles this file verbatim as
+ * guide.html and the extension packages it beside guide.js, so the copy checked
+ * here is the copy that ships.
+ */
+const GUIDE_PATH = join(process.cwd(), "site", "free", "index.html");
+
+/**
+ * The named entities this guide actually uses, decoded.
+ *
+ * A SMALL TABLE RATHER THAN A LIBRARY, and unknown names are left alone rather
+ * than dropped: an entity nobody decoded is visible in a failure message as
+ * `&something;`, which says what went wrong, where silently deleting it would
+ * make two different strings compare equal.
+ */
+const GUIDE_ENTITIES: Record<string, string> = {
+    amp: "&", lt: "<", gt: ">", quot: "\"", apos: "'", nbsp: " ",
+    mdash: "—", ndash: "–", rarr: "→", hellip: "…", lsquo: "‘", rsquo: "’"
+};
+
+function decodeEntities(text: string): string {
+    return text
+        .replace(/&#(\d+);/g, (_whole, digits: string) => String.fromCodePoint(Number(digits)))
+        .replace(/&([a-zA-Z][a-zA-Z0-9]*);/g, (whole, name: string) => GUIDE_ENTITIES[name] ?? whole);
+}
+
 describe("the endpoint box — and its grey hint", () => {
     it("the window renders exactly one text box", () => {
         expect(nodesOfType(renderEndpointModal().tree!, "TextInput")).toHaveLength(1);
@@ -497,6 +523,65 @@ describe("the endpoint box — and its grey hint", () => {
         expect(REAL.appsScriptUrlProblem(
             "https://script.google.com/macros/s/AKfycbwFakeDeploymentIdLongEnough/exec"
         )).toBeNull();
+    });
+
+    /**
+     * THE SETUP GUIDE NOW DRAWS THIS BOX, AND THE DRAWING HAS TO BE OF THIS BOX.
+     *
+     * Step 6 of site/free/index.html ends with a picture of an empty endpoint
+     * field showing this exact hint, added 2026-08-29 so a reader who has just
+     * copied a Deployment ID can recognise where it goes. It is HTML and CSS, not
+     * a screenshot, which is the only reason it can be checked here at all — and
+     * the only reason it can silently drift, because nothing recompiles it.
+     *
+     * READ OUT OF THE RENDERED PROP, NOT OUT OF A LITERAL. The placeholder is
+     * taken from the component this suite actually renders, so a rename or a
+     * reword in EndpointModal.tsx fails here rather than leaving a guide that
+     * shows a hint the plugin no longer displays. A user comparing a screen
+     * against a tutorial that shows different text concludes they are in the
+     * wrong place.
+     *
+     * ENTITIES ARE DECODED FIRST. The guide writes its non-ASCII punctuation as
+     * named entities (`&hellip;` six times, `&mdash;` sixty-seven), so a raw
+     * substring search finds nothing and would report a perfectly good figure as
+     * missing. What is compared is what the reader SEES.
+     */
+    it("the setup guide's picture of this box shows exactly this placeholder", () => {
+        const placeholder: string = only(renderEndpointModal().tree!, "TextInput").props!.placeholder;
+        const guide = readFileSync(GUIDE_PATH, "utf8");
+
+        const span = /<span class="fieldshot-ph" aria-hidden="true">([^<]*)<\/span>/.exec(guide);
+        expect(span, "the guide no longer draws the endpoint box at all").not.toBeNull();
+        expect(
+            decodeEntities(span![1]),
+            "the guide's drawing of this box shows different hint text than the box does"
+        ).toBe(placeholder);
+    });
+
+    it("that drawing is a picture, not a second credential box (accessibility)", () => {
+        // A real <input> on a tutorial page is a box that swallows the value the
+        // reader has on their clipboard, saves nothing and tells nobody. The
+        // figure is a div with role="img", the same way the wireframes above it
+        // are <svg role="img">, and the hint is carried in its accessible name
+        // so a screen-reader user is told what the box says.
+        const guide = readFileSync(GUIDE_PATH, "utf8");
+        const start = guide.indexOf('<figure class="fieldshot">');
+        expect(start, "the figure is gone").toBeGreaterThan(-1);
+        const figure = guide.slice(start, guide.indexOf("</figure>", start));
+
+        expect(figure, "the guide grew a real, focusable input").not.toContain("<input");
+        expect(figure, "the picture was made keyboard-reachable").not.toContain("tabindex");
+        expect(figure).toContain('role="img"');
+
+        const aria = /aria-label="([^"]*)"/.exec(figure);
+        expect(aria, "the picture has no accessible name — it is silent to a screen reader")
+            .not.toBeNull();
+        const placeholder: string = only(renderEndpointModal().tree!, "TextInput").props!.placeholder;
+        expect(
+            decodeEntities(aria![1]),
+            "the accessible name does not carry the hint text, so the figure says nothing " +
+            "to anyone who cannot see it"
+        ).toContain(placeholder);
     });
 
     it("it is a plain text field and never a password field", () => {

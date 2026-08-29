@@ -146,18 +146,21 @@ const STUBS: Readonly<Record<string, string>> = {
         "    load: () => globalThis.__TRANSLATOR_TEST_STORE__.usageBlob," +
         "    save: (json) => { globalThis.__TRANSLATOR_TEST_STORE__.usageBlob = json; }" +
         "});" +
-        // PROVIDER_OPTIONS and DEFAULT_PROVIDER_ID are here only because
-        // provider.ts — which state.ts imports — now names them, and esbuild
-        // fails the bundle on an import a stub does not export. Nothing in THIS
-        // suite reads either value: they feed migrateUnavailableProvider(),
-        // which this file never calls. Their real definitions live in
-        // settings.ts and are pinned, against the real file, by
-        // test/providerMigration.test.ts.
+        // PROVIDER_OPTIONS, DEFAULT_PROVIDER_ID and providerName are here only
+        // because provider.ts — which state.ts imports — now names them, and
+        // esbuild fails the bundle on an import a stub does not export. Nothing
+        // in THIS suite reads any of them: they feed
+        // migrateUnavailableProvider(), which this file never calls. Their real
+        // definitions live in settings.ts and are pinned, against the real file,
+        // by test/providerMigration.test.ts and
+        // test/pluginNamesLiveControls.test.ts.
         "export const PROVIDER_OPTIONS = [" +
         "    { label: \"Google (free, shared)\", value: \"google\", default: true }," +
         "    { label: \"Google Free API\", value: \"apps-script\" }" +
         "];" +
-        "export const DEFAULT_PROVIDER_ID = \"google\";"
+        "export const DEFAULT_PROVIDER_ID = \"google\";" +
+        "export const providerName = id =>" +
+        "    (PROVIDER_OPTIONS.find(o => o.value === id) || {}).label || id;"
 };
 
 type StateModule = {

@@ -338,8 +338,44 @@ export function guildIdOf(channelId: string | undefined): string | null {
  * not just this one.
  */
 export function hydrate(): void {
+    /*
+     * TRANSLATION IS OFF AT EVERY START, AND THAT IS THE POINT.
+     *
+     * `toggle.loadFrom(settings.store.serverState)` used to sit on this line. It
+     * carried the previous session's switched-on servers across a restart, so a
+     * user who left one server on in April was still translating it — and still
+     * sending its messages to a provider — the next time Discord opened, without
+     * having asked for anything this session. Operator ruling 2026-08-29:
+     * "Default off shall persist across restart." Being ON is now a deliberate,
+     * per-session act: the user opens the panel and flips the switch.
+     *
+     * WHY THIS CLEARS RATHER THAN MERELY DECLINING TO LOAD. Deleting the load was
+     * the whole mechanism only for the route that reloads this module, i.e. a
+     * client restart, where `toggle` is a brand-new empty ToggleState anyway.
+     * `toggle` is a module-level singleton, so the OTHER route into start() —
+     * stopPlugin() then startPlugin() on the already-loaded plugin, which is what
+     * the plugin list's own switch does — reaches this function with the previous
+     * run's servers still in it, and nothing here used to take them out. The
+     * plugin came back up already translating a server nobody had switched on
+     * since it was turned back on, and the comments above claimed "off at every
+     * start" while it happened. `clear()` closes that: the toggle is emptied by
+     * every route through start(), not by whichever one happens to rebuild the
+     * module. See test/toggleDoesNotSurviveRestart.test.ts, which now pins the two
+     * routes separately.
+     *
+     * IT MUST STAY THE FIRST STATEMENT. Anything that puts servers INTO the toggle
+     * during hydration has to run after the wipe, or the wipe silently undoes it.
+     *
+     * `toggle` stays purely in memory either way: persist() below no longer writes
+     * the counterpart, and settings.ts no longer declares `serverState` at all.
+     *
+     * THE CACHE IS DELIBERATELY NOT AFFECTED. cache.loadFrom() below still runs:
+     * a translation already paid for is still worth keeping across a restart, and
+     * it reveals nothing and sends nothing on its own. Only the on/off decision
+     * stopped persisting.
+     */
+    toggle.clear();
     cache.loadFrom(settings.store.cacheBlob);
-    toggle.loadFrom(settings.store.serverState);
     // Establish the provider baseline HERE rather than letting the first
     // translation of the session do it, so that the first sync is a baseline and
     // not a spurious "the provider changed" that clears an empty registry for no
@@ -381,9 +417,25 @@ export function entryForMessage(messageId: string) {
     return cache.get(hash, settings.store.targetLanguage);
 }
 
+/*
+ * The translation cache, and nothing else.
+ *
+ * `settings.store.serverState = toggle.serialise();` used to be the second line
+ * here. It is gone with the load in hydrate() above — a write nothing reads is
+ * not "harmless persistence", it is a stored value that the next reader will
+ * reasonably assume is honoured, and the next reader is how "off at start"
+ * quietly stops being true.
+ *
+ * THE PANEL USED TO REPAINT AS A SIDE EFFECT OF THAT WRITE, and this is the part
+ * that is easy to miss. Panel.tsx subscribes with
+ * `settings.use([... "serverState"])`, so writing the setting was what forced the
+ * switch to re-render after a click. With the write gone the panel forces its own
+ * re-render instead — see flip() in panel/Panel.tsx. Deleting the write without
+ * that would have left the switch visually frozen until something else happened
+ * to repaint the panel.
+ */
 export function persist(): void {
     settings.store.cacheBlob = cache.serialise();
-    settings.store.serverState = toggle.serialise();
 }
 
 export function requestTranslation(message: any): void {
