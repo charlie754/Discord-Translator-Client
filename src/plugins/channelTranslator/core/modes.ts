@@ -98,49 +98,49 @@ export class ToggleState {
     }
 }
 
-/**
- * WHAT THE PANEL'S SWITCH SHOWS — which is not always what the user chose.
+/*
+ * THERE IS NO toggleShowsOn() ANY MORE, AND ITS ABSENCE IS THE FIX.
  *
- * THE DEFECT THIS CLOSES. In the `unavailable` state the panel says three
- * things at once, and one of them used to be a lie: the pill reads "Discord
- * updated", the footer reads "Discord changed. Translation is paused;
- * double-click still works." — and the switch stayed GREEN and
- * `aria-checked="true"`, because it rendered `toggle.isOn(guildId)` directly.
- * Nothing is being translated in that state; `.track[aria-checked="true"]` is
- * the only thing that paints the track with the accent colour and slides the
- * thumb across (panel/styles.ts), so the one control on the panel was
- * announcing "on" to sighted users and to a screen reader while the two
- * sentences beside it said translation had stopped.
+ * WHAT IT DID. It returned false while the state was `unavailable` whatever the
+ * user had chosen, so the panel's switch rendered OFF for the whole of a patch
+ * outage. It was aimed at a real contradiction — the pill reads "Discord
+ * updated" and the footer says translation is paused, and a GREEN switch beside
+ * them said the opposite — but it answered that contradiction in the wrong
+ * place, and this file's own comment called it "deliberately only cosmetic".
  *
- * COSMETIC, AND DELIBERATELY ONLY COSMETIC. This does NOT clear the toggle and
- * must never be made to. The session's choice outlives the outage, so when
- * Discord is patched and `patchesOk()` goes true again the user's servers come
- * back on by themselves, in the same sitting, with nothing to re-do. A "fix"
- * that called `setOn(guildId, false)` here would make a transient outage
- * silently forget every server the user had enabled — a far worse defect than
- * the one being fixed, and invisible until the outage ended. `toggle` is taken
- * by value and only read; nothing in this function can write to it.
+ * THE DEFECT ITS REMOVAL CLOSES IS A LOCKOUT, not a cosmetic one. Three facts
+ * met: Panel.tsx also carried `disabled={state === "unavailable"}`; the toggle
+ * stopped surviving a start at all (see hydrate() in state.ts, operator ruling
+ * "default off shall persist across restart"); and this function forced the
+ * switch to read off. A user who started the client while Discord was unpatched
+ * therefore had translation off, a switch that read off, and NO WAY TO MOVE IT —
+ * the single control that could turn translation on was the control the outage
+ * disabled. While the on-state still persisted, a server switched on in an
+ * earlier session stayed on and resumed by itself, so the trap only closed when
+ * the two changes met.
  *
- * (The choice is per START, not per install: state.ts's hydrate() clears the
- * toggle — see clear() above — so nothing carries across a restart OR across a
- * stop/start of the plugin on its own. That is a separate decision and this
- * function is indifferent to it: it never touches storage or the toggle either
- * way, which is why the outage above can be survived while a start cannot.)
+ * WHY UNLOCKING IT IS CORRECT AND NOT A WORKAROUND. selectionGate() below does
+ * NOT consult `patchesOk`; only panelState() does, and only to pick the pill's
+ * label. So double-click translation really does work during the outage, for
+ * exactly the servers whose toggle is on — which is what
+ * UNAVAILABLE_FOOTER.doubleClickWorks already promises, and what index.tsx's
+ * 15-second notice promises too. Freezing the switch off blocked the user from
+ * enabling the one path that still worked, and from pre-arming the rendered path
+ * for the moment the patches match again.
  *
- * A pure function over explicit arguments, in core/, for the reason recorded on
- * translationEnabled() above: Panel.tsx imports @webpack/common and cannot be
- * loaded by this suite at all, so core/ is the only layer where the decision can
- * be pinned as BEHAVIOUR rather than as a string search over JSX — see
- * test/modes.test.ts.
+ * SO THE SWITCH IS A PREFERENCE, NOT A STATUS. The pill carries the status and
+ * the footer explains it; the switch says what the user WANTS. Once the control
+ * is operable a display-only override is the worse bug of the two — a click that
+ * switches the server on while the track stays grey is a control lying about its
+ * own state, and flip() writes from `isOn`, so the next click would then appear
+ * to do nothing at all. The two signals no longer disagree in any case:
+ * unavailableFooter() branches on the same toggle the switch now renders, so an
+ * ON switch is shown beside "double-click still works" and an OFF switch beside
+ * the sentence saying this server is not switched on.
+ *
+ * Panel.tsx renders `toggle.isOn(guildId)` directly again. Do not reintroduce a
+ * display-only wrapper here.
  */
-export function toggleShowsOn(
-    toggle: ToggleState,
-    guildId: string | null,
-    state: PanelState
-): boolean {
-    if (state === "unavailable") return false;
-    return toggle.isOn(guildId);
-}
 
 /**
  * THE ONE ANSWER TO "MAY THIS CONVERSATION BE TRANSLATED?" — for the rendered
@@ -245,10 +245,7 @@ export function selectionGate(
  * state. The second half is a promise about the double-click path, and that path
  * is governed by selectionGate(), which refuses with SELECTION_REFUSAL.serverOff
  * whenever the per-server toggle is off. So a user whose server was never
- * switched on was told a manual route still worked, tried it, and was refused —
- * and could not repair it either, because Panel.tsx disables the switch while the
- * state is `unavailable`. The panel named the one control that would have fixed
- * it and then withheld it.
+ * switched on was told a manual route still worked, tried it, and was refused.
  *
  * DERIVED FROM selectionGate() RATHER THAN FROM toggle.isOn(). The claim the
  * sentence makes is exactly "would the double-click path allow this?", so it is
@@ -257,23 +254,31 @@ export function selectionGate(
  * defect being fixed, one layer down. It is also why DMs come out right for free:
  * the gate already reads `includeDMs` for a null guild id.
  *
- * THE OFF WORDING PROMISES NOTHING. It says what is true (paused, and this server
- * was never switched on) and then says the switch is unavailable, rather than
- * pointing at a control that will refuse. Telling the user to "turn it on from
- * the panel" here would be the same lie in a new place.
+ * THE OFF WORDING NOW POINTS AT THE SWITCH, AND THAT IS THE SECOND DEFECT FIXED
+ * HERE. It used to end "The switch is unavailable until translation works
+ * again." — an accurate description of `disabled={state === "unavailable"}` in
+ * Panel.tsx, and a lie the moment that attribute was removed; the note above the
+ * toggle in this file says why it had to go. It was also the only guidance the
+ * panel gave in the one state where the user was locked out, so it told them
+ * their situation was unfixable while a working route existed. The wording
+ * therefore names the control, says what switching it on buys IMMEDIATELY
+ * (double-click, which selectionGate() allows without ever reading
+ * `patchesOk`), and says what it buys LATER (the rendered path, as soon as the
+ * patches match again). It still promises nothing about the state the user is in
+ * at the moment they read it.
  *
  * A pure function over explicit arguments, in core/, for the reason recorded on
- * toggleShowsOn() above: Panel.tsx imports @webpack/common and cannot be loaded
- * by this suite at all, so core/ is the only layer where the wording can be
- * pinned as BEHAVIOUR — see test/panelUnavailableToggle.test.ts.
+ * translationEnabled() above: Panel.tsx imports @webpack/common and cannot be
+ * loaded by this suite at all, so core/ is the only layer where the wording can
+ * be pinned as BEHAVIOUR — see test/panelUnavailableToggle.test.ts.
  */
 export const UNAVAILABLE_FOOTER = {
     doubleClickWorks:
         "Discord changed. Translation is paused; double-click still works.",
     serverOff:
-        "Discord changed. Translation is paused, and this server was not switched on, " +
-        "so double-click will not translate it either. The switch is unavailable until " +
-        "translation works again."
+        "Discord changed. Translation is paused and this server is not switched on; " +
+        "turn it on with the switch above and double-click will translate straight " +
+        "away, with channel translation resuming on its own once Discord is patched."
 } as const;
 
 export function unavailableFooter(
