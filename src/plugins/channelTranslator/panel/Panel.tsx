@@ -7,7 +7,7 @@
 // plugin/panel/Panel.tsx
 import { React, SelectedChannelStore, SelectedGuildStore, useStateFromStores } from "@webpack/common";
 
-import { PanelState } from "../core/modes";
+import { PanelState, toggleShowsOn } from "../core/modes";
 import { patchesOk } from "../patches";
 import { settings } from "../settings";
 import { breakerOpen, pendingCount, persist,repaintChannel, subscribeProgress, toggle } from "../state";
@@ -64,7 +64,18 @@ export function Panel() {
         SelectedChannelStore.getChannelId());
     const guildId = useStateFromStores([SelectedGuildStore], () =>
         SelectedGuildStore.getGuildId());
-    const store = settings.use(["targetLanguage", "mode", "serverState"]);
+    /*
+     * "serverState" USED TO BE THE THIRD PATH IN THIS LIST, and removing it is
+     * not a tidy-up — it is the other half of a behaviour change.
+     *
+     * The plugin no longer persists which servers are on (state.ts's hydrate()
+     * says why: translation is OFF at every start, by operator ruling). So there
+     * is no such setting to subscribe to any more. It mattered here because
+     * writing it was ALSO what re-rendered this component after a click:
+     * flip() called persist(), persist() wrote serverState, and this hook's
+     * listener forced the update. flip() now ticks the panel itself.
+     */
+    const store = settings.use(["targetLanguage", "mode"]);
     const [, forceTick] = React.useState(0);
     React.useEffect(() => subscribeProgress(() => forceTick(n => n + 1)), []);
 
@@ -80,10 +91,34 @@ export function Panel() {
         LANGUAGES.find(l => l.value === store.targetLanguage)?.label
         ?? store.targetLanguage;
     const isOn = toggle.isOn(guildId);
+    /*
+     * WHAT THE SWITCH SHOWS, which is not the same question as what the user
+     * chose. `isOn` above is this session's actual toggle state and stays the
+     * input to flip(); this is only what the track renders. The two differ in exactly
+     * one state — see toggleShowsOn() in ../core/modes, which is where the
+     * decision lives so test/modes.test.ts can exercise it as behaviour.
+     *
+     * DO NOT COLLAPSE THESE BACK INTO ONE. The pill says "Discord updated" and
+     * the footer says translation is paused, and this used to be the third
+     * signal in the same panel saying the opposite.
+     */
+    const switchShowsOn = toggleShowsOn(toggle, guildId, state);
 
     const flip = () => {
         toggle.setOn(guildId, !isOn);
         persist();
+        /*
+         * THE SWITCH REDRAWS BECAUSE OF THIS LINE AND NOTHING ELSE.
+         *
+         * `toggle` is a plain in-memory object — React cannot see it change, and
+         * since the on/off state stopped being persisted there is no settings
+         * write left for settings.use() above to notice either. Without this tick
+         * the track keeps its old colour and its old aria-checked until something
+         * unrelated repaints the panel, which reads as a dead control.
+         *
+         * repaintChannel() below is about the MESSAGES, not this component.
+         */
+        forceTick(n => n + 1);
         repaintChannel(channelId);
     };
 
@@ -110,7 +145,7 @@ export function Panel() {
                 <button
                     className="track"
                     role="switch"
-                    aria-checked={isOn}
+                    aria-checked={switchShowsOn}
                     aria-label="Translate this server"
                     disabled={state === "unavailable"}
                     onClick={flip}

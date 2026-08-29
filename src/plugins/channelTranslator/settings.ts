@@ -705,12 +705,27 @@ export const settings = definePluginSettings({
         default: false,
         hidden: true
     },
-    serverState: {
-        type: OptionType.STRING,
-        description: "Which servers have translation on (managed by the panel)",
-        default: "[]",
-        hidden: true
-    },
+    /*
+     * `serverState` USED TO BE DECLARED HERE and is deliberately not any more.
+     *
+     * It held a JSON array of the guild ids with translation switched on, written
+     * by persist() and read back by hydrate(). Operator ruling 2026-08-29:
+     * "Default off shall persist across restart" — so the on/off decision is now
+     * per session and lives only in the in-memory ToggleState. Both the read and
+     * the write are gone from state.ts; this declaration went with them, because
+     * a hidden setting nothing reads or writes is an invitation to wire it back up.
+     *
+     * WHAT HAPPENS TO THE VALUE ALREADY IN AN EXISTING USER'S CONFIG. Nothing, and
+     * nothing needs to. The saved settings file is a plain object; a key with no
+     * matching declaration is simply never read — definePluginSettings only ever
+     * reaches for the ids it declares, and the plugin cog renders from the same
+     * declarations, so a leftover `"serverState": "[\"123…\"]"` is inert rather
+     * than an error. It is not migrated or deleted either: removing it would mean
+     * writing a migration whose only effect is to make a file marginally tidier,
+     * and this setting was `hidden: true`, so nobody ever sees it. The practical
+     * consequence for such a user is exactly the intended one — the servers they
+     * had on last session start off.
+     */
     cacheBlob: {
         type: OptionType.STRING,
         description: "Persisted translation cache (managed automatically)",

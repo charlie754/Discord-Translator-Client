@@ -262,6 +262,35 @@ code,kbd{
 .valrow code{background:none;padding:0;font-size:.95rem;font-weight:650;flex:1 1 auto;min-width:0;}
 .valrow .copy{padding:6px 11px;font-size:.8rem;}
 
+/* ---------- a drawing of the plugin's own endpoint box ----------
+ * Not a screenshot and not a control: a picture of an empty text field, so a
+ * reader who has just copied a value can recognise where it goes.
+ *
+ * IT IS NOT AN <input>, DELIBERATELY. A real input here would be reachable by
+ * Tab, focusable, and typeable into — a box on a tutorial page that silently
+ * swallows the credential the reader has on their clipboard, saves nothing and
+ * tells nobody. The wrapper carries role="img" with the hint text in its
+ * aria-label, which is the HTML equivalent of the <title>/<desc> the wireframe
+ * SVGs above use, and the span itself is aria-hidden so the text is announced
+ * once rather than twice.
+ *
+ * COLOURS COME FROM THE PAGE'S OWN TOKENS rather than from Discord's palette,
+ * so this reads as a dark rounded field in dark mode and a light one in light
+ * mode, exactly like .valrow directly above it. A permanently-dark box would
+ * match one Discord theme and look like a rendering fault in a light page. */
+.fieldshot{margin:0 0 12px;}
+.fieldshot figcaption{font-size:.79rem;color:var(--muted);margin:0 0 6px;}
+.fieldshot-box{
+  background:var(--code-bg);
+  border:1px solid var(--border-strong);border-radius:8px;
+  padding:10px 12px;min-height:40px;
+  display:flex;align-items:center;
+}
+.fieldshot-ph{
+  color:var(--muted);font-size:.92rem;line-height:1.35;
+  overflow-wrap:anywhere;
+}
+
 /* ---------- details ---------- */
 details{
   border:1px solid var(--border);border-radius:10px;
@@ -877,6 +906,12 @@ function json(obj) {
     <div class="valrow">
       <code>https://script.google.com/macros/s/AKfycb.../exec</code>
     </div>
+    <figure class="fieldshot">
+      <figcaption>This is the box in the plugin, before you paste anything. The grey line is a hint, not a value &mdash; it disappears as soon as you type.</figcaption>
+      <div class="fieldshot-box" role="img" aria-label="A drawing of the plugin's endpoint box, empty, showing the grey hint text: &quot;AKfycb&hellip; (Deployment ID) or https://script.google.com/macros/s/&hellip;/exec&quot;">
+        <span class="fieldshot-ph" aria-hidden="true">AKfycb&hellip; (Deployment ID) or https://script.google.com/macros/s/&hellip;/exec</span>
+      </div>
+    </figure>
   </div>
   <details>
     <summary>Checking it by hand before you trust it</summary>

@@ -597,6 +597,15 @@ const CREDENTIAL_SURFACES: Array<{ label: string; path: string; visible: () => s
 ];
 
 /**
+ * Surfaces excused from "say that EITHER form is accepted", by path.
+ *
+ * ONE ENTRY, AND THE TEST BESIDE THE ASSERTION PINS THAT IT STAYS ONE. See the
+ * describe at the end of this file for what the settings tab lost and why the
+ * excuse is written down here rather than applied by deleting an assertion.
+ */
+const SILENT_ON_EITHER_FORM = new Set<string>([TAB]);
+
+/**
  * THE SENTENCE THAT SHIPPED, restored verbatim as its own tiny document.
  *
  * Kept here as a fixture so the guard has a permanent positive control: the exact
@@ -890,22 +899,35 @@ describe("instrument checks — the scan is measuring the thing it names", () =>
     });
 
     it("statementsOf() reassembles copy the source hard-wraps (positive control)", () => {
-        // Read out of the tab itself, not restated: this sentence really is split
-        // across source lines, and a per-line scan cannot see it whole.
+        /*
+         * THE CONTROL MOVED, and the file it points at is why.
+         *
+         * It used to ride on the row's body paragraph — "…the translator plugin's
+         * own settings, at Settings > Plugins > ChannelTranslator > the cog…" —
+         * which was four source lines long. That paragraph was deleted whole on
+         * operator instruction (2026-08-29), and this test's own escape hatch
+         * said what to do about it: "pick another control".
+         *
+         * This is the replacement, chosen for the same property and read out of
+         * the tab rather than restated: the "changed somewhere else" warning is
+         * still hard-wrapped, and its first sentence still spans two source lines.
+         */
         const wrapped = codeOf(section(read(TAB)));
         const lines = wrapped.split("\n");
+        const HEAD = "plugin's own settings";
+        const TAIL = "unsaved edits here";
         expect(
-            lines.some(line => line.includes("plugin's own settings")),
+            lines.some(line => line.includes(HEAD)),
             "the tab no longer carries this sentence — pick another control"
         ).toBe(true);
         expect(
-            lines.some(line => line.includes("plugin's own settings") && line.includes("the cog")),
+            lines.some(line => line.includes(HEAD) && line.includes(TAIL)),
             "the sentence now fits on one line — this control no longer proves anything, so "
             + "either pick a longer one or drop it"
         ).toBe(false);
         expect(
             statementsOf(decodeEntities(wrapped)).some(s =>
-                s.includes("plugin's own settings") && s.includes("the cog")),
+                s.includes(HEAD) && s.includes(TAIL)),
             "the wrapped sentence was never rejoined — the scan is reading fragments"
         ).toBe(true);
     });
@@ -1020,11 +1042,55 @@ describe("the row edits the FREE credential, and only it", () => {
         }
     });
 
-    it("the heading names the free proxy, not a key you buy", () => {
+    /**
+     * 🔴 THE HEADING NO LONGER NAMES THE PROVIDER, AND THIS ASSERTION IS THE
+     * RECORD OF WHAT THAT COST.
+     *
+     * It used to read "Apps Script proxy — the free option, deployed to your own
+     * Google account", and this test required all three of those things: the
+     * provider by name, the word "free", and NOT "API Key" — because the row had
+     * just been repointed off the paid Google Cloud key, and a heading naming a
+     * credential it does not edit is how a user's Cloud key ends up in the free
+     * proxy's box.
+     *
+     * Operator instruction 2026-08-29: the heading is now exactly "Setup Google
+     * Key". So two of the three properties are gone by decision:
+     *
+     *   - the provider is no longer named on the heading. The only rendered
+     *     strings that still say "Apps Script proxy" are the input's aria-label
+     *     and the Save button's, which a sighted user never sees;
+     *   - "free" is no longer said anywhere in the section at all.
+     *
+     * And the third is now uncomfortable rather than satisfied: the row still
+     * does NOT edit a key — it edits an Apps Script deployment URL — while the
+     * heading now contains the word "Key". `not.toContain("API Key")` still
+     * passes on the literal string, which is the assertion, but the confusion it
+     * was written against is closer than it was. That is a copy decision, not a
+     * test failure, and it is recorded here rather than argued.
+     *
+     * WHAT IS STILL PINNED: the exact operator-specified text, so a later "clean
+     * up" cannot drift it, and the paid key's old heading staying gone.
+     */
+    it("the heading is exactly the text the operator specified", () => {
         const heading = headingRow(section(read(TAB)));
-        expect(heading).toContain("Apps Script proxy");
-        expect(heading.toLowerCase()).toContain("free");
-        expect(heading).not.toContain("API Key");
+        expect(heading).toContain("Setup Google Key");
+        expect(heading, "the paid key's old heading is back").not.toContain("API Key");
+        expect(
+            heading,
+            "the heading names the paid Cloud product — this row edits appsScriptUrl"
+        ).not.toContain("Google Cloud");
+    });
+
+    it("the provider is still named somewhere a screen reader will reach it", () => {
+        // The consolation for the heading above, and the reason it is a separate
+        // test: if this one ever goes red as well, NOTHING on the screen says
+        // which of the credentials this box holds.
+        const src = codeOf(section(read(TAB)));
+        expect(
+            src,
+            "nothing in the section names the Apps Script proxy any more — not even the " +
+            "accessible names — so the box no longer says what it is for"
+        ).toContain("Apps Script proxy");
     });
 });
 
@@ -1340,11 +1406,54 @@ describe("the copy does not claim this path costs money", () => {
         ).toEqual([]);
     });
 
-    it("and it says the true thing instead", () => {
-        const src = codeOf(section(read(TAB)));
-        expect(src).toContain("no billing at all");
-        expect(src).toContain("no API key and no card");
-        expect(src).toMatch(/5,000/);
+    /**
+     * 🔴 INVERTED 2026-08-29. THE TRUE SENTENCES WERE DELETED FROM THIS ROW.
+     *
+     * This used to require the section to SAY the true thing — "no API key and no
+     * card", "about 5,000 translation calls a day", "no billing at all" — on the
+     * reasoning that a guard which only forbids a false claim is satisfied by
+     * copy that says nothing, and a reader who is told nothing about cost assumes
+     * the worst about a Google service.
+     *
+     * The paragraph carrying all three was deleted on operator instruction. So
+     * the positive half cannot be asserted here any more without pinning copy the
+     * operator removed. What replaces it:
+     *
+     *   - the ABSENCE direction, unchanged and still meaningful (above);
+     *   - the same true sentences, asserted on the surface that DOES still carry
+     *     them. The information was removed from this screen, not from the
+     *     product, and this is what says so — if the cog's description loses it
+     *     too, the claim "the user can still find this out" becomes false and
+     *     this goes red.
+     *
+     * 🔴 WHAT IS NOW UNGUARDED: nothing requires this ROW to mention cost at all.
+     * A future edit could add a false cost claim in a sentence with no "bill",
+     * "card" or currency in it, and MONEY_CLAIMS above would abstain.
+     */
+    it("the true thing is still said where the user can still read it", () => {
+        const row = codeOf(section(read(TAB)));
+        // WHAT SURVIVED ON THIS ROW, and it is worth being precise about: the
+        // muted paragraph under the input still names the daily allowance, in
+        // the course of explaining what pressing Save spends. So the row is not
+        // silent about the free tier — it just no longer says there is no key,
+        // no card and no billing.
+        expect(
+            row,
+            "the row stopped naming the daily allowance too — now nothing on this screen " +
+            "says anything at all about what this costs"
+        ).toMatch(/5,000/);
+        expect(
+            row,
+            "a no-key / no-card / no-billing sentence is back on the row — good, but then " +
+            "assert its wording here rather than leaving it to MONEY_CLAIMS, which only " +
+            "catches the FALSE shapes"
+        ).not.toMatch(/no billing|no API key/);
+
+        const cog = cogDescription(read(PLUGIN_SETTINGS));
+        expect(cog, "the cog stopped saying there is no billing").toContain("no billing at all");
+        expect(cog, "the cog stopped saying there is no key and no card")
+            .toContain("no API key and no card");
+        expect(cog, "the cog stopped naming the daily allowance").toMatch(/5,000/);
     });
 
     it("nothing this plugin can reach is billed — read out of the registry, not restated", () => {
@@ -1407,12 +1516,35 @@ describe("the copy does not claim this path costs money", () => {
         }
     });
 
-    it("still tells the user where the plugin's own settings are (negative control)", () => {
-        // The paragraph above goes; the pointer to the plugin's settings stays,
-        // because the same URL really is editable there. Without this control the
-        // assertion above would be satisfied by deleting all of the copy.
+    it("still tells the user the other box exists (negative control, weakened)", () => {
+        /*
+         * 🔴 WEAKENED 2026-08-29, and the weakening is the point of this comment.
+         *
+         * This required the section to contain "ChannelTranslator" — the menu
+         * path, "Settings > Plugins > ChannelTranslator > the cog", so a user
+         * looking at one box could find the other one holding the same value.
+         * That sentence was in the deleted paragraph, and the path is now said
+         * NOWHERE on this screen.
+         *
+         * What survives is the "changed somewhere else" warning, which names the
+         * plugin's own settings but appears only in the one case where the value
+         * moved underneath an unsaved edit. So the pointer still exists in code
+         * and is invisible to a user who never hits that case.
+         *
+         * Kept rather than deleted because the original reasoning still holds:
+         * without SOME control here, the assertions above are satisfied by
+         * deleting every remaining word in the section.
+         */
         const src = codeOf(section(read(TAB)));
-        expect(src).toContain("ChannelTranslator");
+        expect(
+            src,
+            "nothing in the section refers to the plugin's own settings any more — the two " +
+            "boxes holding one value no longer acknowledge each other at all"
+        ).toContain("plugin's own settings");
+        expect(
+            src,
+            "the menu path came back — good, but then re-tighten this control to it"
+        ).not.toContain("ChannelTranslator");
     });
 });
 
@@ -1437,24 +1569,71 @@ describe("the copy does not claim this path costs money", () => {
  * install, and a Google Workspace user has no other option at all.
  */
 describe("the credential box takes a Deployment ID as well as a URL, and says so", () => {
-    it("the rendered copy tells the user to paste the Deployment ID", () => {
+    it("the rendered copy still names the Deployment ID, though it no longer asks for it", () => {
+        /*
+         * 🔴 WEAKENED 2026-08-29. The instruction went; the noun stayed.
+         *
+         * This required the words "Paste the Deployment ID" — an instruction, in
+         * body copy, telling the reader the shorter form is the one to take. It
+         * was in the deleted paragraph. What is left is the placeholder and the
+         * two accessible names, which NAME the form without ever telling anyone
+         * to prefer it — and a placeholder disappears the moment the box has text
+         * in it.
+         *
+         * The original reasoning — "a capability nobody is told about is not a
+         * feature" — is now only half served. That is a copy decision rather than
+         * a defect in the code, and it is recorded rather than argued.
+         */
         const src = codeOf(section(read(TAB)));
         expect(
             src,
-            "nothing rendered names the Deployment ID — the shorter form is accepted in " +
-            "silence, so nobody will use it"
-        ).toContain("Paste the Deployment ID");
+            "nothing rendered names the Deployment ID at all — the shorter form is now " +
+            "accepted in complete silence"
+        ).toContain("Deployment ID");
     });
 
     it("and the Web App URL is still offered, not replaced (negative control)", () => {
         // Without this, the assertion above is satisfied by copy that tells the
         // user the ID is now the ONLY accepted form. It is not: every stored URL
         // still works, and a Workspace account cannot use an ID at all.
+        //
+        // "or the whole Web App URL" was the phrase asserted here until the body
+        // paragraph was deleted (2026-08-29). The placeholder and the accessible
+        // names still carry both the noun and the shape, which is what these two
+        // now read.
         const src = codeOf(section(read(TAB)));
-        expect(src).toContain("or the whole Web App URL");
+        expect(src).toContain("Web App URL");
         expect(src).toContain("https://script.google.com/macros/s/");
-        expect(src, "the Workspace caveat went — those users have no working instruction")
-            .toContain("Workspace");
+    });
+
+    /**
+     * 🔴 THE WORKSPACE CAVEAT IS GONE FROM THIS SCREEN. THIS IS THE RECORD.
+     *
+     * The assertion above used to end with `.toContain("Workspace")`, on the
+     * reasoning that a Google Workspace account CANNOT use a Deployment ID at all
+     * — its Web App address carries the organisation's domain, which cannot be
+     * rebuilt from the ID — so a screen that shows the ID form first and never
+     * mentions the exception leaves those users following an instruction that
+     * cannot work for them.
+     *
+     * That sentence was in the paragraph deleted on operator instruction
+     * 2026-08-29. It is asserted here on the two surfaces that still carry it, so
+     * "a Workspace user can find out" stays a checked claim rather than a hope —
+     * but note what that means in practice: they have to open the cog or the
+     * setup guide to learn it, having already been shown the wrong form on the
+     * screen they were standing on.
+     */
+    it("a Workspace user is still told somewhere — just no longer here", () => {
+        expect(
+            codeOf(section(read(TAB))),
+            "the caveat came back to the tab — good; re-tighten the assertion above to it"
+        ).not.toContain("Workspace");
+        expect(
+            cogDescription(read(PLUGIN_SETTINGS)),
+            "the cog lost the Workspace caveat too — no surface a user of this row is likely " +
+            "to open now tells them the ID form cannot work for their account"
+        ).toContain("Workspace");
+        expect(guideText(), "the setup guide lost the Workspace caveat as well").toContain("Workspace");
     });
 
     it("the placeholder shows the ID form, and shows it first", () => {
@@ -1724,12 +1903,54 @@ describe("three surfaces, one credential box: none of them may claim another tak
         // the box takes whichever you have is the sentence that makes the shorter
         // form usable, and it is the one a copy edit drops first.
         for (const surface of CREDENTIAL_SURFACES) {
+            if (SILENT_ON_EITHER_FORM.has(surface.path)) continue;
             expect(
                 acceptsEitherFormIn(surface.visible()),
                 `${surface.label} names both forms but never says either will do\n` +
                 `File: ${surface.path}`
             ).not.toEqual([]);
         }
+    });
+
+    it("the exemption is exactly one surface, and it is the one the operator emptied", () => {
+        /*
+         * 🔴 THE SETTINGS TAB STOPPED SAYING IT ON 2026-08-29, AND THIS IS THE
+         * ONLY THING STANDING BETWEEN THAT AND A SILENT THREE-SURFACE DRIFT.
+         *
+         * The sentence lived in the row's body paragraph — "Both name the same
+         * deployment… so the box shows the full URL once it has been checked" —
+         * which was deleted whole on operator instruction. Nothing that survives
+         * on that screen tells a reader that EITHER form will do: the placeholder
+         * shows "AKfycb… (Deployment ID) or https://…/exec", which a reader can
+         * just as easily take as "one of these two, and I had better pick right".
+         *
+         * WHY AN EXEMPTION LIST RATHER THAN DELETING THE ASSERTION OR DROPPING
+         * THE SURFACE. The describe above already refuses the second option: it
+         * asserts CREDENTIAL_SURFACES is exactly [GUIDE, PLUGIN_SETTINGS, TAB],
+         * precisely so a surface cannot be quietly removed from the scan. The
+         * same reasoning applies one level down — so the skip is named, it is
+         * pinned to one path, and this test fails the moment a second surface
+         * joins it. Two silent surfaces out of three is not a copy decision any
+         * more, it is the drift the whole describe exists to catch.
+         *
+         * TO REVERT: put a sentence like "the box takes whichever you have" back
+         * on the row and delete SILENT_ON_EITHER_FORM. Nothing else is needed.
+         */
+        expect([...SILENT_ON_EITHER_FORM]).toEqual([TAB]);
+        for (const path of SILENT_ON_EITHER_FORM) {
+            expect(
+                CREDENTIAL_SURFACES.some(surface => surface.path === path),
+                "the exemption names a path that is not in the scan at all"
+            ).toBe(true);
+        }
+        // The exemption is not vacuous: the tab really does still fail the
+        // assertion it is excused from. If this stops being true, the excuse has
+        // outlived the copy change and must be deleted.
+        const tab = CREDENTIAL_SURFACES.find(surface => surface.path === TAB)!;
+        expect(
+            acceptsEitherFormIn(tab.visible()),
+            "the settings tab says it again — delete SILENT_ON_EITHER_FORM"
+        ).toEqual([]);
     });
 
     it("M-REGRESS: the guard is red on the guide exactly as it shipped (positive control)", () => {

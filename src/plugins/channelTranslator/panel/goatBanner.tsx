@@ -467,7 +467,6 @@ export const GOAT_BANNER_CSS = `
 }
 .goat__link:focus-visible { outline: 2px solid var(--accent, #3ecf8e); outline-offset: 2px; border-radius: 8px; }
 .goat__copy { display: flex; flex-direction: column; gap: 4px; margin: 0 0 8px; }
-.goat__line--from { font-size: 0.85em; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.62; }
 .goat__line { margin: 0; font-size: 10.5px; line-height: 1.4; font-weight: 500; }
 .goat__line--ask { color: var(--ink-muted, #a99f8c); font-weight: 400; }
 .goat .goat-lockup {
@@ -625,15 +624,26 @@ export function GoatBanner({ variant }: { variant: "panel" | "settings"; }): JSX
         <div className={`goat goat--${variant}`}>
             <span className="goat__copy">
                 {/*
-                  Names the product this promotion belongs to, which is what both stores
-                  ask for: Chrome requires an ad to be "presented in context or clearly
-                  state which product they are bundled with", and Mozilla accepts
-                  promotions "in user interface elements that are clearly identified as
-                  belonging to the add-on". It also stops the banner reading as native
-                  Discord content, which is the thing Chrome's third-party-site clause is
-                  actually written about.
+                  A LINE WAS REMOVED FROM THE TOP OF THIS BLOCK, and what it was for is
+                  worth knowing before anybody removes another.
+
+                  It read "From the makers of Discord Translator" and it named the product
+                  this promotion belongs to, which is what both extension stores ask for:
+                  Chrome requires an ad to be "presented in context or clearly state which
+                  product they are bundled with", and Mozilla accepts promotions "in user
+                  interface elements that are clearly identified as belonging to the
+                  add-on". It also stopped the banner reading as native Discord content,
+                  which is the thing Chrome's third-party-site clause is actually written
+                  about. Operator instruction, 2026-08-29: delete it from both variants.
+
+                  What still carries the attribution: in the panel this banner renders
+                  inside the plugin's own shadow-root panel, under the plugin's own
+                  heading; in the settings tab it renders inside the "Discord Translator"
+                  settings screen. The store requirement is met by CONTEXT now rather
+                  than by a sentence, which is a weaker guarantee than it was — a future
+                  reviewer asking "where does this ad say what it belongs to?" should be
+                  pointed here rather than at a line that no longer exists.
                 */}
-                <span className="goat__line goat__line--from">From the makers of Discord Translator</span>
                 <span className="goat__line">Goat Project - Help fight Cancer, Alzheimer&rsquo;s, Parkinson&rsquo;s, COVID-19, Dengue, Hepatitis C etc.</span>
                 <span className="goat__line goat__line--ask">Contribute your idle compute to Earn GOAT.</span>
             </span>

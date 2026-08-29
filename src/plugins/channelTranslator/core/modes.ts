@@ -79,6 +79,48 @@ export class ToggleState {
 }
 
 /**
+ * WHAT THE PANEL'S SWITCH SHOWS — which is not always what the user chose.
+ *
+ * THE DEFECT THIS CLOSES. In the `unavailable` state the panel says three
+ * things at once, and one of them used to be a lie: the pill reads "Discord
+ * updated", the footer reads "Discord changed. Translation is paused;
+ * double-click still works." — and the switch stayed GREEN and
+ * `aria-checked="true"`, because it rendered `toggle.isOn(guildId)` directly.
+ * Nothing is being translated in that state; `.track[aria-checked="true"]` is
+ * the only thing that paints the track with the accent colour and slides the
+ * thumb across (panel/styles.ts), so the one control on the panel was
+ * announcing "on" to sighted users and to a screen reader while the two
+ * sentences beside it said translation had stopped.
+ *
+ * COSMETIC, AND DELIBERATELY ONLY COSMETIC. This does NOT clear the toggle and
+ * must never be made to. The session's choice outlives the outage, so when
+ * Discord is patched and `patchesOk()` goes true again the user's servers come
+ * back on by themselves, in the same sitting, with nothing to re-do. A "fix"
+ * that called `setOn(guildId, false)` here would make a transient outage
+ * silently forget every server the user had enabled — a far worse defect than
+ * the one being fixed, and invisible until the outage ended. `toggle` is taken
+ * by value and only read; nothing in this function can write to it.
+ *
+ * (The choice is per SESSION, not per install: state.ts's hydrate() no longer
+ * restores it across a restart, by operator ruling. That is a separate decision
+ * and this function is indifferent to it — it never touches storage either way.)
+ *
+ * A pure function over explicit arguments, in core/, for the reason recorded on
+ * translationEnabled() above: Panel.tsx imports @webpack/common and cannot be
+ * loaded by this suite at all, so core/ is the only layer where the decision can
+ * be pinned as BEHAVIOUR rather than as a string search over JSX — see
+ * test/modes.test.ts.
+ */
+export function toggleShowsOn(
+    toggle: ToggleState,
+    guildId: string | null,
+    state: PanelState
+): boolean {
+    if (state === "unavailable") return false;
+    return toggle.isOn(guildId);
+}
+
+/**
  * THE ONE ANSWER TO "MAY THIS CONVERSATION BE TRANSLATED?" — for the rendered
  * mainline and for the double-click selection popover alike.
  *

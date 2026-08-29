@@ -336,14 +336,26 @@ describe("Discord Translator tab: the credential row and the plugin share one se
             "that is what a browser password manager autofills"
         ).toBe(false);
 
-        // CODE DIRECTION. The heading has to NAME the provider on screen. A
-        // whole-file scan would be satisfied by the comment above the component,
-        // which discusses the Apps Script proxy at length — so this asserts on
-        // rendered text, where it means something.
+        // CODE DIRECTION, AND ITS SUBJECT MOVED ON 2026-08-29. This was written
+        // about the HEADING, which read "Apps Script proxy — the free option,
+        // deployed to your own Google account": the heading had to NAME the
+        // provider on screen, and a whole-file scan would have been satisfied by
+        // the comment above the component, which discusses the Apps Script proxy
+        // at length — hence a scan of rendered text.
+        //
+        // The heading is now "Setup Google Key", by operator instruction. This
+        // assertion still passes and still means something, but what satisfies it
+        // is no longer the heading: it is the input's aria-label and the Save
+        // button's, i.e. the accessible names, which a sighted user never reads.
+        // So the row still says which credential it edits TO A SCREEN READER, and
+        // says it nowhere else. Recorded rather than argued — the copy is the
+        // operator's call — and pinned so the last surface cannot go quietly too.
+        // test/appsScriptRowSaveReset.test.ts carries the same note against the
+        // heading assertion it replaced.
         expect(
             code,
-            'nothing rendered names the "Apps Script proxy" — the row would not say ' +
-            "which of the three credentials it edits"
+            'nothing rendered names the "Apps Script proxy" — since the heading stopped ' +
+            "naming it, the accessible names are the only place left that does"
         ).toContain("Apps Script proxy");
 
         // ABSENCE DIRECTION — WHOLE FILE. The row is no longer the paid key's,
