@@ -11,7 +11,7 @@ import { popNotice, showNotice } from "@api/Notices";
 
 import { registry, resolveProvider } from "./core/providers/registry";
 import type { HttpTransport, ProviderResolution } from "./core/providers/types";
-import { DEFAULT_PROVIDER_ID, providerName, PROVIDER_OPTIONS, settings } from "./settings";
+import { DEFAULT_PROVIDER_ID, PROVIDER_OPTIONS, providerName, settings } from "./settings";
 
 /**
  * The credential that belongs to this provider, and only to it.

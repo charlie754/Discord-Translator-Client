@@ -98,6 +98,29 @@ function parseLanguageArray(src: string, anchor: string): Lang[] {
     });
 }
 
+/**
+ * The provider dropdown's entries, read out of PROVIDER_OPTIONS.
+ *
+ * Deliberately strict for the same reason parseLanguageArray() above is: a
+ * missing anchor throws rather than returning [], because an empty list makes
+ * every loop over it iterate nothing and pass.
+ */
+function providerOptions(): Array<{ value: string; label: string; }> {
+    return parseLanguageArray(read(SETTINGS_PATH), "export const PROVIDER_OPTIONS");
+}
+
+/** Every name the dropdown currently offers, in order. */
+function providerNames(): string[] {
+    return providerOptions().map(option => option.label);
+}
+
+/** One entry's name, by id. Throws on an id the dropdown does not have. */
+function providerName(id: string): string {
+    const found = providerOptions().find(option => option.value === id);
+    if (!found) throw new Error(`no PROVIDER_OPTIONS entry has value "${id}"`);
+    return found.label;
+}
+
 /** Count entries carrying `default: true`, for the SELECT's single default. */
 function defaultValues(src: string, anchor: string): string[] {
     const start = src.indexOf(anchor);
@@ -190,8 +213,42 @@ describe("settings.ts describes a product that cannot bill anyone", () => {
     it("the provider list offers nothing that takes the user's money", () => {
         const description = settingBlock(flat(), "provider");
         expect(description).toContain("neither can bill you");
-        expect(description).toContain("Google (free)");
-        expect(description).toContain("Google Apps Script");
+        // 🔴 THE TWO NAMES ARE DERIVED NOW, AND THE OLD FORM OF THIS ASSERTION IS
+        // WHY. It read toContain("Google (free)") and toContain("Google Apps
+        // Script") — the names the dropdown carried when it was written. Both
+        // entries were later renamed, this test stayed green, and the
+        // description went on naming controls that were no longer there:
+        // "Google (free)" was still satisfied by the sentence RECORDING the
+        // rename ("listed as Google (free) in earlier builds") and "Google Apps
+        // Script" by the description of the technology. An assertion satisfiable
+        // by a historical note is not an assertion about live copy.
+        //
+        // What is pinned is the claim that has to stay true — every entry the
+        // dropdown offers is described — with the names read off the array the
+        // dropdown is handed. The description names them through providerName(),
+        // so the source carries `${providerName("…")}`; providerNames() resolves
+        // that the same way, which is what keeps this about the sentence.
+        const names = providerNames();
+        expect(names.length, "PROVIDER_OPTIONS derived nothing — this loop would check nothing")
+            .toBeGreaterThan(1);
+        for (const label of names) {
+            expect(
+                description.replace(
+                    /\$\{providerName\("([^"]+)"\)\}/g,
+                    (_whole, id: string) => providerName(id)
+                ),
+                `the provider description no longer names ${JSON.stringify(label)}, which is an ` +
+                "entry the dropdown offers"
+            ).toContain(label);
+        }
+    });
+
+    it("providerNames reads the live array and refuses an unknown id (controls)", () => {
+        // An empty list would satisfy the loop above by iterating nothing — the
+        // exact vacuity every other extractor in this file is guarded against.
+        for (const label of providerNames()) expect(typeof label).toBe("string");
+        expect(providerName("google")).toBe(providerNames()[0]);
+        expect(() => providerName("no-such-provider")).toThrow();
     });
 
     it("quotes no price at all — no currency figure survives anywhere in the file", () => {
