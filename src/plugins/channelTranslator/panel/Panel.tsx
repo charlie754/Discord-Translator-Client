@@ -7,7 +7,7 @@
 // plugin/panel/Panel.tsx
 import { React, SelectedChannelStore, SelectedGuildStore, useStateFromStores } from "@webpack/common";
 
-import { PanelState, toggleShowsOn, unavailableFooter } from "../core/modes";
+import { PanelState, unavailableFooter } from "../core/modes";
 import { patchesOk } from "../patches";
 import { settings } from "../settings";
 import { breakerOpen, pendingCount, persist,repaintChannel, subscribeProgress, toggle } from "../state";
@@ -90,19 +90,26 @@ export function Panel() {
     const langLabel =
         LANGUAGES.find(l => l.value === store.targetLanguage)?.label
         ?? store.targetLanguage;
-    const isOn = toggle.isOn(guildId);
     /*
-     * WHAT THE SWITCH SHOWS, which is not the same question as what the user
-     * chose. `isOn` above is this session's actual toggle state and stays the
-     * input to flip(); this is only what the track renders. The two differ in exactly
-     * one state — see toggleShowsOn() in ../core/modes, which is where the
-     * decision lives so test/modes.test.ts can exercise it as behaviour.
+     * ONE VALUE FOR THE SWITCH, WHICH IS THE USER'S OWN CHOICE, and a second
+     * `switchShowsOn` used to sit beside it.
      *
-     * DO NOT COLLAPSE THESE BACK INTO ONE. The pill says "Discord updated" and
-     * the footer says translation is paused, and this used to be the third
-     * signal in the same panel saying the opposite.
+     * THE DEFECT COLLAPSING THEM BACK INTO ONE CLOSES. `switchShowsOn` was
+     * toggleShowsOn(toggle, guildId, state) from ../core/modes, which forced the
+     * track to read OFF while `state` was `unavailable` — a display-only answer
+     * to the pill and the footer saying translation was paused. It is gone, and
+     * ../core/modes records at length why. The short version: the button below
+     * was ALSO `disabled` in that state, and the toggle stopped surviving a
+     * start, so the panel opened off, drawn off, and immovable. Now that the
+     * button works, a track that renders anything but `isOn` would go grey under
+     * a click that had just switched the server ON — and flip() writes `!isOn`,
+     * so the following click would appear to do nothing at all.
+     *
+     * The pill carries the status and the footer explains it; this carries the
+     * intent. Nothing is contradicted: unavailableFooter() branches on the same
+     * toggle, so an ON track is shown beside "double-click still works".
      */
-    const switchShowsOn = toggleShowsOn(toggle, guildId, state);
+    const isOn = toggle.isOn(guildId);
 
     const flip = () => {
         toggle.setOn(guildId, !isOn);
@@ -142,12 +149,40 @@ export function Panel() {
                         {state === "on" ? ` · ${langLabel}` : ""}
                     </span>
                 </div>
+                {/* NO `disabled` HERE, AND ITS ABSENCE IS LOAD-BEARING.
+                    `disabled={state === "unavailable"}` used to sit under the
+                    aria-label. Combined with translation no longer surviving a
+                    start, it locked the user out of their own plugin: open the
+                    client while Discord is unpatched and translation is off, the
+                    track is off, and the only control that could turn it on
+                    refuses the click. There was no route in at all — the previous
+                    behaviour, where a server switched on earlier stayed on and
+                    resumed by itself, was the only thing that had been hiding it.
+
+                    Unlocking it is not a workaround. selectionGate() in
+                    ../core/modes never reads patchesOk(), so double-click
+                    translation genuinely works in this state for a server that is
+                    switched on, which is exactly what the footer at the bottom of
+                    this panel and index.tsx's notice both promise. Switching on
+                    here also pre-arms the rendered path for the moment the patches
+                    match again.
+
+                    NO OTHER STATE MAY DISABLE IT EITHER. panelState() reaches
+                    `degraded`, `translating` and `on` only while this server is
+                    already switched ON, so in those three the switch is the STOP
+                    button — the one control that halts traffic to the provider —
+                    and `off` is where it is the start button. Disabling it in any
+                    of them takes away the only control the panel has.
+
+                    There is no :disabled rule in panel/styles.ts, so the dead
+                    control looked identical to a live one: nothing on screen ever
+                    said why the click did nothing. See
+                    test/panelUnavailableToggle.test.ts. */}
                 <button
                     className="track"
                     role="switch"
-                    aria-checked={switchShowsOn}
+                    aria-checked={isOn}
                     aria-label="Translate this server"
-                    disabled={state === "unavailable"}
                     onClick={flip}
                 >
                     <span className="thumb" />
@@ -292,10 +327,16 @@ export function Panel() {
                     It used to read "Discord changed. Translation is paused;
                     double-click still works." unconditionally — a promise about a
                     path that selectionGate() refuses whenever this server's toggle
-                    is off, in a state where the switch above is disabled and so the
-                    user cannot make it true either. unavailableFooter() asks the
-                    gate itself, so the two can no longer disagree; see
-                    ../core/modes and test/panelUnavailableToggle.test.ts.
+                    is off. unavailableFooter() asks the gate itself, so the two can
+                    no longer disagree; see ../core/modes and
+                    test/panelUnavailableToggle.test.ts.
+
+                    THE OFF BRANCH NAMES THE SWITCH ABOVE, which is honest only
+                    because that switch no longer carries `disabled`. It used to
+                    end "The switch is unavailable until translation works again."
+                    — true of the old markup, and a lie about the new. If a
+                    `disabled` ever comes back to the track, this wording has to be
+                    re-read before it ships.
 
                     settings.store rather than the `store` from settings.use()
                     above: includeDMs is not one of the subscribed paths, and adding
