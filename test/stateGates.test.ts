@@ -368,8 +368,38 @@ describe("the first-run notice is honest about both providers", () => {
             notice,
             "the notice must still say the text leaves the machine, not merely that it is free"
         ).toContain("leaves this machine");
-        // PRIVACY.md and core/modes.ts both rest on this sentence.
-        expect(notice).toContain("Direct messages are excluded unless you opt in");
+    });
+
+    it("tells the truth about DMs on BOTH paths, which is one sentence more than it used to", () => {
+        // 🔴 THIS ASSERTION WAS REWRITTEN, NOT RELAXED. It used to require the
+        // notice to say "Direct messages are excluded unless you opt in" — a true
+        // sentence about the whole plugin until the 2026-09-11 ruling, and a false
+        // one afterwards, because a deliberate double-click or triple-click now
+        // translates a selection in any conversation the plugin can identify,
+        // including a DM, whatever `includeDMs` says.
+        //
+        // A notice that still said only the old sentence would be the worst
+        // outcome available: the first thing a new install reads, promising an
+        // exclusion the code no longer honours. So BOTH halves are required — the
+        // automatic path is still opt-in for DMs, and the gesture is not — and
+        // neither can be dropped without this failing. PRIVACY.md and
+        // core/modes.ts carry the long version of the same split.
+        const notice = noticeText();
+        expect(
+            notice,
+            "the notice stopped saying that automatic DM translation is opt-in"
+        ).toContain("direct messages stay out of that unless you opt in");
+        expect(
+            notice,
+            "the notice does not disclose that a deliberate double-click translates in a DM — " +
+            "it is promising an exclusion the gate no longer honours"
+        ).toContain("in any conversation including a direct message");
+        // The sentence that is now FALSE must not be there at all. Leaving both in
+        // would be a notice that contradicts itself in two consecutive sentences.
+        expect(
+            notice,
+            "the superseded blanket exclusion is back in the notice"
+        ).not.toContain("Direct messages are excluded unless you opt in");
     });
 
     it("promises nothing about a bill that could be broken by adding a paid provider", () => {

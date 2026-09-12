@@ -72,8 +72,11 @@ export default definePlugin({
                 `Both options are free and neither can bill you: ${providerName("google")} needs ` +
                 `no key and no account, and ${providerName("apps-script")} is a Google Apps ` +
                 "Script proxy you deploy into your own Google account. Message text still leaves " +
-                "this machine either way. Direct messages are excluded unless you opt in. Enable " +
-                "translation per-server from the panel at the top right.",
+                "this machine either way. Whole-channel translation does nothing until you " +
+                "enable it per-server from the panel at the top right, and direct messages stay " +
+                "out of that unless you opt in. A deliberate double-click or triple-click is " +
+                "separate: it translates just what you selected, in any conversation including a " +
+                "direct message.",
                 "Understood",
                 () => {
                     settings.store.consentGiven = true;

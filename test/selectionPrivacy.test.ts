@@ -25,14 +25,20 @@ import { describe, expect, it } from "vitest";
  *
  * The two defects:
  *
- * 1. THE DOUBLE-CLICK PATH HAD NO PRIVACY GUARD. translateSelection() checked
+ * 1. THE DOUBLE-CLICK PATH HAD NO GUARD AT ALL. translateSelection() checked
  *    that the selection was non-empty and that the click landed inside message
- *    content, then sent the text to the provider. It never asked the per-server
- *    toggle and never asked about DMs, so a double-click inside a private
- *    message — or inside a server the user had deliberately switched OFF — was a
- *    disclosure. It was also a BILLED one while the paid providers existed;
- *    those are deleted and the disclosure is not, which is the half that
- *    mattered.
+ *    content, then sent the text to the provider. It asked nothing else, so it
+ *    could not even tell whether the click had landed on a message row.
+ *
+ *    🔴 WHAT IT ASKS NOW IS NARROWER THAN WHAT IT ASKED IN BETWEEN, AND THAT IS
+ *    AN OPERATOR DECISION. The gate it grew consulted the per-server toggle and
+ *    `includeDMs`; ruling 2026-09-11 took both back out — "make
+ *    double-click/triple-click translation available whether translate toggle is
+ *    off", and, on DMs, "Yes - always translate". What survives is the refusal
+ *    for text that cannot be traced to a conversation at all, which is the one
+ *    this file's call-site assertions are about: the decision must still be
+ *    asked, and asked BEFORE a provider is obtained. Which way it answers is
+ *    behaviour and is tested in test/modes.test.ts.
  *
  * 2. `includeDMs` WAS A DEAD SETTING. Its only two mentions in the tree were its
  *    own definition and a source-ORDERING scan in the file that became
@@ -162,40 +168,51 @@ describe("includeDMs is read by the code, not just defined by it", () => {
     }
 
     it("every path that can send message text reads it", () => {
-        // render.tsx is the rendered mainline; selection.ts is double-click and
-        // triple-click; state.ts is repaintChannel(), which enqueues a whole
-        // channel's scrollback when a server is switched on — and is the ONLY
-        // thing that enqueues anything in Both-Language mode, because
+        // render.tsx is the rendered mainline; state.ts is repaintChannel(), which
+        // enqueues a whole channel's scrollback when a server is switched on — and
+        // is the ONLY thing that enqueues anything in Both-Language mode, because
         // wrapContent() reads the cache and never requests. It consulted
-        // toggle.isOn() directly until it was fixed, and toggle.isOn() cannot
-        // see a DM opt-in, so includeDMs governed Replace mode and not
-        // Both-Language: one setting, two answers, decided by mode.
+        // toggle.isOn() directly until it was fixed, and toggle.isOn() cannot see
+        // a DM opt-in, so includeDMs governed Replace mode and not Both-Language:
+        // one setting, two answers, decided by mode.
         //
-        // If any of these drops off this list, one of the ways this plugin
-        // transmits text has stopped asking the user's DM decision. Asserted as a
-        // required subset rather than as the whole list, because the whole list is
-        // now wider than "paths that transmit" — the next test pins the exact
-        // membership, so a new reader still cannot appear unnoticed.
+        // 🔴 WHY selection.ts IS STILL ON THIS LIST, AND IT IS NOT THE REASON IT
+        // USED TO BE. Since the 2026-09-11 ruling the DM opt-in does not gate the
+        // forward double-click translation — selectionGate() does not read it. The
+        // file still reads it for isRenderedTranslated(), which asks "is the text
+        // on screen already one of OURS?" so the REVERSE path knows whether there
+        // is an original to go back to, and that question genuinely depends on
+        // AUTOMATIC translation being on. Losing that read would make the reverse
+        // path try to restore an original behind text that was never translated.
+        //
+        // If any of these drops off the list, one of the ways this plugin decides
+        // what to transmit has stopped asking the user's DM decision. Asserted as a
+        // required subset; the next test pins the exact membership, so a new reader
+        // still cannot appear unnoticed.
         for (const file of ["render.tsx", "selection.ts", "state.ts"]) {
             expect(readers(), `${file} stopped reading the DM decision`).toContain(file);
         }
     });
 
-    it("and nothing else reads it except the one place that only DESCRIBES it", () => {
+    it("and nothing else reads it at all", () => {
         // THE EXACT MEMBERSHIP, kept exact so a new reader is a deliberate act
         // with a reason written down rather than a line nobody notices.
         //
-        // Panel.tsx TRANSMITS NOTHING, and that is why it is allowed here. It
-        // reads includeDMs for one purpose: the footer shown while Discord is
-        // unavailable says whether double-click still works, and "would the
-        // double-click path allow this?" is answered by selectionGate(), which
-        // takes includeDMs. Passing the real value rather than a narrowed
-        // stand-in is what keeps the sentence and the path ONE decision instead of
-        // two that can disagree — which is exactly the defect that footer had. The
-        // panel returns null without a guild id, so the DM branch is unreachable
-        // from it today; the value is passed anyway so that stops being
-        // load-bearing. See test/panelUnavailableToggle.test.ts.
-        expect(readers()).toEqual(["Panel.tsx", "render.tsx", "selection.ts", "state.ts"]);
+        // 🔴 Panel.tsx DROPPED OFF THIS LIST, AND THE GUARD IS TIGHTER FOR IT. It
+        // used to be here, and was the one entry that transmitted nothing: it read
+        // includeDMs to hand to selectionGate(), because the footer shown while
+        // Discord is unavailable claims that double-click still works, and "would
+        // the double-click path allow this?" had to be answered by the function
+        // that decides it rather than by a second copy of its condition.
+        //
+        // Since the 2026-09-11 ruling the gate allows every identified
+        // conversation, the panel cannot produce the one case it refuses, and the
+        // footer is a single unconditional sentence — so there is no question left
+        // for the panel to ask and unavailableFooter() is deleted. The membership
+        // is therefore exactly the paths that decide what to transmit, which is
+        // what this guard was always trying to be. See
+        // test/panelUnavailableToggle.test.ts for the sentence's own premise.
+        expect(readers()).toEqual(["render.tsx", "selection.ts", "state.ts"]);
     });
 
     it("it is still defined, and still ships OFF", () => {
@@ -288,6 +305,11 @@ describe("the double-click path is gated before anything is sent", () => {
         const start = codeIndexOf(source, "selectionAction(toggle, {");
         expect(start, "selectionAction() call not found").toBeGreaterThan(-1);
         const args = source.slice(start, source.indexOf("});", start));
+        // selectionGate() does not read includeDMs since the 2026-09-11 ruling, so
+        // this no longer proves the DM opt-in governs the gesture — it proves that
+        // if a condition is ever added there, it will be attached to the user's
+        // real value rather than to a stand-in somebody hardcoded while the
+        // argument was inert. That substitution is the cheap way this wiring rots.
         expect(args).toContain("includeDMs: settings.store.includeDMs");
         // The guild id comes from the same resolver the rendered path uses;
         // inventing a second mechanism is how the two drift apart.

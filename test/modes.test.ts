@@ -157,14 +157,34 @@ describe("translationEnabled — the one DM/server decision", () => {
 });
 
 /**
- * The double-click / triple-click path had NO privacy guard whatsoever.
- * translateSelection() checked that the selection was non-empty and that the
- * click was inside message content, and then sent the text. Not the per-server
- * toggle, not DMs. With a billed provider selected, a double-click inside a
- * private message — or inside a server the user had deliberately switched off —
- * was a paid disclosure.
+ * THE DOUBLE-CLICK / TRIPLE-CLICK GATE, AND WHAT IT DELIBERATELY STOPPED ASKING.
+ *
+ * WHERE IT STARTED. The path had no guard whatsoever: translateSelection()
+ * checked that the selection was non-empty and that the click was inside message
+ * content, and then sent the text. Not the per-server toggle, not DMs. With a
+ * billed provider selected, a double-click inside a private message — or inside a
+ * server the user had deliberately switched off — was a paid disclosure, and this
+ * gate was built to close it.
+ *
+ * WHERE IT IS NOW, AND IT IS AN OPERATOR DECISION RATHER THAN A REGRESSION.
+ * Ruling 2026-09-11: "make double-click/triple-click translation available
+ * whether translate toggle is off", and, asked directly whether DMs were in
+ * scope, "Yes - always translate". The two refusals that asked "did the user
+ * permit this conversation?" are therefore gone, and the assertions that pinned
+ * them are INVERTED here rather than deleted: each now states that the case is
+ * allowed, deliberately, and names the decision that allows it. A deleted
+ * assertion leaves no record that the behaviour was ever the other way.
+ *
+ * WHAT IS STILL REFUSED is text that cannot be traced to a conversation at all,
+ * and that reasoning did not change: with no answer to "WHICH conversation is
+ * this?", there is nothing true the plugin can say about the text.
+ *
+ * BOTH GESTURES ARE THIS ONE DECISION. A triple-click fires `dblclick` on its
+ * second click and `click` with `detail === 3` on its third, and selection.ts
+ * routes both into selectionAction(), which asks this function. There is no
+ * second gate to test.
  */
-describe("selectionGate — the double-click privacy gate", () => {
+describe("selectionGate — a deliberate gesture, in any identified conversation", () => {
     const server = (guildId: string) => ({ guildId });
     const dm = { guildId: null };
 
@@ -174,47 +194,103 @@ describe("selectionGate — the double-click privacy gate", () => {
         return t;
     };
 
-    it("refuses in a server the user switched off, and says which case it is", () => {
-        const gate = selectionGate(new ToggleState(), server("g1"), false);
-        expect(gate.allowed).toBe(false);
-        expect(gate.allowed === false && gate.reason).toBe(SELECTION_REFUSAL.serverOff);
+    it("ALLOWS in a server the user switched off — INVERTED by the 2026-09-11 ruling", () => {
+        // This assertion used to require SELECTION_REFUSAL.serverOff. The operator
+        // asked for the gesture to work "whether translate toggle is off", so what
+        // it now guarantees is that a switched-off server does not refuse a
+        // deliberate selection. The switch governs CHANNEL translation; this does
+        // not go through it.
+        const toggle = new ToggleState();
+        expect(toggle.isOn("g1"), "the fixture is already on — the assertion is vacuous").toBe(false);
+        expect(selectionGate(toggle, server("g1"), false).allowed).toBe(true);
     });
 
     it("allows in a server the user switched on", () => {
         expect(selectionGate(withServerOn("g1"), server("g1"), false).allowed).toBe(true);
     });
 
-    it("refuses in a DM by default", () => {
-        const gate = selectionGate(new ToggleState(), dm, false);
-        expect(gate.allowed).toBe(false);
-        expect(gate.allowed === false && gate.reason).toBe(SELECTION_REFUSAL.directMessage);
+    it("ALLOWS in a DM with the opt-in off — INVERTED, and the operator chose it explicitly", () => {
+        // This used to require SELECTION_REFUSAL.directMessage. Asked whether DMs
+        // should be covered, the operator answered "Yes - always translate", so
+        // what it now guarantees is that a DM refuses nothing on this path. The
+        // consequence is written into PRIVACY.md rather than left to be found.
+        expect(selectionGate(new ToggleState(), dm, false).allowed).toBe(true);
     });
 
-    it("allows in a DM once the user opted in — the decision is theirs", () => {
+    it("allows in a DM once the user opted in — the decision was theirs either way", () => {
         expect(selectionGate(new ToggleState(), dm, true).allowed).toBe(true);
     });
 
-    it("refuses an unset includeDMs, exactly as the rendered path does", () => {
-        expect(selectionGate(new ToggleState(), dm, undefined).allowed).toBe(false);
+    it("ALLOWS an unset includeDMs too — INVERTED, because the gate no longer reads it", () => {
+        // It used to fail closed here, matching the rendered path, because a
+        // settings store read before hydration yields undefined. The gate does not
+        // consult the value at all now, so there is no open/closed to fail either
+        // way — and translationEnabled(), which DOES consult it, still fails closed
+        // on undefined. That assertion is above and is untouched.
+        expect(selectionGate(new ToggleState(), dm, undefined).allowed).toBe(true);
     });
 
-    it("refuses when the conversation cannot be identified at all", () => {
-        // A search result or a pinned popout is not a message row. Unknown is
-        // NOT a DM and NOT a server; it is its own refusal.
+    it("refuses when the conversation cannot be identified at all — KEPT", () => {
+        // A search result or a pinned popout is not a message row. Unknown is NOT
+        // a DM and NOT a server; it is its own refusal, and it is the only one
+        // left. The reasoning survived the ruling because it is not about
+        // permission: with no conversation identified there is nothing true to say.
         const gate = selectionGate(withServerOn("g1"), null, true);
         expect(gate.allowed).toBe(false);
         expect(gate.allowed === false && gate.reason).toBe(SELECTION_REFUSAL.unknownChannel);
     });
 
-    it("an unknown conversation is not silently treated as a DM", () => {
+    it("an unknown conversation is still not treated as a DM", () => {
+        // The two used to differ because a DM was refused for its own reason and an
+        // unknown surface for another. They differ for a sharper reason now: one is
+        // allowed and the other is not.
         const unknown = selectionGate(new ToggleState(), null, true);
         const inDm = selectionGate(new ToggleState(), dm, true);
         expect(unknown.allowed).toBe(false);
         expect(inDm.allowed).toBe(true);
     });
 
+    it("the toggle and the DM setting are NOT inputs to this gate (the ruling, swept)", () => {
+        // The ruling is "whatever the toggle says, whatever includeDMs says", which
+        // is a statement about INVARIANCE and cannot be made by any single case.
+        // This is also why selectionGate() still takes both arguments: a function
+        // that could not be handed them could not be shown to ignore them.
+        const off = new ToggleState();
+        const on = withServerOn("g1");
+        for (const toggle of [off, on]) {
+            for (const includeDMs of [true, false, undefined]) {
+                for (const channel of [server("g1"), server("g2"), dm]) {
+                    expect(
+                        selectionGate(toggle, channel, includeDMs).allowed,
+                        `refused guildId=${String(channel.guildId)} ` +
+                        `toggledOn=${String(toggle.isOn("g1"))} includeDMs=${String(includeDMs)}`
+                    ).toBe(true);
+                }
+                // …and the one refusal is equally invariant in the other direction.
+                expect(
+                    selectionGate(toggle, null, includeDMs).allowed,
+                    "an unidentifiable conversation was allowed through"
+                ).toBe(false);
+            }
+        }
+        // Control: the sweep really did vary the toggle, so "invariant" is a
+        // finding and not an artefact of two identical fixtures.
+        expect(off.isOn("g1")).toBe(false);
+        expect(on.isOn("g1")).toBe(true);
+    });
+
+    it("there is exactly ONE refusal left, and it is the unknown-conversation one", () => {
+        // The two that went are unreachable, so leaving the constants behind would
+        // be dead wording a future change could wire back up by accident. This
+        // fails if either returns.
+        expect(Object.keys(SELECTION_REFUSAL)).toEqual(["unknownChannel"]);
+        expect(SELECTION_REFUSAL).not.toHaveProperty("serverOff");
+        expect(SELECTION_REFUSAL).not.toHaveProperty("directMessage");
+    });
+
     it("every refusal actually says something — silence reads as a broken plugin", () => {
         const reasons = Object.values(SELECTION_REFUSAL);
+        expect(reasons.length, "there are no refusals at all to check").toBeGreaterThan(0);
         for (const reason of reasons) expect(reason.length).toBeGreaterThan(20);
         expect(new Set(reasons).size).toBe(reasons.length);
     });
@@ -254,11 +330,14 @@ describe("selectionAction — what a double-click actually does", () => {
 
     it("a held original is served even where a translation would be refused", () => {
         // Nothing leaves the client on this branch, so the gate has nothing to
-        // protect. A user who opted out of DMs after translating one must still
-        // be able to read their own message back.
+        // protect. The refusing fixture is now an UNIDENTIFIABLE conversation
+        // rather than an opted-out DM, because since the 2026-09-11 ruling a DM is
+        // allowed and would no longer have demonstrated the ordering at all. A
+        // user must still be able to read back text this plugin already holds even
+        // where it cannot tell which conversation the click landed in.
         const action = selectionAction(new ToggleState(), {
             ...base,
-            channel: { guildId: null },
+            channel: null,
             includeDMs: false,
             heldOriginal: "das Original"
         });
@@ -277,30 +356,43 @@ describe("selectionAction — what a double-click actually does", () => {
         expect(action.kind === "translate" && action.to).toBe("en");
     });
 
-    it("refuses in a DM the user never opted into", () => {
+    it("TRANSLATES in a DM the user never opted into — INVERTED by the ruling", () => {
+        // It used to refuse with SELECTION_REFUSAL.directMessage. What this now
+        // guarantees is the operator's answer to "should DMs also be covered?",
+        // which was "Yes - always translate": the gesture is the permission, and
+        // the selection goes to the provider in a DM with includeDMs false.
         const action = selectionAction(new ToggleState(), {
             ...base,
             channel: { guildId: null }
         });
-        expect(action.kind).toBe("refuse");
-        expect(action.kind === "refuse" && action.reason).toBe(SELECTION_REFUSAL.directMessage);
+        expect(action.kind).toBe("translate");
+        expect(action.kind === "translate" && action.to).toBe("en");
     });
 
     it("a reverse target does NOT carry the request past the gate", () => {
         // reverseTo is a language, not a permission. If the fallback branch were
-        // reachable before the gate, a translated DM would be the easiest way in.
+        // reachable before the gate, a translated message on an unidentifiable
+        // surface would be the easiest way in. The refusing fixture changed from a
+        // DM to an unidentifiable conversation for the reason above — a DM is
+        // allowed now, so it can no longer prove an ordering.
         const action = selectionAction(new ToggleState(), {
             ...base,
-            channel: { guildId: null },
+            channel: null,
             reverseTo: "de"
         });
         expect(action.kind).toBe("refuse");
+        expect(action.kind === "refuse" && action.reason).toBe(SELECTION_REFUSAL.unknownChannel);
     });
 
-    it("refuses in a server that is switched off, whatever the cache holds", () => {
+    it("TRANSLATES in a server that is switched off — INVERTED by the ruling", () => {
+        // It used to refuse with SELECTION_REFUSAL.serverOff. What this now
+        // guarantees is the operator's instruction verbatim — the gesture works
+        // "whether translate toggle is off" — including the reverse direction,
+        // which is the case a user hits most: they translated a channel, switched
+        // it off, and double-clicked a line that is still showing as translated.
         const action = selectionAction(new ToggleState(), { ...base, reverseTo: "de" });
-        expect(action.kind).toBe("refuse");
-        expect(action.kind === "refuse" && action.reason).toBe(SELECTION_REFUSAL.serverOff);
+        expect(action.kind).toBe("translate");
+        expect(action.kind === "translate" && action.to).toBe("de");
     });
 
     it("translates a DM once opted in", () => {
@@ -323,5 +415,158 @@ describe("selectionAction — what a double-click actually does", () => {
         // to a paid provider. The distinction is worth a test.
         const action = selectionAction(serverOn(), { ...base, heldOriginal: "" });
         expect(action.kind).toBe("showHeldOriginal");
+    });
+});
+
+/**
+ * 🔴 THE REGRESSION THE RULING WAS ASKED FOR, IN THE EXACT STATE THE OPERATOR
+ * DESCRIBED.
+ *
+ * "Make double-click/triple-click translation available whether translate toggle
+ * is off." Asked whether DMs should also be covered: "Yes - always translate."
+ *
+ * So the fixture is the shipped starting state and nothing else: NO server
+ * switched on — which is every start, since the toggle stopped surviving one —
+ * and `includeDMs` at its shipped default of false. Both gestures are covered by
+ * one assertion each, because a triple-click fires `dblclick` on its second click
+ * and `click` with `detail === 3` on its third, and selection.ts routes both into
+ * selectionAction(). There is no separate triple-click decision to test.
+ *
+ * REVERT selectionGate()'s BODY AND THIS GOES RED, with `refuse` and
+ * SELECTION_REFUSAL.serverOff for the channel and SELECTION_REFUSAL.directMessage
+ * for the DM — which is how it was checked before it was believed.
+ */
+describe("the ruling: a deliberate gesture works with everything switched off", () => {
+    const base: Omit<SelectionContext, "channel"> = {
+        includeDMs: false,
+        heldOriginal: null,
+        reverseTo: null,
+        targetLanguage: "en"
+    };
+
+    /** The shipped starting state: nothing on, nothing opted into. */
+    const nothingOn = () => {
+        const toggle = new ToggleState();
+        // Controls: without these, every assertion below could be passing because
+        // the fixture was already permissive.
+        expect(toggle.isOn("g1"), "the fixture has a server switched on").toBe(false);
+        expect(base.includeDMs, "the fixture has already opted into DMs").toBe(false);
+        return toggle;
+    };
+
+    it("a double-click in a SERVER CHANNEL whose toggle is off resolves to translate", () => {
+        const action = selectionAction(nothingOn(), { ...base, channel: { guildId: "g1" } });
+        expect(action.kind, "the gesture is refused in a switched-off server").toBe("translate");
+        expect(action.kind === "translate" && action.to).toBe("en");
+    });
+
+    it("a double-click in a DM with includeDMs off resolves to translate", () => {
+        const action = selectionAction(nothingOn(), { ...base, channel: { guildId: null } });
+        expect(action.kind, "the gesture is refused in a direct message").toBe("translate");
+        expect(action.kind === "translate" && action.to).toBe("en");
+    });
+
+    it("…and in a DM with includeDMs UNSET, which is what a pre-hydration store returns", () => {
+        const action = selectionAction(nothingOn(), {
+            ...base,
+            channel: { guildId: null },
+            includeDMs: undefined
+        });
+        expect(action.kind).toBe("translate");
+    });
+
+    it("neither of those opened the AUTOMATIC path, in the same world (control)", () => {
+        // The half that makes this a widening of ONE path rather than of the
+        // plugin. Same toggle, same setting, same moment.
+        const toggle = nothingOn();
+        expect(translationEnabled(toggle, "g1", false), "automatic translation opened for a server").toBe(false);
+        expect(translationEnabled(toggle, null, false), "automatic translation opened for a DM").toBe(false);
+    });
+
+    it("an unidentifiable conversation is still refused in that same state (control)", () => {
+        // Proof the gate is still a gate rather than a pass-through. If this ever
+        // goes green as "translate", the remaining refusal has been lost and text
+        // of unknown origin is being sent.
+        const action = selectionAction(nothingOn(), { ...base, channel: null });
+        expect(action.kind).toBe("refuse");
+        expect(action.kind === "refuse" && action.reason).toBe(SELECTION_REFUSAL.unknownChannel);
+    });
+});
+
+/**
+ * 🔴 THE GUARANTEE MOST AT RISK FROM THE RULING, PINNED AGAINST THE SPECIFIC WAY
+ * IT WOULD HAVE BEEN BROKEN.
+ *
+ * The cheapest way to make "double-click works whether the toggle is off" pass is
+ * to widen translationEnabled(), because the gate used to delegate its whole
+ * answer to it. That would have switched AUTOMATIC channel translation on for
+ * every server and every DM — the exact opposite of the v0.2.13 decision that
+ * turned it off — and a suite that only asked whether the gesture had opened
+ * would have reported it as a clean pass.
+ *
+ * translationEnabled() has four callers and three of them start traffic on a
+ * keystroke the user never made: render.tsx's two entry points, once per message
+ * rendered, and state.ts's repaintChannel(), which enqueues a whole channel's
+ * loaded scrollback at once. The fourth, selection.ts's isRenderedTranslated(),
+ * answers "is the text on screen already one of ours?" — so widening it would
+ * also send the reverse path looking for an original behind text that was never
+ * translated.
+ *
+ * The describe above states that the GESTURE opened. This one states that nothing
+ * else did.
+ */
+describe("the automatic path did NOT widen with the gesture", () => {
+    it("a switched-off server is still refused automatic translation", () => {
+        expect(translationEnabled(new ToggleState(), "g1", false)).toBe(false);
+    });
+
+    it("…and stays refused however the DM opt-in is set", () => {
+        // A DM opt-in must not reach servers. It never did; this is the assertion
+        // that says the gate change did not make it start.
+        for (const includeDMs of [true, false, undefined]) {
+            expect(
+                translationEnabled(new ToggleState(), "g1", includeDMs),
+                `a server became automatic with includeDMs=${String(includeDMs)}`
+            ).toBe(false);
+        }
+    });
+
+    it("a DM with includeDMs off is still refused automatic translation", () => {
+        expect(translationEnabled(new ToggleState(), null, false)).toBe(false);
+        expect(translationEnabled(new ToggleState(), null, undefined)).toBe(false);
+    });
+
+    it("🔴 the two paths genuinely DISAGREE now, which is the entire change", () => {
+        // THE ONE ASSERTION THAT CANNOT BE SATISFIED BY EITHER MISTAKE. If the gate
+        // is narrowed back it fails on the second expect; if translationEnabled()
+        // is widened it fails on the first. Every other test in this file passes in
+        // at least one of those two broken worlds.
+        const toggle = new ToggleState();
+        for (const guildId of ["g1", null]) {
+            for (const includeDMs of [false, undefined]) {
+                expect(
+                    translationEnabled(toggle, guildId, includeDMs),
+                    `automatic translation is ON for guildId=${String(guildId)} ` +
+                    `includeDMs=${String(includeDMs)} — the rendered path widened`
+                ).toBe(false);
+                expect(
+                    selectionGate(toggle, { guildId }, includeDMs).allowed,
+                    `the gesture is REFUSED for guildId=${String(guildId)} ` +
+                    `includeDMs=${String(includeDMs)} — the ruling was undone`
+                ).toBe(true);
+            }
+        }
+    });
+
+    it("switching a server on still turns the automatic path on (control)", () => {
+        // Without this the assertions above would pass on a build where automatic
+        // translation was broken outright rather than merely off by default.
+        const toggle = new ToggleState();
+        toggle.setOn("g1", true);
+        expect(translationEnabled(toggle, "g1", false)).toBe(true);
+    });
+
+    it("opting into DMs still turns the automatic path on for a DM (control)", () => {
+        expect(translationEnabled(new ToggleState(), null, true)).toBe(true);
     });
 });
