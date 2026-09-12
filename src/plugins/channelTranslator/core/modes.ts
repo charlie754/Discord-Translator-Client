@@ -24,7 +24,15 @@ export interface PanelContext {
  * whole DM answer, though — this class deliberately does not know about the
  * `includeDMs` setting, because core/ knows nothing about settings at all.
  * `translationEnabled()` below is the ONLY function that answers "may this
- * conversation be translated?", and it is what every caller must ask.
+ * conversation be translated AUTOMATICALLY?", and it is what every rendering
+ * caller must ask.
+ *
+ * A DELIBERATE double-click or triple-click is a DIFFERENT question with a
+ * different answer: selectionGate() asks neither this class nor `includeDMs`.
+ * Operator ruling 2026-09-11 — "make double-click/triple-click translation
+ * available whether translate toggle is off" and, asked directly whether DMs
+ * were in scope, "Yes - always translate". Do not collapse the two back into
+ * one function; the note on selectionGate() says what each now governs.
  */
 export class ToggleState {
     private servers = new Set<string>();
@@ -121,30 +129,31 @@ export class ToggleState {
  *
  * WHY UNLOCKING IT IS CORRECT AND NOT A WORKAROUND. selectionGate() below does
  * NOT consult `patchesOk`; only panelState() does, and only to pick the pill's
- * label. So double-click translation really does work during the outage, for
- * exactly the servers whose toggle is on — which is what
- * UNAVAILABLE_FOOTER.doubleClickWorks already promises, and what index.tsx's
- * 15-second notice promises too. Freezing the switch off blocked the user from
- * enabling the one path that still worked, and from pre-arming the rendered path
- * for the moment the patches match again.
+ * label. So double-click translation really does work during the outage — and
+ * since the 2026-09-11 ruling it works for every identified conversation rather
+ * than only for the servers whose toggle is on, which is what
+ * UNAVAILABLE_FOOTER promises and what index.tsx's 15-second notice promises
+ * too. Freezing the switch off blocked the user from pre-arming the rendered
+ * path for the moment the patches match again.
  *
  * SO THE SWITCH IS A PREFERENCE, NOT A STATUS. The pill carries the status and
  * the footer explains it; the switch says what the user WANTS. Once the control
  * is operable a display-only override is the worse bug of the two — a click that
  * switches the server on while the track stays grey is a control lying about its
  * own state, and flip() writes from `isOn`, so the next click would then appear
- * to do nothing at all. The two signals no longer disagree in any case:
- * unavailableFooter() branches on the same toggle the switch now renders, so an
- * ON switch is shown beside "double-click still works" and an OFF switch beside
- * the sentence saying this server is not switched on.
+ * to do nothing at all. The two signals cannot disagree any more, and for a
+ * simpler reason than the one that used to hold: UNAVAILABLE_FOOTER is a single
+ * sentence whose promise does not depend on the toggle at all, so there is no
+ * branch left that could fall out of step with the track.
  *
  * Panel.tsx renders `toggle.isOn(guildId)` directly again. Do not reintroduce a
  * display-only wrapper here.
  */
 
 /**
- * THE ONE ANSWER TO "MAY THIS CONVERSATION BE TRANSLATED?" — for the rendered
- * mainline and for the double-click selection popover alike.
+ * THE ONE ANSWER TO "MAY THIS CONVERSATION BE TRANSLATED AUTOMATICALLY?" — for
+ * the rendered mainline and for the scrollback batcher behind it. It is NOT the
+ * answer for the double-click path any more; selectionGate() below is.
  *
  * Two decisions, deliberately kept apart:
  *
@@ -152,12 +161,32 @@ export class ToggleState {
  *   - A DM is governed by the `includeDMs` setting and by nothing else. It has
  *     no guild id, so `ToggleState` cannot reach it.
  *
+ * 🔴 WIDENING THIS FUNCTION IS NOT A WAY TO WIDEN THE DOUBLE-CLICK PATH, AND
+ * THE 2026-09-11 RULING IS NOT AN INSTRUCTION TO TOUCH IT. It has four callers
+ * and three of them start traffic on a keystroke the user never made:
+ *
+ *   - render.tsx transformMessage() — Replace mode, every message rendered
+ *   - render.tsx wrapContent()      — Both Language mode, every message rendered
+ *   - state.ts repaintChannel()     — a whole channel's loaded scrollback at once
+ *   - selection.ts isRenderedTranslated() — "is the visible text already one of
+ *     OURS?", which the REVERSE path needs in order to know whether there is an
+ *     original to go back to. That question genuinely depends on automatic
+ *     translation being on: with it off the text on screen IS the original, and
+ *     reversing there would translate a language into itself.
+ *
+ * Making this return true more often re-enables AUTOMATIC channel translation
+ * for every server and every DM, which is the exact opposite of the decision
+ * that turned it off. The gate below is the only thing the ruling moved.
+ *
  * WHAT THIS CLOSES. `includeDMs` used to be read by nothing whatsoever: the
  * mainline hard-blocked DMs through `toggle.isOn(null)` and the selection path
  * asked no question at all. So a control describing a privacy decision governed
  * nothing in either direction, while index.tsx's first-run notice promised
  * "Direct messages are excluded unless you opt in" and PRIVACY.md described the
  * setting as working. Both statements are true only once something reads it.
+ * It is read for real now — and both of those sentences have since been
+ * rewritten a second time, because what it governs is AUTOMATIC translation and
+ * not a gesture the user makes on one message.
  *
  * `includeDMs !== true` rather than `!includeDMs` on purpose. A settings store
  * read before hydration yields `undefined`, and `undefined` must mean OFF.
@@ -185,17 +214,29 @@ export function translationEnabled(
  * does nothing is indistinguishable from a broken plugin, and the user would
  * reasonably try again — which is the state the previous code left them in for
  * every other failure it had a message for.
+ *
+ * THERE IS NO `serverOff` AND NO `directMessage` ANY MORE, AND THEIR ABSENCE IS
+ * THE 2026-09-11 CHANGE.
+ *
+ * `serverOff` read "Not translated: translation is off for this server. Turn it
+ * on from the translator panel." and `directMessage` read "Not translated: this
+ * is a direct message. Turn on Also translate direct messages in the plugin
+ * settings to allow it." Each named a permission the double-click path no longer
+ * asks for, so each became unreachable — and an unreachable refusal constant is
+ * an invitation to wire it back up, which is why `serverState` and
+ * toggleShowsOn() were deleted rather than left unused as well. The wording is
+ * recorded here because it is the evidence of what the gate used to refuse.
+ *
+ * THE RULING. "Make double-click/triple-click translation available whether
+ * translate toggle is off", and, asked directly whether DMs were in scope,
+ * "Yes - always translate". A deliberate gesture on text the user is already
+ * looking at is a different act from switching a whole conversation on, and it
+ * is the user who performs it.
  */
 export const SELECTION_REFUSAL = {
     unknownChannel:
         "Not translated: this text could not be traced to a conversation, so " +
-        "there is no way to tell whether you allowed it.",
-    directMessage:
-        "Not translated: this is a direct message. Turn on \"Also translate " +
-        "direct messages\" in the plugin settings to allow it.",
-    serverOff:
-        "Not translated: translation is off for this server. Turn it on from " +
-        "the translator panel."
+        "there is no way to tell whether you allowed it."
 } as const;
 
 export type SelectionGate =
@@ -203,24 +244,41 @@ export type SelectionGate =
     | { allowed: false; reason: string; };
 
 /**
- * The privacy gate for the double-click / triple-click path.
+ * THE GATE FOR THE DOUBLE-CLICK / TRIPLE-CLICK PATH, WHICH NOW ASKS EXACTLY ONE
+ * QUESTION: CAN THIS TEXT BE TRACED TO A CONVERSATION AT ALL?
  *
- * THE HOLE THIS CLOSES. `translateSelection()` checked only that the selection
- * was non-empty and that the click landed inside message content, then sent the
- * text. It consulted neither the per-server toggle nor anything about DMs, so a
- * double-click inside a private message — or inside a server the user had
- * deliberately switched OFF — shipped that text to the provider, billed on the
- * paid ones. The rendered path had guarded both since it was written; this one
- * never had.
+ * Operator ruling 2026-09-11. A deliberate double-click or triple-click
+ * translates the selection in any conversation the plugin can identify —
+ * whatever the per-server panel toggle says, and whatever `includeDMs` says.
+ * Both gestures arrive here through selectionAction() and nowhere else, because
+ * a triple-click fires `dblclick` on its second click and `click` with
+ * `detail === 3` on its third; one change here therefore covers both, and a
+ * separate triple-click gate would be a second copy of this decision.
  *
- * `channel === null` means the click could not be traced to a message row. That
- * is not "no guild" — it is "we do not know", and it fails closed, because a
- * `null` guild id and an unknown conversation must not collapse into the same
- * answer.
+ * WHY `unknownChannel` SURVIVES WHEN THE OTHER TWO DID NOT. The two that went
+ * answered "did the user permit this conversation?", which is the question the
+ * ruling settles. This one answers "WHICH conversation is this?", and that is not
+ * the same question. `channel === null` means the click could not be traced to a
+ * message row at all: a search result, a pinned popout, a surface this plugin
+ * does not recognise. That is not "no guild" — it is "we do not know", and
+ * without an answer there is nothing true the plugin can say about the text, so
+ * it still fails closed. A `null` guild id and an unknown conversation must never
+ * collapse into one answer.
  *
- * The allow/deny decision itself is `translationEnabled()` and only that; this
- * function chooses the wording. One implementation, so a change to the decision
- * cannot leave the two paths disagreeing.
+ * 🔴 `toggle` AND `includeDMs` ARE STILL TAKEN AND ARE DELIBERATELY NOT READ.
+ * They are not left-overs. Keeping them is the only way the ruling can be stated
+ * as a TEST rather than as this comment: "the answer does not change when the
+ * toggle flips, or when the DM setting flips" cannot be asserted against a
+ * function that cannot be handed either one, and test/modes.test.ts sweeps both
+ * across every combination for exactly that reason. They are also still the
+ * user's real values, threaded from selection.ts, so a later condition cannot be
+ * wired to a literal by accident. Until there is such a condition, reading either
+ * one in this body re-closes the path the ruling opened.
+ *
+ * THE AUTOMATIC PATH IS UNTOUCHED, AND THAT SEPARATION IS THE WHOLE CHANGE.
+ * translationEnabled() above still governs rendering and the scrollback batcher,
+ * and still refuses a switched-off server and an opted-out DM. This function no
+ * longer calls it.
  */
 export function selectionGate(
     toggle: ToggleState,
@@ -228,68 +286,53 @@ export function selectionGate(
     includeDMs: boolean | undefined
 ): SelectionGate {
     if (!channel) return { allowed: false, reason: SELECTION_REFUSAL.unknownChannel };
-    if (translationEnabled(toggle, channel.guildId, includeDMs)) return { allowed: true };
-    return {
-        allowed: false,
-        reason: channel.guildId === null
-            ? SELECTION_REFUSAL.directMessage
-            : SELECTION_REFUSAL.serverOff
-    };
+    return { allowed: true };
 }
 
 /**
- * THE PANEL'S FOOTER IN THE `unavailable` STATE, WHICH IS NOT ONE SENTENCE.
+ * THE PANEL'S FOOTER IN THE `unavailable` STATE, WHICH IS ONE SENTENCE AGAIN.
  *
- * THE DEFECT THIS CLOSES. The footer rendered one fixed line — "Discord changed.
- * Translation is paused; double-click still works." — for every user in that
- * state. The second half is a promise about the double-click path, and that path
- * is governed by selectionGate(), which refuses with SELECTION_REFUSAL.serverOff
- * whenever the per-server toggle is off. So a user whose server was never
- * switched on was told a manual route still worked, tried it, and was refused.
+ * 🔴 READ THIS BEFORE "FIXING" IT BACK, BECAUSE THIS EXACT SENTENCE WAS ONCE THE
+ * DEFECT HERE. The footer used to render "Discord changed. Translation is
+ * paused; double-click still works." for every user in that state, while
+ * selectionGate() refused with SELECTION_REFUSAL.serverOff whenever the
+ * per-server toggle was off. A user whose server had never been switched on was
+ * told a manual route still worked, tried it, and was refused. The fix was a
+ * second sentence for that case, chosen by asking the gate rather than by
+ * re-deciding.
  *
- * DERIVED FROM selectionGate() RATHER THAN FROM toggle.isOn(). The claim the
- * sentence makes is exactly "would the double-click path allow this?", so it is
- * answered by the function that decides it. A second copy of the condition here
- * would be a copy that can disagree with the path it describes — which is the
- * defect being fixed, one layer down. It is also why DMs come out right for free:
- * the gate already reads `includeDMs` for a null guild id.
+ * THE SENTENCE IS TRUE NOW, FOR A REASON THAT DID NOT EXIST THEN. Since the
+ * 2026-09-11 ruling the gate's only refusal is `unknownChannel`, and the panel
+ * cannot produce that case: it returns null before rendering when there is no
+ * guild id, so the channel it would hand the gate is an object literal and never
+ * null. There is no input the panel can supply for which the double-click path
+ * refuses, so there is nothing left to branch on — and a branch would now be the
+ * opposite lie, withholding a route that works.
  *
- * THE OFF WORDING NOW POINTS AT THE SWITCH, AND THAT IS THE SECOND DEFECT FIXED
- * HERE. It used to end "The switch is unavailable until translation works
- * again." — an accurate description of `disabled={state === "unavailable"}` in
- * Panel.tsx, and a lie the moment that attribute was removed; the note above the
- * toggle in this file says why it had to go. It was also the only guidance the
- * panel gave in the one state where the user was locked out, so it told them
- * their situation was unfixable while a working route existed. The wording
- * therefore names the control, says what switching it on buys IMMEDIATELY
- * (double-click, which selectionGate() allows without ever reading
- * `patchesOk`), and says what it buys LATER (the rendered path, as soon as the
- * patches match again). It still promises nothing about the state the user is in
- * at the moment they read it.
+ * SO THE CONDITION TO RE-READ IS THE GATE, NEVER THIS STRING. If selectionGate()
+ * grows a refusal a server channel can reach, this sentence starts over-promising
+ * exactly as it did the first time, and the two-branch form — derived FROM the
+ * gate, never from a second copy of its condition — is what it has to go back
+ * to. test/panelUnavailableToggle.test.ts pins the premise it rests on: the gate
+ * allows every identified conversation, whatever the toggle and the DM setting
+ * say.
  *
- * A pure function over explicit arguments, in core/, for the reason recorded on
- * translationEnabled() above: Panel.tsx imports @webpack/common and cannot be
- * loaded by this suite at all, so core/ is the only layer where the wording can
- * be pinned as BEHAVIOUR — see test/panelUnavailableToggle.test.ts.
+ * A PLAIN CONSTANT, AND unavailableFooter() IS DELETED. A function taking three
+ * parameters, reading none of them and having one possible return value is dead
+ * machinery that reads like a live choice. It also made Panel.tsx a reader of the
+ * `includeDMs` setting, which put the panel inside an exact-membership privacy
+ * guard over the paths that transmit text — a guard it has no business being in
+ * now that it has no decision to make. See test/selectionPrivacy.test.ts. (That
+ * guard is a whole-file substring scan, so the `settings.store` expression is
+ * deliberately not spelled out in this comment or in Panel.tsx's: naming it would
+ * make either file register as a reader.)
+ *
+ * The wording stays in core/ for the reason recorded on translationEnabled():
+ * Panel.tsx imports @webpack/common and cannot be loaded by this suite at all,
+ * so core/ is the only layer where the copy can be asserted at all.
  */
-export const UNAVAILABLE_FOOTER = {
-    doubleClickWorks:
-        "Discord changed. Translation is paused; double-click still works.",
-    serverOff:
-        "Discord changed. Translation is paused and this server is not switched on; " +
-        "turn it on with the switch above and double-click will translate straight " +
-        "away, with channel translation resuming on its own once Discord is patched."
-} as const;
-
-export function unavailableFooter(
-    toggle: ToggleState,
-    guildId: string | null,
-    includeDMs: boolean | undefined
-): string {
-    return selectionGate(toggle, { guildId }, includeDMs).allowed
-        ? UNAVAILABLE_FOOTER.doubleClickWorks
-        : UNAVAILABLE_FOOTER.serverOff;
-}
+export const UNAVAILABLE_FOOTER =
+    "Discord changed. Translation is paused; double-click still works.";
 
 export interface SelectionContext {
     /**
@@ -298,6 +341,14 @@ export interface SelectionContext {
      * null guild id, and must not be collapsed into it.
      */
     channel: { guildId: string | null; } | null;
+    /**
+     * The user's DM opt-in, passed on to selectionGate(), which since the
+     * 2026-09-11 ruling does not read it. It is threaded anyway: it is what makes
+     * "the DM setting does not change this answer" assertable as behaviour, and it
+     * keeps the real setting wired here rather than a literal a later condition
+     * could be attached to by mistake. Where it DOES decide something is
+     * translationEnabled(), i.e. automatic translation.
+     */
     includeDMs: boolean | undefined;
     /**
      * The message's original text, when the click is on a translation of ours

@@ -8,7 +8,7 @@ A Discord client mod that translates a whole channel, including scrollback, into
 
 - **Whole-channel translation** with a per-server toggle
 - **Replace mode** and **Both Language mode** for viewing
-- **Selection translation**: double-click a word or triple-click a sentence to translate a selection; shows the original when already translated
+- **Selection translation**: double-click a word or triple-click a sentence to translate a selection — in any conversation, whatever the per-server toggle and `includeDMs` say; shows the original when already translated
 - **Floating panel** at the top-right of the chat area
 - **15 target languages** supported
 - **Free providers only** — no API key, no card, nothing that can bill you
@@ -126,7 +126,7 @@ your messages reaches any of them either way. [PRIVACY.md](./PRIVACY.md) lists a
 
 Message text is sent to a third-party translation service for processing. This includes other people’s messages. See [PRIVACY.md](./PRIVACY.md) for details, including every host contacted and what each one receives.
 
-DMs and group DMs are excluded from translation by default.
+**Whole-channel translation excludes DMs and group DMs by default**, and the `includeDMs` setting is what includes them. Selection translation is separate and is not governed by that setting: a deliberate double-click or triple-click translates what you selected in any conversation, including a DM. It sends that one selection and nothing else, retried up to three more times if an attempt fails — see [PRIVACY.md](./PRIVACY.md#direct-messages).
 
 ## Terms of Service
 

@@ -7,7 +7,7 @@
 // plugin/panel/Panel.tsx
 import { React, SelectedChannelStore, SelectedGuildStore, useStateFromStores } from "@webpack/common";
 
-import { PanelState, unavailableFooter } from "../core/modes";
+import { PanelState, UNAVAILABLE_FOOTER } from "../core/modes";
 import { patchesOk } from "../patches";
 import { settings } from "../settings";
 import { breakerOpen, pendingCount, persist,repaintChannel, subscribeProgress, toggle } from "../state";
@@ -106,8 +106,11 @@ export function Panel() {
      * so the following click would appear to do nothing at all.
      *
      * The pill carries the status and the footer explains it; this carries the
-     * intent. Nothing is contradicted: unavailableFooter() branches on the same
-     * toggle, so an ON track is shown beside "double-click still works".
+     * intent. Nothing is contradicted, for a simpler reason than the one that
+     * used to hold: since the 2026-09-11 ruling the footer is ONE sentence that
+     * does not depend on this toggle at all, so an OFF track beside "double-click
+     * still works" is two true statements rather than a disagreement — the switch
+     * governs CHANNEL translation, the sentence is about a gesture.
      */
     const isOn = toggle.isOn(guildId);
 
@@ -161,11 +164,13 @@ export function Panel() {
 
                     Unlocking it is not a workaround. selectionGate() in
                     ../core/modes never reads patchesOk(), so double-click
-                    translation genuinely works in this state for a server that is
-                    switched on, which is exactly what the footer at the bottom of
-                    this panel and index.tsx's notice both promise. Switching on
-                    here also pre-arms the rendered path for the moment the patches
-                    match again.
+                    translation genuinely works in this state — for every
+                    identified conversation since the 2026-09-11 ruling, not only
+                    for a server that is switched on — which is exactly what the
+                    footer at the bottom of this panel and index.tsx's notice both
+                    promise. Switching on here pre-arms the RENDERED path for the
+                    moment the patches match again, and that is what this control
+                    is for now that the manual route needs nothing from it.
 
                     NO OTHER STATE MAY DISABLE IT EITHER. panelState() reaches
                     `degraded`, `translating` and `on` only while this server is
@@ -323,33 +328,44 @@ export function Panel() {
 
                 <GoatBanner variant="panel" />
 
-                {/* THE SENTENCE IS CHOSEN, NOT FIXED, and that is the whole point.
-                    It used to read "Discord changed. Translation is paused;
-                    double-click still works." unconditionally — a promise about a
-                    path that selectionGate() refuses whenever this server's toggle
-                    is off. unavailableFooter() asks the gate itself, so the two can
-                    no longer disagree; see ../core/modes and
-                    test/panelUnavailableToggle.test.ts.
+                {/* 🔴 ONE SENTENCE AGAIN — AND IT IS THE SENTENCE THAT WAS ONCE
+                    THE BUG HERE. "Discord changed. Translation is paused;
+                    double-click still works." shipped unconditionally while
+                    selectionGate() refused whenever this server's toggle was off,
+                    so a user whose server had never been switched on was promised
+                    a manual route and then refused it. It was replaced by two
+                    branches chosen by asking the gate, through unavailableFooter().
 
-                    THE OFF BRANCH NAMES THE SWITCH ABOVE, which is honest only
-                    because that switch no longer carries `disabled`. It used to
-                    end "The switch is unavailable until translation works again."
-                    — true of the old markup, and a lie about the new. If a
-                    `disabled` ever comes back to the track, this wording has to be
-                    re-read before it ships.
+                    WHAT MAKES IT TRUE THIS TIME, rather than the same defect
+                    coming back. The 2026-09-11 ruling left the gate one refusal,
+                    `unknownChannel`, and this panel cannot reach it: it returns
+                    null above when there is no guild id, so the conversation is
+                    always identified and the gate always allows. There is no input
+                    this component can produce for which the promise is false —
+                    which is why there is nothing left to branch on, and why
+                    unavailableFooter() is deleted rather than left returning one
+                    value from three arguments it ignores.
 
-                    settings.store rather than the `store` from settings.use()
-                    above: includeDMs is not one of the subscribed paths, and adding
-                    it would repaint this panel on a setting it cannot display.
-                    guildId is non-null by the early return at the top, so the DM
-                    branch of the gate is unreachable from here — it is passed
-                    anyway so this reads the same question the double-click path
-                    reads, rather than a narrowed copy of it. */}
+                    DO NOT RESTORE THE LITERAL WITHOUT RE-READING THE GATE. If
+                    selectionGate() ever grows a refusal a server channel can hit,
+                    this line over-promises exactly as it did the first time, and
+                    the wording has to go back to being derived FROM the gate —
+                    never to a second copy of its condition. ../core/modes and
+                    test/panelUnavailableToggle.test.ts carry the long version.
+
+                    IT ALSO NO LONGER READS THE DM OPT-IN OUT OF THE SETTINGS
+                    STORE. That read existed only so this sentence asked the
+                    double-click path's own question instead of a narrowed copy of
+                    it; with no question left, the panel drops out of the
+                    exact-membership privacy guard in
+                    test/selectionPrivacy.test.ts, which is where a component that
+                    transmits nothing belongs. That guard is a whole-file substring
+                    scan and cannot tell a comment from a read, which is why the
+                    `settings.store` expression is described here rather than
+                    typed. */}
                 {state === "unavailable" && (
                     <div className="row">
-                        <span className="label">
-                            {unavailableFooter(toggle, guildId, settings.store.includeDMs)}
-                        </span>
+                        <span className="label">{UNAVAILABLE_FOOTER}</span>
                     </div>
                 )}
             </div></div></div>

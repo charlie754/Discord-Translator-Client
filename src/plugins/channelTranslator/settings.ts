@@ -745,12 +745,23 @@ export const settings = definePluginSettings({
     // under its old name, unread by anything. Deleting stored values is a
     // migration, not a settings edit, and it is not done here.
 
-    // The one switch that turns DMs on. The per-server panel toggle cannot: a DM
-    // has no guild id to toggle. This setting is read only through
-    // core/modes.ts's translationEnabled(), which both the rendered path and the
-    // double-click path go through — it governed nothing at all until they did,
-    // while the first-run notice in index.tsx and PRIVACY.md both described it
-    // as working.
+    // The one switch that turns AUTOMATIC DM translation on. The per-server panel
+    // toggle cannot: a DM has no guild id to toggle. This setting is read only
+    // through core/modes.ts's translationEnabled() — it governed nothing at all
+    // until something read it, while the first-run notice in index.tsx and
+    // PRIVACY.md both described it as working.
+    //
+    // IT NO LONGER GOVERNS THE DOUBLE-CLICK PATH, AND THE DESCRIPTION BELOW HAD
+    // TO FOLLOW. Operator ruling 2026-09-11: a deliberate double-click or
+    // triple-click translates the selection in any conversation the plugin can
+    // identify, a DM included, whatever this setting says. selectionGate() is
+    // where that decision lives and it does not read this value.
+    //
+    // THE DEFECT THAT CHANGING ONLY THE CODE WOULD HAVE LEFT BEHIND. The
+    // description used to end "It governs the whole plugin: channel translation
+    // and double-click translation alike" — true when it was written, false the
+    // moment the gate changed, and nothing in a build recompiles a sentence. A
+    // rename broke this product's own prose one release ago the same way.
     includeDMs: {
         type: OptionType.BOOLEAN,
         description:
@@ -758,8 +769,10 @@ export const settings = definePluginSettings({
             "your translation provider — Google's free endpoint, or the Apps Script deployment in " +
             "your own Google account. Off by " +
             "default, and it is the only control that turns DMs on — the per-server panel toggle " +
-            "cannot reach a DM. It governs the whole plugin: channel translation and double-click " +
-            "translation alike.",
+            "cannot reach a DM. It governs AUTOMATIC translation only — the channel you are " +
+            "reading and its scrollback. A deliberate double-click or triple-click translates " +
+            "just what you selected, in any conversation including a DM, whether this is on or " +
+            "off.",
         default: false
     },
     consentGiven: {

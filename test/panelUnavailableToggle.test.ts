@@ -12,8 +12,8 @@ import {
     PanelState,
     selectionGate,
     ToggleState,
-    UNAVAILABLE_FOOTER,
-    unavailableFooter
+    translationEnabled,
+    UNAVAILABLE_FOOTER
 } from "../src/plugins/channelTranslator/core/modes";
 
 /**
@@ -37,11 +37,18 @@ import {
  *
  * WHY UNLOCKING IT IS THE FIX AND NOT A WORKAROUND. selectionGate() does not
  * consult `patchesOk` — only panelState() does, and only to choose the pill's
- * label. So double-click translation genuinely works during the outage for a
- * server whose toggle is on, which is exactly what
- * UNAVAILABLE_FOOTER.doubleClickWorks promises. Disabling the switch withheld
- * the one path that still worked, and withheld pre-arming the rendered path for
- * the moment the patches match again.
+ * label. So double-click translation genuinely works during the outage, which is
+ * exactly what UNAVAILABLE_FOOTER promises. Disabling the switch withheld
+ * pre-arming the rendered path for the moment the patches match again.
+ *
+ * WHAT THE 2026-09-11 RULING CHANGED ABOUT THIS FILE. The gesture used to work
+ * during the outage only for a server whose toggle was ON, so the disabled switch
+ * withheld the manual route as well. It no longer does: a deliberate double-click
+ * or triple-click is allowed in any conversation the plugin can identify,
+ * whatever the toggle says. The lockout is therefore narrower than it was — it
+ * withholds the RENDERED path, which translationEnabled() still governs — and the
+ * assertions below say which path each claim is about rather than saying
+ * "translation".
  *
  * SO THE THREE SIGNALS DIVIDE THE WORK. The pill carries the status ("Discord
  * updated"), the footer explains it and says what to do, and the switch says
@@ -336,8 +343,10 @@ describe("the display-only wrapper is gone and must not come back", () => {
         expect(source).not.toMatch(/^import\s*\{[^}]*\btoggleShowsOn\b[^}]*\}\s*from\s*"\.\.\/core\/modes";$/m);
         expect(source).not.toContain("= toggleShowsOn(");
         // The import that IS still needed, so this is not passing on a file that
-        // stopped importing from core/modes altogether.
-        expect(source).toMatch(/^import\s*\{[^}]*\bunavailableFooter\b[^}]*\}\s*from\s*"\.\.\/core\/modes";$/m);
+        // stopped importing from core/modes altogether. It is UNAVAILABLE_FOOTER
+        // rather than unavailableFooter() since the 2026-09-11 ruling left the
+        // footer with one sentence and nothing to choose between.
+        expect(source).toMatch(/^import\s*\{[^}]*\bUNAVAILABLE_FOOTER\b[^}]*\}\s*from\s*"\.\.\/core\/modes";$/m);
     });
 
     it("the scan would notice either of them coming back (positive control)", () => {
@@ -349,7 +358,7 @@ describe("the display-only wrapper is gone and must not come back", () => {
             "): boolean {\n" +
             "    if (state === \"unavailable\") return false;\n" +
             "}\n" +
-            "import { PanelState, toggleShowsOn, unavailableFooter } from \"../core/modes\";\n" +
+            "import { PanelState, toggleShowsOn, UNAVAILABLE_FOOTER } from \"../core/modes\";\n" +
             "    const switchShowsOn = toggleShowsOn(toggle, guildId, state);";
         expect(reverted).toContain("export function toggleShowsOn");
         expect(reverted).toMatch(/if \(state === "unavailable"\) return false;/);
@@ -363,7 +372,10 @@ describe("nothing clears the user's servers when the patches stop matching", () 
         const toggle = enabled();
         const before = toggle.serialise();
 
-        unavailableFooter(toggle, "g1", false);
+        // unavailableFooter(toggle, "g1", false) used to stand here. It is deleted;
+        // the question the panel asks about the gesture is the gate itself, and the
+        // claim is the same one — asking must not write.
+        selectionGate(toggle, { guildId: "g1" }, false);
         toggle.panelState(contextFor("unavailable"));
 
         expect(toggle.isOn("g1"), "the outage cleared the user's own choice").toBe(true);
@@ -404,24 +416,37 @@ describe("nothing clears the user's servers when the patches stop matching", () 
  * two halves that meet. The SOURCE half proves the click is deliverable — the
  * track is enabled and wired to flip(). The BEHAVIOUR half performs what flip()
  * does, the exact `toggle.setOn(guildId, !isOn)` line asserted above, and shows
- * the double-click path opens as a result while the state stays `unavailable`
- * throughout.
+ * what opens as a result while the state stays `unavailable` throughout.
  *
  * Reverting the fix breaks this: put `disabled={state === "unavailable"}` back
  * on the track and the first half fails, because the click the second half
  * performs can no longer reach the panel.
+ *
+ * 🔴 WHICH PATH THE LOCKOUT WITHHELD, RESTATED AFTER THE 2026-09-11 RULING. This
+ * test used to open by asserting that selectionGate() REFUSED — the double-click
+ * path was the thing the user was locked out of, because the gate delegated to the
+ * same per-server toggle the disabled switch had frozen. The gesture is now
+ * allowed in any identified conversation, so it is open before the click and after
+ * it. What the click still buys is the RENDERED path, which translationEnabled()
+ * governs and which the switch is now the only way to arm. Both paths are asserted
+ * at both moments, so neither the ruling nor the lockout fix can be undone quietly.
  */
 describe("the lockout: switched off, Discord unavailable", () => {
-    it("the user can still switch it on, and double-click then works", () => {
+    it("the user can still switch it on, and that is what arms the rendered path", () => {
         const toggle = new ToggleState();
         const ctx = contextFor("unavailable");
 
         // Where the operator was: fresh start, nothing switched on, patches gone.
         expect(toggle.panelState(ctx), "the state under test is not the one reported").toBe("unavailable");
         expect(toggle.isOn("g1"), "the fixture is already on — the test proves nothing").toBe(false);
+        // BEFORE the click: the gesture already works, the rendered path does not.
         expect(
             selectionGate(toggle, { guildId: "g1" }, false).allowed,
-            "the double-click path was already open, so there was nothing to be locked out of"
+            "the gesture is refused with the toggle off — the 2026-09-11 ruling has been undone"
+        ).toBe(true);
+        expect(
+            translationEnabled(toggle, "g1", false),
+            "the rendered path is already on for a server nobody switched on"
         ).toBe(false);
 
         // The click is deliverable: the control is enabled and has a handler.
@@ -437,23 +462,38 @@ describe("the lockout: switched off, Discord unavailable", () => {
         // What that click does, verbatim from flip(): toggle.setOn(guildId, !isOn).
         toggle.setOn("g1", true);
 
-        // The state has NOT changed — Discord is still unpatched — and the manual
-        // route is open anyway, which is the whole point of unlocking the switch.
+        // AFTER the click: the state has NOT changed — Discord is still unpatched —
+        // the rendered path is armed for the moment it is, and the gesture is open
+        // exactly as it was before, which is what the ruling guarantees.
         expect(toggle.panelState(ctx), "switching on pretended to fix the patches").toBe("unavailable");
         expect(toggle.isOn("g1"), "the click did not stick").toBe(true);
         expect(
+            translationEnabled(toggle, "g1", false),
+            "the click did not arm the rendered path, so the switch buys nothing at all"
+        ).toBe(true);
+        expect(
             selectionGate(toggle, { guildId: "g1" }, false).allowed,
-            "the server is switched on and double-click is still refused"
+            "the server is switched on and the gesture is still refused"
         ).toBe(true);
     });
 
-    it("and the footer stops withholding it at the same moment (end to end)", () => {
-        // The sentence the user reads follows the same flip, because
-        // unavailableFooter() asks the same gate.
+    it("and the footer promises the gesture at BOTH moments, because it is true at both", () => {
+        // This assertion INVERTED with the ruling. It used to require
+        // UNAVAILABLE_FOOTER.serverOff before the flip and .doubleClickWorks after
+        // it, because the sentence followed the gate. There is one sentence now and
+        // the flip cannot change it — what has to hold instead is that the gate
+        // allows at both moments, or the single sentence is over-promising again.
         const toggle = new ToggleState();
-        expect(unavailableFooter(toggle, "g1", false)).toBe(UNAVAILABLE_FOOTER.serverOff);
+        expect(UNAVAILABLE_FOOTER).toContain("double-click still works");
+        expect(
+            selectionGate(toggle, { guildId: "g1" }, false).allowed,
+            "the footer promises the gesture while the server is off and the gate refuses it"
+        ).toBe(true);
         toggle.setOn("g1", true);
-        expect(unavailableFooter(toggle, "g1", false)).toBe(UNAVAILABLE_FOOTER.doubleClickWorks);
+        expect(
+            selectionGate(toggle, { guildId: "g1" }, false).allowed,
+            "the footer promises the gesture while the server is on and the gate refuses it"
+        ).toBe(true);
     });
 
     it("the gate that opened never asked about the patches (control)", () => {
@@ -481,6 +521,15 @@ describe("the lockout: switched off, Discord unavailable", () => {
         expect(gate).not.toContain("export const UNAVAILABLE_FOOTER");
         expect(gate, "the double-click gate started consulting the patches").not.toContain("patchesOk");
         expect(allowed, "the allow/deny answer started consulting the patches").not.toContain("patchesOk");
+        // AND THE SEPARATION THE 2026-09-11 RULING CREATED. The gate used to
+        // delegate its whole answer to translationEnabled(), which is why widening
+        // the gesture and widening automatic channel translation were once the same
+        // edit. They are not any more, and this is the line that would go back.
+        expect(
+            gate,
+            "the gesture is decided by translationEnabled() again, so the per-server toggle " +
+            "and includeDMs govern it once more — see test/modes.test.ts"
+        ).not.toContain("translationEnabled(");
         // The contrast that makes it a finding: panelState() DOES read it, and is
         // the only thing that does.
         expect(functionBody(modes, "export class ToggleState")).toContain("if (!ctx.patchesOk) return \"unavailable\";");
@@ -489,138 +538,131 @@ describe("the lockout: switched off, Discord unavailable", () => {
 
 /**
  * THE FOOTER MAY NOT PROMISE A PATH THAT WILL REFUSE, AND MAY NOT WITHHOLD ONE
- * THAT WORKS.
+ * THAT WORKS. IT IS ONE SENTENCE AGAIN, AND THAT IS NOT THE FIRST DEFECT COMING
+ * BACK.
  *
  * WHAT SHIPPED FIRST. In the `unavailable` state the footer rendered one fixed
  * sentence for everybody:
  *
  *     "Discord changed. Translation is paused; double-click still works."
  *
- * The second clause is a claim about the selection path, and that path is
- * governed by selectionGate(), which refuses with SELECTION_REFUSAL.serverOff
- * whenever this server's toggle is off. So a user who had never switched this
+ * The second clause is a claim about the selection path, and that path was
+ * governed by selectionGate(), which refused with SELECTION_REFUSAL.serverOff
+ * whenever this server's toggle was off. So a user who had never switched this
  * server on was told a manual route still worked, tried it, and was refused.
  *
- * WHAT SHIPPED SECOND, and it is the half this turn rewrites. The off branch
- * ended "The switch is unavailable until translation works again." — an accurate
- * description of the disabled track, and the only guidance the panel offered in
- * the one state where the user was locked out. It told them their situation
- * could not be repaired while a working route existed. With the track operable
- * the sentence is simply false, so it now names the control and says what
- * switching it on buys: double-click straight away, and the rendered path once
- * the patches match again.
+ * WHAT SHIPPED SECOND. A second sentence for that case, chosen by asking the gate
+ * rather than by re-deciding, ending by naming the switch and what switching it on
+ * bought.
  *
- * WHAT IS ASSERTED. The wording is chosen by unavailableFooter(), which asks
- * selectionGate() rather than re-deciding, so the promise is pinned as BEHAVIOUR
- * against the function that actually answers the click.
+ * 🔴 WHAT THE 2026-09-11 RULING DID TO BOTH. The gate's only refusal is now
+ * `unknownChannel`, and this panel cannot produce it: Panel.tsx returns null
+ * before rendering when there is no guild id, so the channel it would hand the
+ * gate is an object literal and never null. The off branch therefore became
+ * unreachable and the original sentence became unconditionally TRUE — and the off
+ * branch's advice ("this server is not switched on; turn it on … and double-click
+ * will translate straight away") became false, because the gesture needs nothing
+ * from the switch. A branch would now be the opposite lie: withholding a route
+ * that works.
+ *
+ * 🔴 SO WHAT IS ASSERTED HERE IS THE PREMISE, NOT THE STRING. Comparing the
+ * footer against the gate case by case is impossible with one sentence, and
+ * "the sentence is this sentence" is a tautology that would keep passing after the
+ * gate changed underneath it. What is pinned instead is the property that makes
+ * the sentence true — the gate allows EVERY conversation the panel can be in,
+ * whatever the toggle and the DM setting say. If that stops holding, these fail
+ * and the two-branch form has to come back.
  */
 describe("the panel's footer while Discord is unavailable", () => {
-    it("says double-click still works when this server IS switched on", () => {
-        expect(unavailableFooter(enabled(), "g1", false)).toBe(UNAVAILABLE_FOOTER.doubleClickWorks);
-    });
-
-    it("does NOT say it when this server was never switched on", () => {
-        expect(unavailableFooter(new ToggleState(), "g1", false)).toBe(UNAVAILABLE_FOOTER.serverOff);
-    });
-
-    it("the promise is made exactly when the double-click path would allow it", () => {
-        // The property, rather than the two cases: whatever the footer claims, it
-        // agrees with the function that actually decides the click. A second copy
-        // of the condition would pass the two tests above and drift the first time
-        // either side was reworded.
+    it("🔴 the premise: the gate allows every conversation this panel can be in", () => {
+        // Swept rather than sampled, because the sentence claims something for all
+        // of them. `{ guildId }` and never null, because the panel returns null
+        // before rendering without a guild id — which is why the one surviving
+        // refusal is unreachable from here.
         for (const toggle of [enabled(), new ToggleState()]) {
             for (const includeDMs of [true, false, undefined]) {
-                for (const guildId of ["g1", null]) {
-                    const allowed = selectionGate(toggle, { guildId }, includeDMs).allowed;
+                for (const guildId of ["g1", "g2"]) {
                     expect(
-                        unavailableFooter(toggle, guildId, includeDMs) === UNAVAILABLE_FOOTER.doubleClickWorks,
-                        `footer and gate disagree for guildId=${String(guildId)} includeDMs=${String(includeDMs)}`
-                    ).toBe(allowed);
+                        selectionGate(toggle, { guildId }, includeDMs).allowed,
+                        `the footer promises double-click and the gate refuses it for ` +
+                        `guildId=${guildId} includeDMs=${String(includeDMs)} — the sentence is ` +
+                        `over-promising exactly as it did the first time`
+                    ).toBe(true);
                 }
             }
         }
     });
 
-    it("the two sentences are genuinely different (control)", () => {
-        // Without this, every assertion above is satisfied by one string under two
-        // names, and the footer would be as unconditional as it ever was.
-        expect(UNAVAILABLE_FOOTER.serverOff).not.toBe(UNAVAILABLE_FOOTER.doubleClickWorks);
+    it("says translation is paused AND that double-click still works", () => {
+        // The half that was always true must survive every rewrite: without it a
+        // user in the outage has no explanation of the pill above. The half that
+        // used to be conditional is now the whole point of the sentence.
+        expect(UNAVAILABLE_FOOTER, "the footer stopped saying translation is paused")
+            .toContain("Translation is paused");
+        expect(UNAVAILABLE_FOOTER, "the footer stopped naming the route that does work")
+            .toContain("double-click still works");
     });
 
-    it("both still say translation is paused (control)", () => {
-        // The half of the original sentence that was always true must survive
-        // every rewrite. Losing it would leave a user in the outage with no
-        // explanation of the pill above.
-        for (const sentence of Object.values(UNAVAILABLE_FOOTER)) {
-            expect(sentence, "a footer stopped saying translation is paused")
-                .toContain("Translation is paused");
-        }
+    it("it is ONE sentence and no longer a choice (control)", () => {
+        // `.doubleClickWorks` and `.serverOff` are gone. A two-key object would be
+        // two sentences again with one of them unreachable, which is the dead
+        // machinery this collapse removed.
+        expect(typeof UNAVAILABLE_FOOTER, "UNAVAILABLE_FOOTER is an object again").toBe("string");
+        expect(UNAVAILABLE_FOOTER).not.toHaveProperty("serverOff");
+        expect(UNAVAILABLE_FOOTER).not.toHaveProperty("doubleClickWorks");
     });
 
-    it("the off wording points at the switch, which is now honest", () => {
-        const off = UNAVAILABLE_FOOTER.serverOff.toLowerCase();
-        // It says what is wrong…
-        expect(off, "the footer no longer says why nothing is translating").toContain("not switched on");
-        // …names the control that fixes it, which it could not honestly do while
-        // the track was disabled…
-        expect(off, "the footer names no way out of the state it describes").toContain("switch");
-        expect(off).toMatch(/turn it on|switch it on/);
-        // …and says what that buys.
-        expect(off, "the footer does not say double-click becomes available").toContain("double-click");
-        // The sentence it replaced, which described the disabled track.
-        expect(
-            off,
-            "the footer says the switch is unavailable again — either the wording is stale " +
-            "or `disabled` is back on the track"
-        ).not.toContain("unavailable");
+    it("it does not condition the gesture on the switch any more", () => {
+        // The deleted off branch said "this server is not switched on; turn it on
+        // with the switch above and double-click will translate straight away."
+        // Sending the user to a control they do not have to touch is the same class
+        // of defect as promising a path that refuses — the footer would be
+        // withholding something that already works.
+        const footer = UNAVAILABLE_FOOTER.toLowerCase();
+        expect(footer, "the footer still makes the gesture conditional on the switch")
+            .not.toContain("not switched on");
+        expect(footer, "the footer still sends the user to the switch for the gesture")
+            .not.toMatch(/turn it on|switch it on/);
+        expect(footer, "the house voice does not shout").not.toContain("!");
+        expect(UNAVAILABLE_FOOTER.split(". ").length, "the footer grew past two sentences").toBe(2);
     });
 
-    it("the off wording still promises nothing about right now (control)", () => {
-        // The original defect in a new place: this branch is rendered precisely
-        // when selectionGate() REFUSES, so it must not claim the manual route
-        // currently works. Everything it offers is conditional on the switch.
-        const off = UNAVAILABLE_FOOTER.serverOff;
-        expect(off, "the off branch promises the double-click path it is refusing")
-            .not.toContain("still works");
-        expect(off, "the house voice does not shout").not.toContain("!");
-        // Two sentences, as the on branch is.
-        expect(off.split(". ").length, "the off footer grew past two sentences").toBe(2);
-        expect(UNAVAILABLE_FOOTER.doubleClickWorks.split(". ").length).toBe(2);
-    });
-
-    it("the switch really is operable, which is what makes pointing at it honest (control)", () => {
-        // The premise of the two tests above, read off the panel rather than
-        // assumed. This assertion INVERTED this turn: it used to require
-        // `disabled={state === "unavailable"}` to be PRESENT, because the wording
-        // then said the switch was unavailable.
+    it("the switch really is operable, which the REST of the panel still rests on (control)", () => {
+        // Inherited from the version of this file that pinned the off branch. The
+        // footer no longer points at the switch, but the switch is still the only
+        // way to arm the rendered path, so a `disabled` coming back is still a
+        // lockout — out of that path rather than out of the gesture.
         expect(
             hasDisabledAttribute(openingTag(read(PANEL), "className=\"track\"")),
-            "the footer tells the user to use a switch the panel has disabled"
+            "the only control that can arm the rendered path is disabled again"
         ).toBe(false);
     });
 
-    it("the panel renders the chosen sentence, not a literal one (wiring)", () => {
+    it("the panel renders the constant, not a literal of its own (wiring)", () => {
         const source = read(PANEL);
-        expect(source).toMatch(/^import\s*\{[^}]*\bunavailableFooter\b[^}]*\}\s*from\s*"\.\.\/core\/modes";$/m);
-        expect(source).toContain("{unavailableFooter(toggle, guildId, settings.store.includeDMs)}");
-        // The exact JSX text node that shipped, as its own line. The doc-comments
-        // beside the fix quote the same sentence across two lines on purpose, so
-        // this matches the rendered copy coming back and not the note explaining
-        // why it went.
+        expect(source).toMatch(/^import\s*\{[^}]*\bUNAVAILABLE_FOOTER\b[^}]*\}\s*from\s*"\.\.\/core\/modes";$/m);
+        expect(source).toContain("<span className=\"label\">{UNAVAILABLE_FOOTER}</span>");
+        // The sentence typed straight into the JSX as its own line, which is what
+        // shipped the first time. The doc-comments beside the fix quote it across
+        // two lines on purpose, so this matches the rendered copy coming back and
+        // not the note explaining why it went.
         expect(
             source,
-            "the fixed sentence is back in the JSX — the footer promises double-click to " +
-            "users whose server is off again"
+            "the sentence is typed into the JSX again — it is true only while the gate allows " +
+            "every identified conversation, and a literal in the markup cannot know that"
         ).not.toMatch(/^\s+Discord changed\. Translation is paused; double-click still works\.\s*$/m);
     });
 
-    it("the wording lives in core/, where it can be exercised (control)", () => {
-        // A sentence built inline in the JSX is a sentence this suite cannot
-        // reach, and the behaviour tests would be measuring a function the panel
-        // does not use.
+    it("the wording lives in core/ and the chooser is gone (control)", () => {
+        // A sentence built inline in the JSX is a sentence this suite cannot reach.
         const modes = read(MODES);
-        expect(modes).toContain("export function unavailableFooter(");
-        expect(modes, "the footer stopped asking the gate and decided for itself")
-            .toMatch(/return selectionGate\(toggle, \{ guildId \}, includeDMs\)\.allowed/);
+        expect(modes, "the footer is no longer a constant this suite can read")
+            .toContain("export const UNAVAILABLE_FOOTER =");
+        expect(
+            modes,
+            "unavailableFooter() is back: three parameters, none of them read, one possible " +
+            "return value, and Panel.tsx dragged back into the includeDMs privacy guard in " +
+            "test/selectionPrivacy.test.ts"
+        ).not.toContain("export function unavailableFooter(");
     });
 });
