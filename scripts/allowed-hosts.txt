@@ -110,9 +110,6 @@ script.googleusercontent.com
 # --- Link targets shown to the user; navigated only on an explicit click ---
 betterdiscord.app
 codeberg.org
-# The Goat Project campaign banner in the translator panel and the settings tab.
-# An <a href> only: the lockup beside it is inline SVG, so nothing is fetched.
-dagoat.io
 # Google's own Apps Script documentation, in three <a href> links at the foot of the bundled setup
 # guide (site/free/index.html, shipped as guide.html): the quotas page, the Web Apps guide and the
 # LanguageApp reference. They document the script.google.com provider listed above - what its free
@@ -130,6 +127,12 @@ dagoat.io
 developers.google.com
 discord.gg
 github.com
+# The GOAT Cam banner in the translator panel and the settings tab: self-promotion of the
+# author's own iPhone app. One <a href> on the banner's plate, navigated only on a click. Nothing
+# is fetched: the lockup and the QR are inline SVG and the coffee photo is a data: URI. The QR
+# encodes the app's App Store listing, but only as modules - pixels - so that address is not a
+# string anywhere in the build and is not a host here.
+goatcam.dagoat.io
 gitlab.com
 ko-fi.com
 

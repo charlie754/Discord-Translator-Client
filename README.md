@@ -112,15 +112,17 @@ The hosts those two providers used are no longer reachable from any build. They 
 
 The translator panel carries three outbound destinations, and all three are the author's:
 
-- A **banner linking to [Goat Project](https://dagoat.io)**, also shown in the settings tab.
-  **Goat Project is the author's own project**, so this is self-promotion rather than paid
-  advertising.
+- A **banner for [GOAT Cam](https://goatcam.dagoat.io)**, the author's own iPhone app, also shown
+  in the settings tab. **GOAT Cam is the author's own app**, so this is self-promotion rather than
+  paid advertising. The banner links to `goatcam.dagoat.io`; its QR code opens the app's App Store
+  page only if you scan it with a phone.
 - A **Ko-fi donation button** linking to the author's page at `ko-fi.com`.
 - A **Star Project on Github** button linking to this repository.
 
-Each is a link, an inline SVG and some text. **None of them makes a network request**, runs code,
-mines anything or sends anything — those hosts are contacted only if you click. Nothing about you or
-your messages reaches any of them either way. [PRIVACY.md](./PRIVACY.md) lists all three.
+Each is a link, inline SVG and some text; the banner also carries a small coffee photo embedded in
+the plugin itself, not downloaded. **None of them makes a network request**, runs code, mines
+anything or sends anything — those hosts are contacted only if you click. Nothing about you or your
+messages reaches any of them either way. [PRIVACY.md](./PRIVACY.md) lists all three.
 
 ## Privacy
 

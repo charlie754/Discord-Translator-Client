@@ -41,7 +41,7 @@ gone with them** — nothing counts characters any more, because nothing is bill
 | `clients2.google.com` | only if you turn on **Enable React DevTools** | your IP, to download that extension |
 | `discord.com` | continuously — it is Discord, and in the browser build it is the page the extension runs on | whatever you send Discord by using Discord. Nothing this app adds |
 | `raw.githubusercontent.com` and the other theme-asset hosts | **only if** a theme or QuickCSS *you* installed references a file there | a request for that file, and your IP. No message text, no key, no identifier |
-| `ko-fi.com`, `github.com`, `dagoat.io`, `betterdiscord.app` and other link targets | **only when you click the link**, from the translator panel or a settings screen | what any link click sends: that you arrived from here. Nothing is requested until you click |
+| `ko-fi.com`, `github.com`, `goatcam.dagoat.io`, `betterdiscord.app` and other link targets | **only when you click the link**, from the translator panel or a settings screen | what any link click sends: that you arrived from here. Nothing is requested until you click |
 
 **Why `raw.githubusercontent.com` is in that table and in the extension manifests.** It is one of
 the fourteen CSP entries that exist so installed themes can load images and fonts, and it is the one
@@ -318,21 +318,26 @@ explaining. `src/plugins/channelTranslator/panel/Panel.tsx` is the file.
 |---|---|---|
 | **Support me on Ko-fi** — a coffee-cup button reading `@IRP_HongKong` | `ko-fi.com`, the author's donation page | a button, an inline SVG and text |
 | **Star Project on Github** — a star button | `github.com`, this project's own repository | a button, an inline SVG and text |
-| **The Goat Project banner** — also shown in the settings tab | `dagoat.io`, the author's own separate project | a hyperlink, an inline SVG lockup and text |
+| **The GOAT Cam banner** — also shown in the settings tab | `goatcam.dagoat.io`, the website of GOAT Cam, the author's own iPhone app | a hyperlink, an inline SVG lockup, an inline SVG QR code, an embedded photo and text |
 
-**None of the three makes a request of any kind.** No fetch, no image load, no web font, no
-analytics, no tracking parameter on any of the destinations. Every graphic is inline SVG drawn by
-the panel itself, and the panel's stylesheet references no remote asset. The Ko-fi and GitHub
-buttons are `<button>` elements that call `window.open(..., "noopener,noreferrer")` when clicked;
-the banner is a plain `<a href>`. Until you click one, nothing about any of these hosts is
-contacted.
+**None of the three makes a request of any kind.** No fetch, no remote image, no web font, no
+analytics, no tracking parameter on any of the destinations. Every graphic is drawn by the panel
+itself — inline SVG, plus the banner's small coffee photo, which is carried inside the plugin as a
+`data:` URI rather than downloaded — and the panel's stylesheet references no remote asset. The
+Ko-fi and GitHub buttons are `<button>` elements that call `window.open(..., "noopener,noreferrer")`
+when clicked; the banner is a plain `<a href>`. Until you click one, nothing about any of these
+hosts is contacted.
 
-`dagoat.io` does not appear in the request log of a full session — the only hosts contacted were
-`discord.com` and the translation provider. Clicking any of the three sends only what any link
-click sends: that you arrived from this app.
+The banner's QR code encodes the app's App Store page. That address exists only as the code's
+black and white squares, so nothing in this app ever opens it; a phone camera does, if you scan it.
 
-**The Ko-fi button is a donation link and the Goat Project banner is self-promotion.** Neither is
-paid advertising, and both go to the same person who wrote this app.
+`goatcam.dagoat.io` is never contacted unless you click the banner. In the built app it exists only
+as the banner's link target, and rendering the banner on its own in a headless browser — at rest,
+hovered and keyboard-focused — made no network request of any kind. Clicking any of the three sends
+only what any link click sends: that you arrived from this app.
+
+**The Ko-fi button is a donation link and the GOAT Cam banner is self-promotion of the author's own
+app.** Neither is paid advertising, and both go to the same person who wrote this app.
 
 ## What is Not Transmitted
 
