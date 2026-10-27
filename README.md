@@ -119,7 +119,7 @@ The translator panel carries three outbound destinations, and all three are the 
 - A **Ko-fi donation button** linking to the author's page at `ko-fi.com`.
 - A **Star Project on Github** button linking to this repository.
 
-Each is a link, inline SVG and some text; the banner also carries a small coffee photo embedded in
+Each is a link, inline SVG and some text; the banner's background is a coffee photo embedded in
 the plugin itself, not downloaded. **None of them makes a network request**, runs code, mines
 anything or sends anything — those hosts are contacted only if you click. Nothing about you or your
 messages reaches any of them either way. [PRIVACY.md](./PRIVACY.md) lists all three.

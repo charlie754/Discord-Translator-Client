@@ -85,6 +85,14 @@ The following further modifications were made on October 25, 2026:
   its animated lockup, and adds an embedded coffee photo (credited below) and a QR code for
   the app's App Store page. Nothing in it is fetched from the network.
 
+The following further modifications were made on October 26, 2026:
+
+- Redesigned the GOAT Cam banner (v2): removed its second copy line and the animated goat
+  lockup, which belonged to the author's other project; the GOAT Cam website's own coffee photo
+  now fills the whole banner with the wordmark over it, at 1600 px in the settings tab for
+  high-DPI screens; and the App Store QR code enlarges on hover or keyboard focus so a phone can
+  scan it. Nothing in it is fetched from the network
+
 ### Source Attribution
 
 All upstream copyright notices are preserved in the source code. The message-interception technique, patch anchor, and translation regexes used by the ChannelTranslator feature are derived from Equicord's own `MessageTranslate` plugin.
@@ -94,13 +102,14 @@ Complete corresponding source is available at https://github.com/charlie754/Disc
 ### Image Credits
 
 The coffee photo in the GOAT Cam banner (`src/plugins/channelTranslator/panel/goatBanner.tsx`)
-is a crop of "White cup and MacBook" by Alex Knight (https://unsplash.com/@agkdesign), taken
+is "White cup and MacBook" by Alex Knight (https://unsplash.com/@agkdesign), taken
 2017-01-18 in Akasaka, Minato, Tokyo. Source page: https://unsplash.com/photos/j4uuKnN43_M.
 
 It is dedicated to the public domain under the Creative Commons CC0 1.0 Universal Public Domain
 Dedication (https://creativecommons.org/publicdomain/zero/1.0/). Unsplash published photos under
 CC0 until 5 June 2017, and this photo was on Unsplash before that date; Wikimedia Commons records
 the same licence (https://commons.wikimedia.org/wiki/File:White_cup_and_MacBook_(Unsplash).jpg).
-It was cropped, resized, colour-graded and stripped of its embedded metadata.
+It is the photo the GOAT Cam website shows, resized to 800 and 1600 pixels wide, colour-graded
+and stripped of its embedded metadata.
 
 CC0 does not require attribution. The photographer is credited anyway, with thanks.

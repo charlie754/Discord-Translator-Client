@@ -129,7 +129,7 @@ discord.gg
 github.com
 # The GOAT Cam banner in the translator panel and the settings tab: self-promotion of the
 # author's own iPhone app. One <a href> on the banner's plate, navigated only on a click. Nothing
-# is fetched: the lockup and the QR are inline SVG and the coffee photo is a data: URI. The QR
+# is fetched: the QR is inline SVG and the coffee photo is a data: URI. The QR
 # encodes the app's App Store listing, but only as modules - pixels - so that address is not a
 # string anywhere in the build and is not a host here.
 goatcam.dagoat.io

@@ -318,11 +318,11 @@ explaining. `src/plugins/channelTranslator/panel/Panel.tsx` is the file.
 |---|---|---|
 | **Support me on Ko-fi** — a coffee-cup button reading `@IRP_HongKong` | `ko-fi.com`, the author's donation page | a button, an inline SVG and text |
 | **Star Project on Github** — a star button | `github.com`, this project's own repository | a button, an inline SVG and text |
-| **The GOAT Cam banner** — also shown in the settings tab | `goatcam.dagoat.io`, the website of GOAT Cam, the author's own iPhone app | a hyperlink, an inline SVG lockup, an inline SVG QR code, an embedded photo and text |
+| **The GOAT Cam banner** — also shown in the settings tab | `goatcam.dagoat.io`, the website of GOAT Cam, the author's own iPhone app | a hyperlink, an inline SVG QR code, an embedded photo and text |
 
 **None of the three makes a request of any kind.** No fetch, no remote image, no web font, no
 analytics, no tracking parameter on any of the destinations. Every graphic is drawn by the panel
-itself — inline SVG, plus the banner's small coffee photo, which is carried inside the plugin as a
+itself — inline SVG, plus the banner's coffee photo, which is carried inside the plugin as a
 `data:` URI rather than downloaded — and the panel's stylesheet references no remote asset. The
 Ko-fi and GitHub buttons are `<button>` elements that call `window.open(..., "noopener,noreferrer")`
 when clicked; the banner is a plain `<a href>`. Until you click one, nothing about any of these
