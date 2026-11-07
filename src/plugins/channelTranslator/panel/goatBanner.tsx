@@ -151,13 +151,6 @@ function GoatBannerOnline({ variant, model }: { variant: "panel" | "settings"; m
     const photo = banner.photo ?? {};
     const focus = photo.focus ?? [];
     const steamAt = photo.steamAt ?? [];
-    const textBox = photo.textBox ?? [];
-    const textBoxStyle = style({
-        left: percentage(textBox[0], 0.33),
-        top: percentage(textBox[1], 0.1),
-        width: percentage(textBox[2], 0.4),
-        height: percentage(textBox[3], 0.45)
-    });
     const imageStyle = style({
         objectPosition: `${percentage(focus[0], 0.3)} ${percentage(focus[1], 0.55)}`
     });
@@ -189,10 +182,7 @@ function GoatBannerOnline({ variant, model }: { variant: "panel" | "settings"; m
                     ) : null}
                     {banner.effects?.viewfinder ? <span className="gc-vf" /> : null}
                 </span>
-                <span className="gc-iphone" aria-hidden="true">
-                    <img className="gc-iphone__screen" src={IPHONE_PREVIEW_DATA_URL} alt="" width="60" height="128" draggable="false" />
-                </span>
-                <span className="goat-lockup__word" style={textBoxStyle}>
+                <span className="goat-lockup__word">
                     <span className={`goat-lockup__name ${fitClass(wordmark, 12)}`}>{wordmark}</span>
                     <span className={`goat-lockup__tag ${fitClass(taglineText, 18)}`}>
                         {tagline.flatMap((part, index) => [
@@ -202,6 +192,9 @@ function GoatBannerOnline({ variant, model }: { variant: "panel" | "settings"; m
                     </span>
                 </span>
                 {badge ? <span className="gc-osd gc-badge" aria-hidden="true"><span className="gc-osd__dot" aria-hidden="true" /><span className={`gc-badge__text ${fitClass(badge, 16)}`}>{badge}</span></span> : null}
+                <span className="gc-iphone" aria-hidden="true">
+                    <img className="gc-iphone__screen" src={IPHONE_PREVIEW_DATA_URL} alt="" width="60" height="128" draggable="false" />
+                </span>
                 <span className="gc-qr">
                     <svg viewBox={`0 0 ${QR_SIZE} ${QR_SIZE}`} shapeRendering="crispEdges" role="img" aria-label={banner.labels?.qr} xmlns="http://www.w3.org/2000/svg" focusable="false">
                         <rect width={QR_SIZE} height={QR_SIZE} fill="#fbf5ea" />
@@ -262,124 +255,87 @@ export const GOAT_BANNER_CSS = `
 .goat--online.goat--panel .gc-tag__part{white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis;}.goat--online.goat--settings .goat-lockup{--gc-h:106.4px;--gc-qr:74px;--gc-qr-zoom:2.1622;--gc-arm:11px;}.goat--online.goat--settings .gc-photo{--gc-px:0%;--gc-py:68%;--gc-scrim:none;}.goat--online.goat--settings .gc-qr{--gc-qr-x:18px;--gc-qr-y:calc((var(--gc-h) - 2px - var(--gc-qr)) / 2);--gc-qr-origin:100% 50%;}.goat--online.goat--settings .gc-vf{--gc-vf-t:7px;--gc-vf-l:7px;--gc-vf-b:7px;--gc-vf-r:7px;}.goat--online.goat--settings .gc-osd{--gc-osd-fs:7px;--gc-dot:7px;top:4px;left:22px;gap:4px;padding:3px 5px;}.goat--online.goat--settings .goat-lockup__word{--gc-word-x:222px;--gc-word-y:34px;--gc-name:30px;--gc-tag:8.5px;--gc-word-gap:9px;}.goat--online .goat--panel .goat-lockup,.goat--online .goat--settings .goat-lockup{margin:0;}.goat--online .goat--panel .goat-lockup__word,.goat--online .goat--settings .goat-lockup__word{pointer-events:none;}
 @keyframes goatcam-steam{0%{stroke-dashoffset:44;opacity:0;translate:0 0;}18%{opacity:.95;}65%{opacity:.6;}100%{stroke-dashoffset:-100;opacity:0;translate:2px -6px;}}@keyframes goatcam-tally{0%,100%{opacity:1;}50%{opacity:.3;}}
 @media (prefers-reduced-motion:reduce){.goat--online .gc-steam{display:none;}.goat--online .gc-qr,.goat--online .gc-qr:hover,.goat--online .goat-lockup:focus-visible .gc-qr{transition:none;}.goat--online .goat-lockup:is(:hover,:focus-visible,.is-active) .gc-photo__frame{transform:none;}.goat--online .goat-lockup:is(:hover,:focus-visible,.is-active) .gc-vf{inset:var(--gc-vf-t,6px) var(--gc-vf-r,6px) var(--gc-vf-b,6px) var(--gc-vf-l,6px);}.goat--online .goat-lockup:is(:hover,:focus-visible,.is-active) .gc-osd__dot{animation:none;}.goat--online .goat-lockup,.goat--online .goat-lockup:hover,.goat--online .goat-lockup:active{transform:none;}}
-/* Founder-standard online geometry. The DaGoat plate in this file is width:100%;
- * its panel plate is 5.4em at 20px plus 20px of vertical padding (128px), and
- * its settings plate is 5.4em at 16px plus 20px (106.4px). Matching those
- * measured heights at the same host widths preserves the DaGoat ratio. */
-.goat--online .goat-lockup {
-  height: var(--gc-h);
-  aspect-ratio: var(--gc-plate-ratio);
-}
-.goat--online .gc-photo {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
+/* Maps online geometry, ported from the founder-approved Maps widget. */
+.goat--online .goat__copy {
   display: block;
-  overflow: hidden;
-  border-radius: 9px;
-  container-type: size;
-  background: var(--gc-950);
-  --gc-scrim: none;
+  height: 48px;
+  margin: 0 0 8px;
+  padding: 0;
 }
-.goat--online .gc-photo__frame {
-  position: absolute;
-  left: var(--gc-px, 0%);
-  top: var(--gc-py, 50%);
-  display: block;
-  width: max(100cqw, 100cqh * 800 / 498);
-  aspect-ratio: 800 / 498;
-  translate: calc(var(--gc-px, 0%) * -1) calc(var(--gc-py, 50%) * -1);
-  transform-origin: 30% 55%;
-}
-.goat--online .gc-photo__img {
+.goat--online .goat__line {
   display: block;
   width: 100%;
-  height: 100%;
-  max-width: none;
+  max-width: 100%;
   margin: 0;
-  border: 0;
-  object-fit: cover;
-  user-select: none;
-  -webkit-user-drag: none;
+  overflow: hidden;
 }
-.goat--online .gc-photo::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: var(--gc-scrim, none);
+.goat--online .goat-lockup {
+  height: 74px;
 }
 .goat--online .goat-lockup__word {
   position: absolute;
-  z-index: 2;
-  isolation: isolate;
-  left: 22px !important;
-  top: 14px !important;
-  right: calc(var(--gc-iphone-right) + var(--gc-iphone-width) + 6px) !important;
+  z-index: 1;
+  left: 22px;
+  top: 14px;
   display: flex;
+  width: 112px;
+  max-width: 112px;
   min-width: 0;
-  max-width: none;
-  max-height: calc(100% - 34px);
   flex-direction: column;
   align-items: flex-start;
   gap: 4px;
-  overflow: hidden;
-  pointer-events: none;
-}
-.goat--online .goat-lockup__word::before {
-  content: "";
-  position: absolute;
-  z-index: -1;
-  inset: -10px -16px;
-  border-radius: 12px;
-  background: linear-gradient(to right, rgba(20, 13, 8, .84), rgba(20, 13, 8, .68) 66%, rgba(20, 13, 8, 0));
-  filter: blur(5px);
+  overflow: visible;
   pointer-events: none;
 }
 .goat--online .goat-lockup__name,
 .goat--online .goat-lockup__tag {
   display: block;
+  flex: none;
+  width: 100%;
   min-width: 0;
   max-width: 100%;
-  margin: 0;
-  padding: 0;
   overflow: hidden;
-  color: var(--gc-cream);
-  white-space: normal;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
 }
 .goat--online .goat-lockup__name {
-  font: 700 16px/1 var(--gc-serif);
-  letter-spacing: 0;
+  font-size: 15px;
 }
 .goat--online .goat-lockup__tag {
-  font: 600 7px/1.25 var(--gc-sans);
-  letter-spacing: .04em;
+  font-size: 6px;
+}
+.goat--online .goat-lockup__name {
+  color: var(--gc-cream);
+  text-shadow: 0 0 2px rgba(20, 13, 8, .96), 0 0 6px rgba(20, 13, 8, .78), 0 0 10px rgba(20, 13, 8, .42);
+}
+.goat--online .goat-lockup__tag {
+  color: var(--gc-cream-soft);
+  text-shadow: 0 0 2px rgba(20, 13, 8, .96), 0 0 5px rgba(20, 13, 8, .8), 0 0 10px rgba(20, 13, 8, .44);
+}
+.goat--online .goat-lockup:is(:hover, :focus-visible, .is-active) .goat-lockup__tag {
   color: var(--gc-cream-soft);
 }
 .goat--online .gc-badge {
   position: absolute;
   z-index: 2;
-  left: 22px;
-  right: auto;
   top: auto;
+  right: auto;
+  left: 22px;
   bottom: 7px;
   display: flex;
   align-items: center;
   gap: 3px;
-  width: max-content;
-  max-width: calc(100% - var(--gc-iphone-right) - var(--gc-iphone-width) - 28px);
+  width: calc(50% - 28px);
+  max-width: calc(50% - 28px);
   overflow: hidden;
   white-space: nowrap;
-  padding: 2px 4px;
-  border: 1px solid rgba(240, 192, 122, .46);
-  border-radius: 999px;
-  background: rgba(20, 13, 8, .82);
-  box-shadow: none;
-  color: var(--gc-gold);
+}
+.goat--online .gc-badge {
   font: 700 6.5px/1.2 var(--gc-mono);
+  padding: 2px 4px;
   letter-spacing: .05em;
   font-variant-numeric: tabular-nums;
+  background: rgba(20, 13, 8, .82);
+  box-shadow: none;
 }
 .goat--online .gc-badge__text {
   display: block;
@@ -387,26 +343,53 @@ export const GOAT_BANNER_CSS = `
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
-  color: var(--gc-gold);
-  text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--gc-gold);
+  text-shadow: 0 0 2px rgba(20, 13, 8, .96), 0 0 5px rgba(20, 13, 8, .8), 0 0 10px rgba(20, 13, 8, .44);
 }
-.goat--online .gc-badge .gc-osd__dot { flex: none; }
+.goat--online .gc-badge .gc-osd__dot {
+  flex: none;
+}
+.goat--online .gc-qr {
+  --gc-qr: 60px;
+  --gc-qr-zoom: 2.6667;
+  top: 6px;
+  right: 14px;
+  bottom: auto;
+}
+.goat--online .gc-photo,
+.goat--online .goat-lockup:is(:hover, :focus-visible, .is-active) .gc-photo {
+  --gc-scrim: none;
+}
+.goat--online .gc-photo::after {
+  background: none;
+}
+.goat--online .gc-photo__img {
+  filter: none;
+}
+.goat--online .goat-lockup__word::before {
+  content: "";
+  z-index: -1;
+  inset: -6px 0 -6px -6px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse 72px 30px at 48% 50%, rgba(20, 13, 8, .86), rgba(20, 13, 8, .56) 68%, rgba(20, 13, 8, 0) 100%);
+  filter: blur(5px);
+  opacity: 1;
+}
 .goat--online .gc-iphone {
   position: absolute;
   z-index: 2;
-  top: 50%;
-  right: var(--gc-iphone-right, 76px);
+  top: 6px;
+  right: 76px;
   display: block;
-  width: var(--gc-iphone-width, 30px);
-  height: var(--gc-iphone-height, 62px);
+  width: 30px;
+  height: 62px;
   overflow: hidden;
   border: 0;
   border-radius: 6.5px;
   background: transparent;
   box-shadow: 0 2px 5px rgba(0, 0, 0, .55);
   pointer-events: none;
-  transform: translateY(-50%);
 }
 .goat--online .gc-iphone::after {
   content: "";
@@ -425,51 +408,6 @@ export const GOAT_BANNER_CSS = `
   border: 0;
   border-radius: 4.6px;
   object-fit: fill;
-}
-.goat--online .gc-qr {
-  z-index: 3;
-  top: 50%;
-  right: var(--gc-qr-x, 14px);
-  bottom: auto;
-  transform: translateY(-50%);
-}
-.goat--online .gc-qr:hover,
-.goat--online .goat-lockup:focus-visible .gc-qr {
-  scale: var(--gc-qr-zoom);
-  transform: translateY(-50%);
-}
-.goat--online.goat--panel .goat-lockup {
-  --gc-h: 128px;
-  --gc-plate-ratio: 244 / 128;
-  --gc-qr: 60px;
-  --gc-qr-zoom: 2.6667;
-  --gc-qr-x: 14px;
-  --gc-iphone-width: 30px;
-  --gc-iphone-right: 76px;
-}
-.goat--online.goat--panel .gc-photo,
-.goat--online.goat--settings .gc-photo {
-  --gc-scrim: none;
-}
-.goat--online.goat--panel .goat-lockup__word,
-.goat--online.goat--settings .goat-lockup__word {
-  left: 22px !important;
-  top: 14px !important;
-  right: calc(var(--gc-iphone-right) + var(--gc-iphone-width) + 6px) !important;
-  width: auto !important;
-  height: auto !important;
-}
-.goat--online.goat--settings .goat-lockup {
-  --gc-h: 106.4px;
-  --gc-plate-ratio: 594 / 106.4;
-  --gc-qr: 74px;
-  --gc-qr-zoom: 2.1622;
-  --gc-qr-x: 18px;
-  --gc-iphone-width: 30px;
-  --gc-iphone-right: 94px;
-}
-@media (prefers-reduced-motion: reduce) {
-  .goat--online .gc-iphone { transform: translateY(-50%); }
 }
 `;
 

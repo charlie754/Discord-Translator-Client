@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { transformSync } from "esbuild";
@@ -9,6 +10,7 @@ const MAX_TEXT_PATH = join(process.cwd(), "test", "banner", "vectors", "cases", 
 const SOURCE = readFileSync(SOURCE_PATH, "utf8");
 const DAGOAT_URL = "https://dagoat.io";
 const SVG_NS = "http://www.w3.org/2000/svg";
+const MAPS_IPHONE_PREVIEW_SHA256 = "bb1247eb9a66af97d32f6f52b6252e3fa0174a5dba954210bbaa66919114cc28";
 
 type Banner = Record<string, any>;
 
@@ -140,6 +142,12 @@ function strayUrls(loaded: Loaded): string[] {
     return stray;
 }
 
+function iphonePreviewDataUrl(source: string): string {
+    const match = source.match(/const IPHONE_PREVIEW_DATA_URL = "([^"]+)";/);
+    if (!match) throw new Error("goatBanner.tsx is missing the iPhone preview data URL");
+    return match[1];
+}
+
 describe("Goat banner pure helpers", () => {
     it("builds one QR path square per 1 cell and nothing for 0 cells", () => {
         const { qrPathFromRows } = load().helpers;
@@ -193,42 +201,34 @@ describe("Goat banner two-model drawing", () => {
         expect((qr?.children[1] as Node).props.d).toBe(loaded.helpers.qrPathFromRows(banner.qr.rows));
     });
 
-    it("puts the non-interactive iPhone preview directly before the QR", () => {
-        const tree = load(onlineModel()).render("panel");
-        const link = anchor(tree);
-        const iphone = firstClass(tree, "gc-iphone");
-        const screen = firstClass(tree, "gc-iphone__screen");
-        const qr = firstClass(tree, "gc-qr");
-
-        expect(iphone.props["aria-hidden"]).toBe("true");
-        expect(screen.props.src).toMatch(/^data:image\/webp;base64,/);
-        expect(link.children.indexOf(iphone)).toBeLessThan(link.children.indexOf(qr));
-    });
-
-    it("uses the DaGoat plate measurements for each online variant", () => {
+    it("matches the Maps online geometry, preview, and DOM order", () => {
         const css = load(onlineModel()).css;
-        const rule = (selector: string) => {
-            const start = css.lastIndexOf(`${selector} {`);
-            const end = css.indexOf("}", start);
-            return css.slice(start, end);
-        };
-
-        // DaGoat's plate is its 5.4em mark plus 10px top and bottom padding:
-        // 128px at the panel's 20px lockup size and 106.4px at settings' 16px.
-        expect(rule(".goat--online.goat--panel .goat-lockup")).toContain("--gc-h: 128px;");
-        expect(rule(".goat--online.goat--panel .goat-lockup")).toContain("--gc-plate-ratio: 244 / 128;");
-        expect(rule(".goat--online.goat--settings .goat-lockup")).toContain("--gc-h: 106.4px;");
-        expect(rule(".goat--online.goat--settings .goat-lockup")).toContain("--gc-plate-ratio: 594 / 106.4;");
-    });
-
-    it("keeps the photo natural and puts the contrast scrim behind the text", () => {
-        const css = load(onlineModel()).css;
-        const photoAfterRules = [...css.matchAll(/\.goat--online \.gc-photo::after\s*\{[^}]*\}/g)].map(match => match[0]);
-
-        expect(photoAfterRules.length).toBeGreaterThan(0);
-        expect(photoAfterRules.every(rule => !rule.includes("rgba("))).toBe(true);
+        expect(css).toMatch(/\.goat--online \.goat-lockup\s*\{\s*height:\s*74px;/);
+        expect(css).toMatch(/\.goat--online \.gc-qr\s*\{\s*--gc-qr:\s*60px;\s*--gc-qr-zoom:\s*2\.6667;\s*top:\s*6px;\s*right:\s*14px;\s*bottom:\s*auto;/);
+        expect(css).toMatch(/top:\s*6px;\s*right:\s*76px;\s*display:\s*block;\s*width:\s*30px;\s*height:\s*62px;/);
+        expect(css).toMatch(/left:\s*22px;\s*bottom:\s*7px;/);
+        expect(css).toMatch(/\.goat--online \.gc-photo::after\s*\{\s*background:\s*none;/);
+        expect(css).toMatch(/\.goat--online \.gc-photo__img\s*\{\s*filter:\s*none;/);
         expect(css).toContain(".goat--online .goat-lockup__word::before");
-        expect(css).toContain("background: linear-gradient(to right, rgba(20, 13, 8, .84)");
+        expect(css).toContain("background: radial-gradient(ellipse 72px 30px at 48% 50%");
+
+        const loaded = load(onlineModel());
+        expect(createHash("sha256").update(iphonePreviewDataUrl(loaded.source), "utf8").digest("hex")).toBe(MAPS_IPHONE_PREVIEW_SHA256);
+        for (const variant of ["panel", "settings"] as const) {
+            const tree = loaded.render(variant);
+            const link = anchor(tree);
+            const word = firstClass(tree, "goat-lockup__word");
+            const badge = firstClass(tree, "gc-badge");
+            const iphone = firstClass(tree, "gc-iphone");
+            const screen = firstClass(tree, "gc-iphone__screen");
+            const qr = firstClass(tree, "gc-qr");
+
+            expect(iphone.props["aria-hidden"]).toBe("true");
+            expect(screen.props.src).toBe(iphonePreviewDataUrl(loaded.source));
+            expect(link.children.indexOf(word)).toBeLessThan(link.children.indexOf(badge));
+            expect(link.children.indexOf(badge)).toBeLessThan(link.children.indexOf(iphone));
+            expect(link.children.indexOf(iphone)).toBeLessThan(link.children.indexOf(qr));
+        }
     });
 
     it("uses signed effects and positions instead of drawing hidden static features", () => {
@@ -241,8 +241,7 @@ describe("Goat banner two-model drawing", () => {
         const image = elements(tree).find(node => node.type === "img");
         expect(image?.props.src).toBe(photoDataUrl);
         const word = firstClass(tree, "goat-lockup__word");
-        expect(word.props.style.left).toBe(`${valid.photo.textBox[0] * 100}%`);
-        expect(word.props.style.top).toBe(`${valid.photo.textBox[1] * 100}%`);
+        expect(word.props.style).toBeUndefined();
     });
 
     it("passes anchor events to the shared banner controls without preventing navigation", () => {
