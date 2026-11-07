@@ -47,6 +47,12 @@ function onlineModel(banner: Banner = valid) {
     return { kind: "online", banner, photoDataUrl };
 }
 
+const liveBanner = {
+    ...valid,
+    tagline: ["Your iPhone, NOW", "your PC’s webcam."],
+    badge: "1440p · 60 fps"
+};
+
 function load(model: { kind: "dagoat" } | ReturnType<typeof onlineModel> = { kind: "dagoat" }, patchSource: (source: string) => string = s => s): Loaded {
     const source = patchSource(SOURCE);
     const compiled = transformSync(source, {
@@ -178,16 +184,20 @@ describe("Goat banner two-model drawing", () => {
     });
 
     it("draws the signed online fields, photo, QR, and accessible labels", () => {
-        const loaded = load(onlineModel());
+        const loaded = load(onlineModel(liveBanner));
         const tree = loaded.render("settings");
-        const banner = valid;
+        const banner = liveBanner;
         const link = anchor(tree);
-        const tagline = Array.isArray(banner.tagline) ? banner.tagline.join(" · ") : "";
 
         expect(classes(tree)).toContain("goat--online");
         expect(texts(firstClass(tree, "goat__line")).join("")).toBe(banner.headline);
         expect(texts(firstClass(tree, "goat-lockup__name")).join("")).toBe(banner.wordmark);
-        expect(texts(firstClass(tree, "goat-lockup__tag")).join("")).toBe(tagline);
+        expect(texts(firstClass(tree, "gc-tag__a")).join("")).toBe(banner.tagline[0]);
+        expect(texts(firstClass(tree, "gc-tag__b")).join("")).toBe(banner.tagline[1]);
+        expect(firstClass(tree, "gc-tag__a").children.some(child => (child as Node).type === "em")).toBe(true);
+        expect(firstClass(tree, "gc-tag__a").children.find(child => (child as Node).type === "em")).toMatchObject({
+            children: [banner.headlineEm]
+        });
         expect(texts(firstClass(tree, "gc-badge__text")).join("")).toBe(banner.badge);
         expect(link.props.href).toBe(banner.link);
         expect(link.props.target).toBe("_blank");
@@ -201,33 +211,35 @@ describe("Goat banner two-model drawing", () => {
         expect((qr?.children[1] as Node).props.d).toBe(loaded.helpers.qrPathFromRows(banner.qr.rows));
     });
 
-    it("matches the Maps online geometry, preview, and DOM order", () => {
+    it("matches the master stage geometry, preview, and DOM order", () => {
         const css = load(onlineModel()).css;
-        expect(css).toMatch(/\.goat--online \.goat-lockup\s*\{\s*height:\s*74px;/);
-        expect(css).toMatch(/\.goat--online \.gc-qr\s*\{\s*--gc-qr:\s*60px;\s*--gc-qr-zoom:\s*2\.6667;\s*top:\s*6px;\s*right:\s*14px;\s*bottom:\s*auto;/);
-        expect(css).toMatch(/top:\s*6px;\s*right:\s*76px;\s*display:\s*block;\s*width:\s*30px;\s*height:\s*62px;/);
-        expect(css).toMatch(/left:\s*22px;\s*bottom:\s*7px;/);
-        expect(css).toMatch(/\.goat--online \.gc-photo::after\s*\{\s*background:\s*none;/);
-        expect(css).toMatch(/\.goat--online \.gc-photo__img\s*\{\s*filter:\s*none;/);
-        expect(css).toContain(".goat--online .goat-lockup__word::before");
-        expect(css).toContain("background: radial-gradient(ellipse 72px 30px at 48% 50%");
+        expect(css).toContain(".gc-stage");
+        expect(css).toMatch(/\.goat--panel \.goat-lockup\s*\{[^}]*--gc-content-scale:\s*1\.05;/s);
+        expect(css).toMatch(/\.goat--settings \.goat-lockup\s*\{[^}]*--gc-content-scale:\s*1\.06;/s);
+        expect(css).toMatch(/--gc-qr-zoom:\s*1;/);
+        expect(css).toMatch(/\.goat--panel \.gc-iphone\s*\{[^}]*--gc-iphone-h:\s*50px;/s);
+        expect(css).toMatch(/\.goat--panel \.gc-qr\s*\{[^}]*--gc-qr-x:\s*var\(--gc-panel-qr-x\)/s);
+        expect(css).toMatch(/text-transform:\s*none/);
+        expect(css).toMatch(/--gc-scrim:\s*radial-gradient\(ellipse 58% 62%/);
+        expect(css).not.toContain("!important");
 
         const loaded = load(onlineModel());
         expect(createHash("sha256").update(iphonePreviewDataUrl(loaded.source), "utf8").digest("hex")).toBe(MAPS_IPHONE_PREVIEW_SHA256);
         for (const variant of ["panel", "settings"] as const) {
             const tree = loaded.render(variant);
             const link = anchor(tree);
+            const stage = firstClass(tree, "gc-stage");
             const word = firstClass(tree, "goat-lockup__word");
             const badge = firstClass(tree, "gc-badge");
             const iphone = firstClass(tree, "gc-iphone");
             const screen = firstClass(tree, "gc-iphone__screen");
             const qr = firstClass(tree, "gc-qr");
+            const vf = firstClass(tree, "gc-vf");
 
             expect(iphone.props["aria-hidden"]).toBe("true");
             expect(screen.props.src).toBe(iphonePreviewDataUrl(loaded.source));
-            expect(link.children.indexOf(word)).toBeLessThan(link.children.indexOf(badge));
-            expect(link.children.indexOf(badge)).toBeLessThan(link.children.indexOf(iphone));
-            expect(link.children.indexOf(iphone)).toBeLessThan(link.children.indexOf(qr));
+            expect(stage.children).toEqual([badge, word, iphone, qr]);
+            expect(link.children.indexOf(vf)).toBeLessThan(link.children.indexOf(stage));
         }
     });
 
@@ -270,9 +282,9 @@ describe("Goat banner two-model drawing", () => {
         expect(classes(firstClass(tree, "goat__line")).slice(1)).toEqual(expected(maxText.headline, 48));
         expect(classes(firstClass(tree, "goat-lockup__name")).slice(1)).toEqual(expected(maxText.wordmark, 12));
         expect(classes(firstClass(tree, "gc-badge__text")).slice(1)).toEqual(expected(maxText.badge, 16));
-        const parts = byClass(tree, "gc-tag__part");
+        const parts = [firstClass(tree, "gc-tag__a"), firstClass(tree, "gc-tag__b")];
         maxText.tagline.forEach((part: string, index: number) => {
-            expect(classes(parts[index]).slice(2)).toEqual(expected(part, 18));
+            expect(classes(parts[index]).slice(1)).toEqual(expected(part, 18));
         });
         // Pixel fit is intentionally left to the visual gate; node has no layout engine.
     });
