@@ -11,7 +11,7 @@ import { hashContent } from "./core/hash";
 import { translationEnabled } from "./core/modes";
 import { markPatchHit } from "./patches";
 import { settings } from "./settings";
-import { cache, entryForMessage, guildIdOf, requestTranslation, toggle } from "./state";
+import { cache, entryForMessage, guildIdOf, requestTranslation, requestTranslationById, toggle } from "./state";
 
 /**
  * Mode A. Returns a prototype-preserving CLONE with translated content.
@@ -62,7 +62,13 @@ export function wrapContent(content: any, messageId: string, channelId: string):
     const { mode } = settings.store;
     const target = settings.store.targetLanguage;
     const entry = entryForMessage(messageId);
-    if (!entry) return content;
+    if (!entry) {
+        // Both Language mode has no other request path for a row that renders
+        // later (new messages, or history loaded by scrolling up). The request
+        // is only recorded; state.ts sends it once the row is on screen.
+        requestTranslationById(channelId, messageId);
+        return content;
+    }
 
     if (mode === "bilingual") {
         return (
