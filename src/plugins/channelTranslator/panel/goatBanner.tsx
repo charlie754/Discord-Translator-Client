@@ -15,6 +15,9 @@ const QR_SIZE = 37;
 const DAGOAT_LINE = "Goat Project - Help fight Cancer, Alzheimer’s, Parkinson’s, COVID-19, Dengue, Hepatitis C etc.";
 const DAGOAT_ASK = "Contribute your idle compute to Earn GOAT.";
 
+// Static extension preview only; this image is not part of the signed banner.
+const IPHONE_PREVIEW_DATA_URL = "data:image/webp;base64,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";
+
 type OnlineBanner = {
     headline?: string;
     headlineEm?: string;
@@ -186,7 +189,9 @@ function GoatBannerOnline({ variant, model }: { variant: "panel" | "settings"; m
                     ) : null}
                     {banner.effects?.viewfinder ? <span className="gc-vf" /> : null}
                 </span>
-                {badge ? <span className="gc-osd gc-badge" aria-hidden="true"><span className="gc-osd__dot" aria-hidden="true" /><span className={`gc-badge__text ${fitClass(badge, 16)}`}>{badge}</span></span> : null}
+                <span className="gc-iphone" aria-hidden="true">
+                    <img className="gc-iphone__screen" src={IPHONE_PREVIEW_DATA_URL} alt="" width="60" height="128" draggable="false" />
+                </span>
                 <span className="goat-lockup__word" style={textBoxStyle}>
                     <span className={`goat-lockup__name ${fitClass(wordmark, 12)}`}>{wordmark}</span>
                     <span className={`goat-lockup__tag ${fitClass(taglineText, 18)}`}>
@@ -196,6 +201,7 @@ function GoatBannerOnline({ variant, model }: { variant: "panel" | "settings"; m
                         ])}
                     </span>
                 </span>
+                {badge ? <span className="gc-osd gc-badge" aria-hidden="true"><span className="gc-osd__dot" aria-hidden="true" /><span className={`gc-badge__text ${fitClass(badge, 16)}`}>{badge}</span></span> : null}
                 <span className="gc-qr">
                     <svg viewBox={`0 0 ${QR_SIZE} ${QR_SIZE}`} shapeRendering="crispEdges" role="img" aria-label={banner.labels?.qr} xmlns="http://www.w3.org/2000/svg" focusable="false">
                         <rect width={QR_SIZE} height={QR_SIZE} fill="#fbf5ea" />
@@ -249,13 +255,222 @@ export const GOAT_BANNER_CSS = `
 .goat--online *,.goat--online *::before,.goat--online *::after{box-sizing:border-box;}.goat--online .goat__copy{display:block;margin:0 0 8px;padding:2px 0 1px;}.goat--online .goat__line{display:block;margin:0;font-size:10.5px;line-height:1.4;font-weight:500;color:var(--gc-ink);}.goat--online .goat__line em{font:italic 700 1.14em/1 var(--gc-serif);color:var(--gc-gold);letter-spacing:.02em;}.goat--online .goat-lockup{position:relative;z-index:2;display:block;width:100%;height:var(--gc-h,136px);margin:0;padding:0;border:1px solid var(--gc-line);border-radius:10px;background:var(--gc-950);color:var(--gc-cream);line-height:1;text-decoration:none;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform var(--gc-t-out) var(--gc-out),box-shadow var(--gc-t-out) var(--gc-out);}.goat--online .goat-lockup:hover{color:var(--gc-cream);text-decoration:none;}.goat--online .goat-lockup:focus-visible{outline:2px solid var(--gc-gold);outline-offset:2px;}
 .goat--online .gc-photo{position:absolute;inset:0;z-index:0;display:block;overflow:hidden;border-radius:9px;container-type:size;background:var(--gc-950);}.goat--online .gc-photo__frame{position:absolute;left:var(--gc-px,0%);top:var(--gc-py,50%);display:block;width:max(100cqw,100cqh * 800 / 498);aspect-ratio:800 / 498;translate:calc(var(--gc-px,0%) * -1) calc(var(--gc-py,50%) * -1);transform-origin:30% 55%;transition:transform var(--gc-t-out) var(--gc-out);}.goat--online .gc-photo__img{display:block;width:100%;height:100%;max-width:none;margin:0;border:0;object-fit:cover;user-select:none;-webkit-user-drag:none;}.goat--online .gc-photo::after{content:"";position:absolute;inset:0;pointer-events:none;background:var(--gc-scrim,none);}.goat--online .gc-steam{position:absolute;left:13%;bottom:41.5%;width:7.5%;height:auto;aspect-ratio:60 / 120;translate:-50% 0;overflow:visible;opacity:0;filter:blur(.5px);transition:opacity var(--gc-t-out) var(--gc-out);}.goat--online .gc-steam path{fill:none;stroke:rgba(255,247,236,.9);stroke-width:6;stroke-linecap:round;stroke-dasharray:44 100;stroke-dashoffset:44;animation:goatcam-steam 3.2s linear infinite paused;}.goat--online .gc-vf{--gc-m:conic-gradient(at var(--gc-arm) var(--gc-arm),#0000 75%,#000 0) 0 0 / calc(100% - var(--gc-arm)) calc(100% - var(--gc-arm));position:absolute;z-index:1;pointer-events:none;inset:var(--gc-vf-t,6px) var(--gc-vf-r,6px) var(--gc-vf-b,6px) var(--gc-vf-l,6px);border:2px solid rgba(248,238,223,.62);-webkit-mask:var(--gc-m);mask:var(--gc-m);transition:inset var(--gc-t-out) var(--gc-out);}.goat--online .gc-vf::after{content:"";position:absolute;inset:-2px;border:2px solid var(--gc-gold);opacity:0;transition:opacity var(--gc-t-out) var(--gc-out);}
 .goat--online .gc-osd{position:absolute;z-index:1;top:3px;left:calc(var(--gc-vf-l,6px) + var(--gc-arm) + 4px);display:flex;align-items:center;gap:3px;margin:0;padding:2px 4px;border-radius:4px;background:rgba(20,13,8,.62);color:var(--gc-cream);font:500 var(--gc-osd-fs,6.5px)/1 var(--gc-mono);letter-spacing:.05em;font-variant-numeric:tabular-nums;white-space:nowrap;}.goat--online .gc-osd__dot{flex:none;width:var(--gc-dot,5px);height:var(--gc-dot,5px);border-radius:50%;background:var(--gc-gold);}.goat--online .goat-lockup__word{position:absolute;z-index:1;left:var(--gc-word-x,16px);top:var(--gc-word-y,12px);display:flex;flex-direction:column;align-items:flex-start;gap:var(--gc-word-gap,5px);pointer-events:none;}.goat--online .goat-lockup__word::before{content:"";position:absolute;z-index:-1;inset:-10px -14px;background:radial-gradient(closest-side,rgba(20,13,8,.62),rgba(20,13,8,.3) 60%,rgba(20,13,8,0));}.goat--online .goat-lockup__name{display:block;font:400 var(--gc-name,17px)/1 var(--gc-serif);letter-spacing:-.005em;color:var(--gc-cream);white-space:nowrap;}.goat--online .goat-lockup__tag{display:flex;gap:.4em;font:600 var(--gc-tag,6.5px)/1.25 var(--gc-sans);letter-spacing:var(--gc-tag-track,.15em);text-transform:uppercase;color:var(--gc-cream-soft);white-space:nowrap;transition:color var(--gc-t-out) var(--gc-out);}.goat--online .gc-tag__part{display:inline-block;}.goat--online .gc-qr{position:absolute;z-index:3;top:var(--gc-qr-y,auto);right:var(--gc-qr-x,14px);bottom:var(--gc-qr-b,auto);display:block;width:var(--gc-qr);height:var(--gc-qr);overflow:hidden;border-radius:6px;background:#fbf5ea;box-shadow:0 6px 16px -8px rgba(0,0,0,.7);transform-origin:var(--gc-qr-origin,100% 100%);transition:scale 120ms var(--gc-out),box-shadow 120ms var(--gc-out);}.goat--online .gc-qr svg{display:block;width:100%;height:100%;shape-rendering:crispEdges;}.goat--online .gc-qr:hover,.goat--online .goat-lockup:focus-visible .gc-qr{scale:var(--gc-qr-zoom);box-shadow:0 8px 20px -6px rgba(0,0,0,.75),0 0 0 1px rgba(201,138,70,.55);transition-duration:200ms;transition-timing-function:var(--gc-in);}.goat--online .goat-lockup:is(:hover,:focus-visible,.is-active) .gc-photo__frame{transform:scale(1.06);transition:transform 1200ms var(--gc-in);}.goat--online .goat-lockup:is(:hover,:focus-visible,.is-active) .gc-steam{opacity:1;}.goat--online .goat-lockup:is(:hover,:focus-visible,.is-active) .gc-steam path{animation-play-state:running;}.goat--online .goat-lockup:is(:hover,:focus-visible,.is-active) .gc-vf{inset:calc(var(--gc-vf-t,6px) + 3px) calc(var(--gc-vf-r,6px) + 3px) calc(var(--gc-vf-b,6px) + 3px) calc(var(--gc-vf-l,6px) + 3px);}.goat--online .goat-lockup:is(:hover,:focus-visible,.is-active) .gc-vf::after{opacity:1;}.goat--online .goat-lockup:is(:hover,:focus-visible,.is-active) .gc-osd__dot{animation:goatcam-tally 2.4s .5s ease-in-out infinite;}.goat--online .goat-lockup:is(:hover,:focus-visible,.is-active) .goat-lockup__tag{color:var(--gc-cream);}.goat--online:not(.goat--gated) .goat-lockup:hover{transform:var(--gc-lift);box-shadow:var(--gc-lift-shadow);}.goat--online:not(.goat--gated) .goat-lockup:active{transform:var(--gc-press);}
-.goat--online .goat-fit-shrink{font-size:85%;}.goat--online .goat-fit-ellipsis{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.goat--online .goat--panel .goat-lockup{--gc-h:136px;}.goat--online.goat--panel .gc-photo{--gc-px:0%;--gc-py:55%;--gc-scrim:linear-gradient(to bottom,rgba(20,13,8,.8),rgba(20,13,8,.42) 30%,rgba(20,13,8,0) 52%);}.goat--online.goat--panel .gc-qr{--gc-qr-x:14px;--gc-qr-b:14px;--gc-qr-origin:100% 100%;}.goat--online.goat--panel .gc-osd{left:auto;right:calc(var(--gc-vf-r,6px) + var(--gc-arm) + 4px);}.goat--online.goat--panel .goat-lockup__word{--gc-word-x:22px;--gc-word-y:14px;}
+.goat--online .goat-fit-shrink{font-size:85%;}.goat--online .goat-fit-ellipsis{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.goat--online .goat--panel .goat-lockup{--gc-h:128px;}.goat--online.goat--panel .gc-photo{--gc-px:0%;--gc-py:55%;--gc-scrim:none;}.goat--online.goat--panel .gc-qr{--gc-qr-x:14px;--gc-qr-b:14px;--gc-qr-origin:100% 100%;}.goat--online.goat--panel .gc-osd{left:auto;right:calc(var(--gc-vf-r,6px) + var(--gc-arm) + 4px);}.goat--online.goat--panel .goat-lockup__word{--gc-word-x:22px;--gc-word-y:14px;}
 .goat--online.goat--panel .goat-lockup__word{left:var(--gc-word-x,16px)!important;right:calc(var(--gc-qr) + var(--gc-qr-x,14px) + 6px);width:auto!important;max-width:none;}
 .goat--online.goat--panel .goat-lockup__name{max-width:100%;overflow:hidden;text-overflow:ellipsis;}
 .goat--online.goat--panel .goat-lockup__tag{flex-wrap:wrap;row-gap:2px;white-space:normal;max-width:100%;}
-.goat--online.goat--panel .gc-tag__part{white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis;}.goat--online.goat--settings .goat-lockup{--gc-h:150px;--gc-qr:74px;--gc-qr-zoom:2.1622;--gc-arm:11px;}.goat--online.goat--settings .gc-photo{--gc-px:0%;--gc-py:68%;--gc-scrim:linear-gradient(to left,rgba(20,13,8,.55),rgba(20,13,8,0) 30%);}.goat--online.goat--settings .gc-qr{--gc-qr-x:18px;--gc-qr-y:calc((var(--gc-h) - 2px - var(--gc-qr)) / 2);--gc-qr-origin:100% 50%;}.goat--online.goat--settings .gc-vf{--gc-vf-t:7px;--gc-vf-l:7px;--gc-vf-b:7px;--gc-vf-r:7px;}.goat--online.goat--settings .gc-osd{--gc-osd-fs:7px;--gc-dot:7px;top:4px;left:22px;gap:4px;padding:3px 5px;}.goat--online.goat--settings .goat-lockup__word{--gc-word-x:222px;--gc-word-y:34px;--gc-name:30px;--gc-tag:8.5px;--gc-word-gap:9px;}.goat--online .goat--panel .goat-lockup,.goat--online .goat--settings .goat-lockup{margin:0;}.goat--online .goat--panel .goat-lockup__word,.goat--online .goat--settings .goat-lockup__word{pointer-events:none;}
+.goat--online.goat--panel .gc-tag__part{white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis;}.goat--online.goat--settings .goat-lockup{--gc-h:106.4px;--gc-qr:74px;--gc-qr-zoom:2.1622;--gc-arm:11px;}.goat--online.goat--settings .gc-photo{--gc-px:0%;--gc-py:68%;--gc-scrim:none;}.goat--online.goat--settings .gc-qr{--gc-qr-x:18px;--gc-qr-y:calc((var(--gc-h) - 2px - var(--gc-qr)) / 2);--gc-qr-origin:100% 50%;}.goat--online.goat--settings .gc-vf{--gc-vf-t:7px;--gc-vf-l:7px;--gc-vf-b:7px;--gc-vf-r:7px;}.goat--online.goat--settings .gc-osd{--gc-osd-fs:7px;--gc-dot:7px;top:4px;left:22px;gap:4px;padding:3px 5px;}.goat--online.goat--settings .goat-lockup__word{--gc-word-x:222px;--gc-word-y:34px;--gc-name:30px;--gc-tag:8.5px;--gc-word-gap:9px;}.goat--online .goat--panel .goat-lockup,.goat--online .goat--settings .goat-lockup{margin:0;}.goat--online .goat--panel .goat-lockup__word,.goat--online .goat--settings .goat-lockup__word{pointer-events:none;}
 @keyframes goatcam-steam{0%{stroke-dashoffset:44;opacity:0;translate:0 0;}18%{opacity:.95;}65%{opacity:.6;}100%{stroke-dashoffset:-100;opacity:0;translate:2px -6px;}}@keyframes goatcam-tally{0%,100%{opacity:1;}50%{opacity:.3;}}
 @media (prefers-reduced-motion:reduce){.goat--online .gc-steam{display:none;}.goat--online .gc-qr,.goat--online .gc-qr:hover,.goat--online .goat-lockup:focus-visible .gc-qr{transition:none;}.goat--online .goat-lockup:is(:hover,:focus-visible,.is-active) .gc-photo__frame{transform:none;}.goat--online .goat-lockup:is(:hover,:focus-visible,.is-active) .gc-vf{inset:var(--gc-vf-t,6px) var(--gc-vf-r,6px) var(--gc-vf-b,6px) var(--gc-vf-l,6px);}.goat--online .goat-lockup:is(:hover,:focus-visible,.is-active) .gc-osd__dot{animation:none;}.goat--online .goat-lockup,.goat--online .goat-lockup:hover,.goat--online .goat-lockup:active{transform:none;}}
+/* Founder-standard online geometry. The DaGoat plate in this file is width:100%;
+ * its panel plate is 5.4em at 20px plus 20px of vertical padding (128px), and
+ * its settings plate is 5.4em at 16px plus 20px (106.4px). Matching those
+ * measured heights at the same host widths preserves the DaGoat ratio. */
+.goat--online .goat-lockup {
+  height: var(--gc-h);
+  aspect-ratio: var(--gc-plate-ratio);
+}
+.goat--online .gc-photo {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: block;
+  overflow: hidden;
+  border-radius: 9px;
+  container-type: size;
+  background: var(--gc-950);
+  --gc-scrim: none;
+}
+.goat--online .gc-photo__frame {
+  position: absolute;
+  left: var(--gc-px, 0%);
+  top: var(--gc-py, 50%);
+  display: block;
+  width: max(100cqw, 100cqh * 800 / 498);
+  aspect-ratio: 800 / 498;
+  translate: calc(var(--gc-px, 0%) * -1) calc(var(--gc-py, 50%) * -1);
+  transform-origin: 30% 55%;
+}
+.goat--online .gc-photo__img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  margin: 0;
+  border: 0;
+  object-fit: cover;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.goat--online .gc-photo::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: var(--gc-scrim, none);
+}
+.goat--online .goat-lockup__word {
+  position: absolute;
+  z-index: 2;
+  isolation: isolate;
+  left: 22px !important;
+  top: 14px !important;
+  right: calc(var(--gc-iphone-right) + var(--gc-iphone-width) + 6px) !important;
+  display: flex;
+  min-width: 0;
+  max-width: none;
+  max-height: calc(100% - 34px);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  overflow: hidden;
+  pointer-events: none;
+}
+.goat--online .goat-lockup__word::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -10px -16px;
+  border-radius: 12px;
+  background: linear-gradient(to right, rgba(20, 13, 8, .84), rgba(20, 13, 8, .68) 66%, rgba(20, 13, 8, 0));
+  filter: blur(5px);
+  pointer-events: none;
+}
+.goat--online .goat-lockup__name,
+.goat--online .goat-lockup__tag {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  color: var(--gc-cream);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.goat--online .goat-lockup__name {
+  font: 700 16px/1 var(--gc-serif);
+  letter-spacing: 0;
+}
+.goat--online .goat-lockup__tag {
+  font: 600 7px/1.25 var(--gc-sans);
+  letter-spacing: .04em;
+  color: var(--gc-cream-soft);
+}
+.goat--online .gc-badge {
+  position: absolute;
+  z-index: 2;
+  left: 22px;
+  right: auto;
+  top: auto;
+  bottom: 7px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  width: max-content;
+  max-width: calc(100% - var(--gc-iphone-right) - var(--gc-iphone-width) - 28px);
+  overflow: hidden;
+  white-space: nowrap;
+  padding: 2px 4px;
+  border: 1px solid rgba(240, 192, 122, .46);
+  border-radius: 999px;
+  background: rgba(20, 13, 8, .82);
+  box-shadow: none;
+  color: var(--gc-gold);
+  font: 700 6.5px/1.2 var(--gc-mono);
+  letter-spacing: .05em;
+  font-variant-numeric: tabular-nums;
+}
+.goat--online .gc-badge__text {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--gc-gold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.goat--online .gc-badge .gc-osd__dot { flex: none; }
+.goat--online .gc-iphone {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  right: var(--gc-iphone-right, 76px);
+  display: block;
+  width: var(--gc-iphone-width, 30px);
+  height: var(--gc-iphone-height, 62px);
+  overflow: hidden;
+  border: 0;
+  border-radius: 6.5px;
+  background: transparent;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, .55);
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+.goat--online .gc-iphone::after {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  border: 1px solid rgba(10, 8, 7, .92);
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 .5px rgba(255, 239, 214, .4);
+  pointer-events: none;
+}
+.goat--online .gc-iphone__screen {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 4.6px;
+  object-fit: fill;
+}
+.goat--online .gc-qr {
+  z-index: 3;
+  top: 50%;
+  right: var(--gc-qr-x, 14px);
+  bottom: auto;
+  transform: translateY(-50%);
+}
+.goat--online .gc-qr:hover,
+.goat--online .goat-lockup:focus-visible .gc-qr {
+  scale: var(--gc-qr-zoom);
+  transform: translateY(-50%);
+}
+.goat--online.goat--panel .goat-lockup {
+  --gc-h: 128px;
+  --gc-plate-ratio: 244 / 128;
+  --gc-qr: 60px;
+  --gc-qr-zoom: 2.6667;
+  --gc-qr-x: 14px;
+  --gc-iphone-width: 30px;
+  --gc-iphone-right: 76px;
+}
+.goat--online.goat--panel .gc-photo,
+.goat--online.goat--settings .gc-photo {
+  --gc-scrim: none;
+}
+.goat--online.goat--panel .goat-lockup__word,
+.goat--online.goat--settings .goat-lockup__word {
+  left: 22px !important;
+  top: 14px !important;
+  right: calc(var(--gc-iphone-right) + var(--gc-iphone-width) + 6px) !important;
+  width: auto !important;
+  height: auto !important;
+}
+.goat--online.goat--settings .goat-lockup {
+  --gc-h: 106.4px;
+  --gc-plate-ratio: 594 / 106.4;
+  --gc-qr: 74px;
+  --gc-qr-zoom: 2.1622;
+  --gc-qr-x: 18px;
+  --gc-iphone-width: 30px;
+  --gc-iphone-right: 94px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .goat--online .gc-iphone { transform: translateY(-50%); }
+}
 `;
 
 const STYLE_ID = "ct-goat-banner-css";

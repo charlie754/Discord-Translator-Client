@@ -193,6 +193,44 @@ describe("Goat banner two-model drawing", () => {
         expect((qr?.children[1] as Node).props.d).toBe(loaded.helpers.qrPathFromRows(banner.qr.rows));
     });
 
+    it("puts the non-interactive iPhone preview directly before the QR", () => {
+        const tree = load(onlineModel()).render("panel");
+        const link = anchor(tree);
+        const iphone = firstClass(tree, "gc-iphone");
+        const screen = firstClass(tree, "gc-iphone__screen");
+        const qr = firstClass(tree, "gc-qr");
+
+        expect(iphone.props["aria-hidden"]).toBe("true");
+        expect(screen.props.src).toMatch(/^data:image\/webp;base64,/);
+        expect(link.children.indexOf(iphone)).toBeLessThan(link.children.indexOf(qr));
+    });
+
+    it("uses the DaGoat plate measurements for each online variant", () => {
+        const css = load(onlineModel()).css;
+        const rule = (selector: string) => {
+            const start = css.lastIndexOf(`${selector} {`);
+            const end = css.indexOf("}", start);
+            return css.slice(start, end);
+        };
+
+        // DaGoat's plate is its 5.4em mark plus 10px top and bottom padding:
+        // 128px at the panel's 20px lockup size and 106.4px at settings' 16px.
+        expect(rule(".goat--online.goat--panel .goat-lockup")).toContain("--gc-h: 128px;");
+        expect(rule(".goat--online.goat--panel .goat-lockup")).toContain("--gc-plate-ratio: 244 / 128;");
+        expect(rule(".goat--online.goat--settings .goat-lockup")).toContain("--gc-h: 106.4px;");
+        expect(rule(".goat--online.goat--settings .goat-lockup")).toContain("--gc-plate-ratio: 594 / 106.4;");
+    });
+
+    it("keeps the photo natural and puts the contrast scrim behind the text", () => {
+        const css = load(onlineModel()).css;
+        const photoAfterRules = [...css.matchAll(/\.goat--online \.gc-photo::after\s*\{[^}]*\}/g)].map(match => match[0]);
+
+        expect(photoAfterRules.length).toBeGreaterThan(0);
+        expect(photoAfterRules.every(rule => !rule.includes("rgba("))).toBe(true);
+        expect(css).toContain(".goat--online .goat-lockup__word::before");
+        expect(css).toContain("background: linear-gradient(to right, rgba(20, 13, 8, .84)");
+    });
+
     it("uses signed effects and positions instead of drawing hidden static features", () => {
         const noEffects = { ...valid, effects: { viewfinder: false, steam: false }, badge: "" };
         const tree = load(onlineModel(noEffects)).render("panel");
