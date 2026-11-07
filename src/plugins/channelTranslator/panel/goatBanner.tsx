@@ -278,7 +278,7 @@ export const GOAT_BANNER_CSS = `
 .goat--online.goat--panel{margin-top:16px;}
 .goat--online.goat--panel .gc-iphone{left:100px;right:auto;top:21px;width:44px;height:96px;}
 
-.goat--online.goat--settings .gc-iphone{left:438px;right:auto;top:18px;width:52.5px;height:112px;}
+.goat--online.goat--settings .gc-iphone{left:516px;right:auto;top:18px;width:52.5px;height:112px;}
 `;
 
 const STYLE_ID = "ct-goat-banner-css";
