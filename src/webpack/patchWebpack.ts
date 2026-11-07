@@ -204,17 +204,23 @@ define(Function.prototype, "m", {
             define(this, "m", { value: proxiedModuleFactories });
 
             // Overwrite Webpack's defineExports function to define the export descriptors configurable.
-            // This is needed so we can later blacklist specific exports from Webpack search by making them non-enumerable
-            this.d = function (exports, definition) {
-                for (const key in definition) {
-                    if (Object.hasOwn(definition, key) && !Object.hasOwn(exports, key)) {
-                        Object.defineProperty(exports, key, {
-                            enumerable: true,
-                            configurable: true,
-                            get: definition[key],
-                        });
+            // This is needed so we can later blacklist specific exports from Webpack search by making them non-enumerable.
+            // Discord build 667580 (2026-11) calls d(exports, getters, values): the third argument carries plain
+            // values instead of getters. Ignoring it left every such export undefined and Discord rendered blank.
+            this.d = function (exports, getters, values) {
+                const defineAll = (source: Record<PropertyKey, any> | undefined, kind: "get" | "value") => {
+                    for (const key in source) {
+                        if (Object.hasOwn(source, key) && !Object.hasOwn(exports, key)) {
+                            Object.defineProperty(exports, key, {
+                                enumerable: true,
+                                configurable: true,
+                                [kind]: source[key],
+                            });
+                        }
                     }
-                }
+                };
+                defineAll(getters, "get");
+                defineAll(values, "value");
             };
         };
     }
@@ -424,8 +430,15 @@ function runFactoryWithWrap(patchedFactory: PatchedModuleFactory, thisArg: unkno
         }
 
         logger.error("Error in patched module factory:\n", err);
-        return originalFactory.apply(thisArg, argArray);
+        const originalReturn = originalFactory.apply(thisArg, argArray);
+        module.loaded ??= true;
+        return originalReturn;
     }
+
+    // Discord bundles with rspack since build 667580 (2026-11), whose require never sets module.loaded.
+    // find() skips modules without it (they may still be evaluating), so without this every lookup fails.
+    // Webpack sets loaded=false before the factory and true after, so ??= leaves that path untouched.
+    module.loaded ??= true;
 
     exports = module.exports;
 
