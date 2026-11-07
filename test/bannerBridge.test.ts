@@ -110,6 +110,36 @@ describe("GOAT Cam extension gate bridge", () => {
         expect(page.posted).toEqual([]);
     });
 
+    it("Chrome that also defines globalThis.browser still answers true", async () => {
+        // Chrome 151 defines `browser` in extension contexts too, so namespace presence
+        // is not a Firefox test. Only Firefox has runtime.getBrowserInfo.
+        const page = makeWindow();
+        const sendMessage = vi.fn();
+        const api = {
+            runtime: {
+                sendMessage,
+                getManifest: () => ({ version: "0.0.0" }),
+                getURL: (path: string) => `chrome-extension://test/${path}`
+            }
+        };
+        vi.stubGlobal("window", page);
+        vi.stubGlobal("document", { addEventListener: () => undefined });
+        vi.stubGlobal("chrome", api);
+        vi.stubGlobal("browser", api);
+        await import("../browser/content.js");
+
+        page.dispatch("message", {
+            source: page,
+            data: { type: "goatcamBanner:gate", id: 5 }
+        });
+        await vi.waitFor(() => expect(page.posted).toEqual([{
+            type: "goatcamBanner:gate:result",
+            id: 5,
+            granted: true
+        }]));
+        expect(sendMessage).not.toHaveBeenCalled();
+    });
+
     it("Firefox relays the gate through the background permission API", async () => {
         const page = makeWindow();
         const sendMessage = vi.fn(() => Promise.resolve({ granted: false }));

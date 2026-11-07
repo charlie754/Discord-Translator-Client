@@ -1,9 +1,9 @@
 // Firefox exposes the promise-style `browser` API; Chrome exposes `chrome`. Reading
 // through globalThis keeps the distinction intact in this classic content script.
 const extensionApi = globalThis.browser ?? globalThis.chrome;
-// ponytail: one shared content script uses namespace presence; split browser-specific
-// content scripts only if another engine needs a different capability surface.
-const isFirefox = typeof globalThis.browser !== "undefined";
+// Chrome 151 also defines `browser` in extension contexts, so namespace presence is not
+// a Firefox test. runtime.getBrowserInfo exists only in Firefox.
+const isFirefox = typeof extensionApi?.runtime?.getBrowserInfo === "function";
 
 /*
  * Translation relay.
