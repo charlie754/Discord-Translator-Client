@@ -96,9 +96,11 @@ The following further modifications were made on October 26, 2026:
 The following further modifications were made on November 6, 2026 (v0.2.17):
 
 - The GOAT Cam banner can now load signed content from `goatcam.dagoat.io`: one signed file
-  plus one photo, verified with a public key built into the release and cached locally. When
-  offline, or when the file is missing, bad, expired or switched off, it falls back to the
-  original DaGoat.io banner. The Firefox package does not fetch this content in this release.
+  plus one photo, verified with a public key built into the release and cached locally. The two
+  browser packages and the desktop client request it while the translator panel or settings tab
+  is visible. When offline, or when the file is missing, bad, expired or switched off, it falls
+  back to the original DaGoat.io banner. Firefox shows this under its "technical and interaction
+  data" install-time disclosure.
 
 ### Source Attribution
 

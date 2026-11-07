@@ -48,7 +48,6 @@ type BannerGlobals = typeof globalThis & {
         publicKeyHex: string;
         keyId: string;
         floor: number;
-        firefoxOnline: boolean;
     };
     GoatBannerMachine: {
         create: (options: { floor: number; kinds: string[] }) => unknown;
@@ -211,9 +210,18 @@ export function configureGoatBannerGate() {
 
     // ponytail: one shared extension bundle waits for runtime metadata; separate
     // Chrome and Firefox bundles only if the package-specific behavior grows.
+    /*
+     * The banner request is made by the page-world bundle on https://discord.com,
+     * which is Discord's own origin after the extension strips Discord's CSP. It
+     * is not an extension-context fetch, so Firefox's per-install moz-extension
+     * UUID never appears in the Origin header. The shared GoatBannerKey.firefoxOnline
+     * flag is for apps whose fetch runs in an extension context; Discord Translator
+     * therefore uses Firefox's technicalAndInteraction permission as its own gate.
+     * If a user removes that data permission in Firefox's add-on settings, the
+     * background check returns false and the bundled DaGoat banner is shown.
+     */
     const extensionGate = async () => {
         await metaReady;
-        if (IS_FIREFOX && globals.GoatBannerKey.firefoxOnline !== true) return false;
         return IS_FIREFOX ? goatBannerGateFromExtension() : true;
     };
 

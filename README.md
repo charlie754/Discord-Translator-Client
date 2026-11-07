@@ -121,9 +121,10 @@ The translator panel carries three outbound destinations, and all three are the 
 
 The Ko-fi and GitHub controls are links and contact their sites only when clicked. The GOAT Cam
 banner normally starts with bundled content, but while the translator panel or settings tab is on
-screen the Chrome/Edge extension may request one signed file and one image from `goatcam.dagoat.io`,
-at most about once a day plus retries. The Firefox package does not fetch this banner in this
-release. The request sends no identifier, cookie, query string, analytics or message content;
+screen both browser packages and the desktop client may request one signed file and one photo from
+`goatcam.dagoat.io`, at most about once a day plus retries. Firefox shows this under its "technical
+and interaction data" install-time disclosure. The request sends no identifier, cookie, query string,
+analytics or message content;
 [PRIVACY.md](./PRIVACY.md) explains the ordinary request details the server can see.
 
 ## Privacy

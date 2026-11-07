@@ -165,10 +165,7 @@ describe("GOAT Cam extension gate bridge", () => {
         expect(sendMessage).toHaveBeenCalledWith({ action: "goatcamBanner:gate" });
     });
 
-    it("Firefox with firefoxOnline false resolves false before the runner can fetch", async () => {
-        // This is the coordinator seam: the configured Firefox gate is exercised by
-        // the real runner, and the fetch mock proves the runner never starts a
-        // signed-banner request when the release flag is off.
+    it("Firefox with permission granted resolves true and the runner fetches", async () => {
         const page = makeWindow();
         vi.stubGlobal("window", page);
         vi.stubGlobal("location", page.location);
@@ -176,14 +173,13 @@ describe("GOAT Cam extension gate bridge", () => {
         vi.stubGlobal("GoatBannerKey", {
             publicKeyHex: "00",
             keyId: "test",
-            floor: 0,
-            firefoxOnline: false
+            floor: 0
         });
 
         const { configureGoatBannerGate, __resetGoatBannerForTests } = await import(
             "../src/plugins/channelTranslator/banner/coordinator"
         );
-        const fetchMock = vi.fn();
+        const fetchMock = vi.fn(async () => ({ status: 503 }));
         __resetGoatBannerForTests({
             fetch: fetchMock,
             setTimer: () => 0,
@@ -198,8 +194,13 @@ describe("GOAT Cam extension gate bridge", () => {
         });
 
         const gate = configureGoatBannerGate();
-        await expect(gate?.()).resolves.toBe(false);
-        expect(page.posted).toEqual([]);
+        const pending = gate?.();
+        await vi.waitFor(() => expect(page.posted).toEqual([{ type: "goatcamBanner:gate", id: 1 }]));
+        page.dispatch("message", {
+            source: page,
+            data: { type: "goatcamBanner:gate:result", id: 1, granted: true }
+        });
+        await expect(pending).resolves.toBe(true);
 
         let value = 0;
         fakeReact.useState = (initial: unknown) => [value || initial, (next: unknown) => {
@@ -210,6 +211,69 @@ describe("GOAT Cam extension gate bridge", () => {
             "../src/plugins/channelTranslator/banner/coordinator"
         );
         useGoatBannerModel();
+        await vi.waitFor(() => expect(page.posted).toEqual([
+            { type: "goatcamBanner:gate", id: 1 },
+            { type: "goatcamBanner:gate", id: 2 }
+        ]));
+        page.dispatch("message", {
+            source: page,
+            data: { type: "goatcamBanner:gate:result", id: 2, granted: true }
+        });
+        await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    });
+
+    it("Firefox with permission missing resolves false and the runner does not fetch", async () => {
+        const page = makeWindow();
+        vi.stubGlobal("window", page);
+        vi.stubGlobal("location", page.location);
+        vi.stubGlobal("IS_EXTENSION", true);
+        vi.stubGlobal("GoatBannerKey", {
+            publicKeyHex: "00",
+            keyId: "test",
+            floor: 0
+        });
+
+        const { configureGoatBannerGate, __resetGoatBannerForTests } = await import(
+            "../src/plugins/channelTranslator/banner/coordinator"
+        );
+        const fetchMock = vi.fn(async () => ({ status: 503 }));
+        __resetGoatBannerForTests({
+            fetch: fetchMock,
+            setTimer: () => 0,
+            clearTimer: () => undefined
+        });
+
+        page.dispatch("message", {
+            source: page,
+            data: { type: "vencord:meta", meta: { IS_FIREFOX: true } }
+        });
+
+        const gate = configureGoatBannerGate();
+        const pending = gate?.();
+        await vi.waitFor(() => expect(page.posted).toEqual([{ type: "goatcamBanner:gate", id: 1 }]));
+        page.dispatch("message", {
+            source: page,
+            data: { type: "goatcamBanner:gate:result", id: 1, granted: false }
+        });
+        await expect(pending).resolves.toBe(false);
+
+        let value = 0;
+        fakeReact.useState = (initial: unknown) => [value || initial, (next: unknown) => {
+            value = typeof next === "function" ? (next as (value: number) => number)(value) : Number(next);
+        }];
+        fakeReact.useEffect = (effect: () => (() => void) | undefined) => effect();
+        const { useGoatBannerModel } = await import(
+            "../src/plugins/channelTranslator/banner/coordinator"
+        );
+        useGoatBannerModel();
+        await vi.waitFor(() => expect(page.posted).toEqual([
+            { type: "goatcamBanner:gate", id: 1 },
+            { type: "goatcamBanner:gate", id: 2 }
+        ]));
+        page.dispatch("message", {
+            source: page,
+            data: { type: "goatcamBanner:gate:result", id: 2, granted: false }
+        });
         await new Promise<void>(resolve => setTimeout(resolve, 0));
         expect(fetchMock).not.toHaveBeenCalled();
     });
@@ -219,7 +283,6 @@ describe("GOAT Cam extension gate bridge", () => {
         vi.stubGlobal("window", page);
         vi.stubGlobal("location", page.location);
         vi.stubGlobal("IS_EXTENSION", true);
-        vi.stubGlobal("GoatBannerKey", { firefoxOnline: false });
         const { configureGoatBannerGate } = await import(
             "../src/plugins/channelTranslator/banner/coordinator"
         );
