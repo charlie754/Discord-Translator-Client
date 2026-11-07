@@ -438,7 +438,126 @@ export function persist(): void {
     settings.store.cacheBlob = cache.serialise();
 }
 
+/*
+ * ON SCREEN ONLY, NEWEST FIRST. Operator ruling 2026-11-06: "start from Latest,
+ * then translate the content only that currently showing on screen."
+ *
+ * Every caller used to send at once. Switching a channel on handed every loaded
+ * message to a FIFO scheduler oldest-first, so the screen the user was actually
+ * reading — the newest messages — was translated LAST, after scrollback they
+ * might never scroll to, and every one of those requests spent the free
+ * endpoint's rate budget.
+ *
+ * Now requestTranslation() only records the message. flushVisible() sends the
+ * recorded messages whose rows are on screen, newest first; the rest wait until
+ * a scroll brings them into view. A request still queued in the scheduler when
+ * its row scrolls away is skipped at the head of the queue and recorded again,
+ * so it costs nothing until it is visible once more.
+ */
+const wanted = new Map<string, any>();
+let flushTimer: ReturnType<typeof setTimeout> | undefined;
+let scrollHooked = false;
+const SKIPPED = Symbol("off-screen");
+
+function rowOf(channelId: string, messageId: string): HTMLElement | null {
+    return document.getElementById(`chat-messages-${channelId}-${messageId}`);
+}
+
+/**
+ * True when any part of the message's row lies inside the visible chat area: the
+ * row's nearest scrolling ancestor, clipped to the window. Without a DOM (the
+ * unit tests) everything counts as visible, which keeps the old behaviour there.
+ */
+function isOnScreen(channelId: string, messageId: string): boolean {
+    if (typeof document === "undefined") return true;
+    const row = rowOf(channelId, messageId);
+    if (!row) return false;
+
+    let top = 0;
+    let bottom = window.innerHeight;
+    for (let node = row.parentElement; node; node = node.parentElement) {
+        const overflow = getComputedStyle(node).overflowY;
+        if (overflow === "auto" || overflow === "scroll") {
+            const box = node.getBoundingClientRect();
+            top = Math.max(top, box.top);
+            bottom = Math.min(bottom, box.bottom);
+            break;
+        }
+    }
+
+    const rect = row.getBoundingClientRect();
+    return rect.height > 0 && rect.bottom > top && rect.top < bottom;
+}
+
+/** Snowflakes grow with time and are decimal strings: longer, then larger, is newer. */
+function newestFirst(a: any, b: any): number {
+    const x = String(a.id), y = String(b.id);
+    return y.length - x.length || (y > x ? 1 : y < x ? -1 : 0);
+}
+
+function flushVisible(): void {
+    const ready: any[] = [];
+    for (const [id, message] of wanted) {
+        const on = translationEnabled(toggle, guildIdOf(message.channel_id), settings.store.includeDMs);
+        // Switched off, or no longer rendered (another channel, unloaded history):
+        // forget it. A row that renders again asks again.
+        if (!on || !rowOf(message.channel_id, id)) {
+            wanted.delete(id);
+            continue;
+        }
+        if (isOnScreen(message.channel_id, id)) {
+            wanted.delete(id);
+            ready.push(message);
+        }
+    }
+    // The scheduler is FIFO, so sending newest first translates newest first.
+    ready.sort(newestFirst);
+    for (const message of ready) sendTranslation(message);
+}
+
+function scheduleFlush(): void {
+    if (flushTimer !== undefined) return;
+    // Debounced: a render pass or a scroll fires this dozens of times, and the
+    // rows a render adds are only laid out (and measurable) a moment later.
+    flushTimer = setTimeout(() => {
+        flushTimer = undefined;
+        flushVisible();
+    }, 120);
+}
+
 export function requestTranslation(message: any): void {
+    // Hashing and the cache lookup are local and free, so they stay immediate:
+    // entryForMessage() needs the hash to paint an already-cached translation,
+    // and repaintChannel() repaints straight after this call returns.
+    const hash = hashContent(message.content);
+    messageHashes.set(message.id, hash);
+    if (cache.get(hash, settings.store.targetLanguage)) return;
+
+    if (typeof document === "undefined") {
+        sendTranslation(message);
+        return;
+    }
+    if (!scrollHooked) {
+        scrollHooked = true;
+        // Scroll events do not bubble, but a capturing listener on the document
+        // sees the chat scroller's. It does nothing while nothing is waiting.
+        // ponytail: one document-wide listener for the page's lifetime; scope it to
+        // the chat scroller if profiling ever shows the empty-map check costs anything.
+        document.addEventListener("scroll", () => {
+            if (wanted.size > 0) scheduleFlush();
+        }, { capture: true, passive: true });
+    }
+    wanted.set(message.id, message);
+    scheduleFlush();
+}
+
+/** For Both Language mode, whose render hook knows only the ids. */
+export function requestTranslationById(channelId: string, messageId: string): void {
+    const message = MessageStore.getMessage(channelId, messageId);
+    if (message?.content) requestTranslation(message);
+}
+
+function sendTranslation(message: any): void {
     const target = settings.store.targetLanguage;
     const hash = hashContent(message.content);
     messageHashes.set(message.id, hash);
@@ -484,8 +603,13 @@ export function requestTranslation(message: any): void {
     inFlight.add(flightKey);
     pending++;
     emitProgress();
+    let skipped = false;
     void scheduler
         .run(async () => {
+            // Queued behind other requests, the row may have scrolled away since.
+            // Sending it now is exactly the waste the on-screen gate exists to stop.
+            if (!isOnScreen(raw.channelId, raw.id)) return SKIPPED;
+
             const lines = raw.content.split("\n");
 
             // Indices of lines worth translating; blanks pass through untouched
@@ -517,6 +641,10 @@ export function requestTranslation(message: any): void {
             // A null payload means the message had nothing worth translating, so
             // nothing was sent and there is nothing to cache.
             if (!payload) return;
+            if (payload === SKIPPED) {
+                skipped = true;
+                return;
+            }
             const { text, result } = payload;
             cache.set(hash, target, {
                 text,
@@ -550,6 +678,8 @@ export function requestTranslation(message: any): void {
             pending--;
             inFlight.delete(flightKey);
             emitProgress();
+            // Wait for it to come back on screen; flushVisible() forgets it if it never renders again.
+            if (skipped) requestTranslation(message);
         });
 }
 
