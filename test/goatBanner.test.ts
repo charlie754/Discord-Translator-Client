@@ -254,3 +254,29 @@ describe("Goat banner absence detectors", () => {
         expect(loaded.css).toContain(".goat--online");
     });
 });
+
+describe("module load", () => {
+    // Regression for 0.2.17 pre-release: a top-level JSX constant ran
+    // Vencord.Webpack.Common.React.createElement while the bundle was still
+    // evaluating, before `Vencord` existed, and the whole mod failed to start.
+    it("evaluates without calling the JSX factory", () => {
+        const compiled = transformSync(SOURCE, {
+            loader: "tsx",
+            format: "cjs",
+            target: "es2022",
+            jsx: "transform",
+            jsxFactory: "VencordCreateElement",
+            jsxFragment: "VencordFragment",
+            sourcefile: "goatBanner.tsx"
+        }).code;
+        const throwingFactory = () => { throw new Error("JSX factory called while the module was loading"); };
+        const modules: Record<string, unknown> = {
+            "@webpack/common": { React: {} },
+            "../banner/coordinator": { bannerEvents: {}, useGoatBannerModel: () => ({ kind: "dagoat" }) }
+        };
+        const module_ = { exports: {} as any };
+        // eslint-disable-next-line no-new-func
+        const run = new Function("require", "module", "exports", "VencordCreateElement", "VencordFragment", compiled);
+        expect(() => run((id: string) => modules[id], module_, module_.exports, throwingFactory, Symbol("Fragment"))).not.toThrow();
+    });
+});

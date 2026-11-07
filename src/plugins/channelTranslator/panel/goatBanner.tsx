@@ -72,7 +72,8 @@ function headlineChildren(headline: string, emphasis: string | undefined): Array
     return [headline.slice(0, at), <em key="headline-emphasis">{emphasis}</em>, headline.slice(at + emphasis.length)];
 }
 
-const mark = (
+// A function, not a constant: JSX at module level runs the factory before Vencord exists.
+const mark = () => (
     <span className="goat-lockup__mark" aria-hidden="true">
         <svg className="goat-lockup__svg" viewBox="46 -16 220 250" xmlns="http://www.w3.org/2000/svg" focusable="false">
             <g className="gl-head">
@@ -129,7 +130,7 @@ export function GoatBannerDaGoat({ variant }: { variant: "panel" | "settings" })
                 <span className="goat-lockup__meteors" aria-hidden="true">
                     {Array.from({ length: 9 }, (_, index) => <i key={index} />)}
                 </span>
-                {mark}
+                {mark()}
                 <span className="goat-lockup__word">
                     <span className="goat-lockup__name">Goatproject</span>
                     <span className="goat-lockup__tag">The People’s Compute Commons</span>
