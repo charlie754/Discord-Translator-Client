@@ -11,6 +11,8 @@ import "./banner-key.js";
 
 import { React } from "@webpack/common";
 
+import { goatBannerGateFromExtension } from "../../../../browser/translationBridge";
+import { IS_FIREFOX, metaReady } from "../../../utils/web-metadata";
 import { type GoatBannerStorage, goatBannerStorage } from "./storage";
 
 type BannerRunnerModel =
@@ -65,6 +67,7 @@ const globals = globalThis as BannerGlobals;
 const KINDS = ["webp"];
 const ORIGIN = "https://goatcam.dagoat.io";
 const defaultGate = async () => true;
+const isExtensionBuild = typeof IS_EXTENSION !== "undefined" && IS_EXTENSION;
 
 let latestModel: Model = { kind: "dagoat" };
 let mountedCount = 0;
@@ -201,6 +204,21 @@ export const bannerEvents = {
 
 export function setGoatBannerGate(nextGate: () => Promise<boolean>) {
     gate = nextGate;
+}
+
+export function configureGoatBannerGate() {
+    if (!isExtensionBuild) return undefined;
+
+    // ponytail: one shared extension bundle waits for runtime metadata; separate
+    // Chrome and Firefox bundles only if the package-specific behavior grows.
+    const extensionGate = async () => {
+        await metaReady;
+        if (IS_FIREFOX && globals.GoatBannerKey.firefoxOnline !== true) return false;
+        return IS_FIREFOX ? goatBannerGateFromExtension() : true;
+    };
+
+    setGoatBannerGate(extensionGate);
+    return extensionGate;
 }
 
 export function __resetGoatBannerForTests(deps: RunnerDeps = {}) {

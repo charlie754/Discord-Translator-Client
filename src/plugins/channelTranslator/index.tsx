@@ -9,6 +9,7 @@ import "./styles.css";
 import { popNotice, showNotice } from "@api/Notices";
 import definePlugin from "@utils/types";
 
+import { configureGoatBannerGate } from "./banner/coordinator";
 import { mountPanel, unmountPanel } from "./panel";
 import { CHANNEL_TRANSLATOR_PATCHES, patchHit } from "./patches";
 import { migrateUnavailableProvider } from "./provider";
@@ -41,6 +42,8 @@ export default definePlugin({
     wrapContent,
 
     start() {
+        configureGoatBannerGate();
+
         // FIRST, before anything reads `provider`. A persisted provider id that
         // this build's registry can no longer serve refuses every translation
         // with developer wording and never heals itself, so it is repaired here

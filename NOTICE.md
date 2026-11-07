@@ -93,6 +93,13 @@ The following further modifications were made on October 26, 2026:
   high-DPI screens; and the App Store QR code enlarges on hover or keyboard focus so a phone can
   scan it. Nothing in it is fetched from the network
 
+The following further modifications were made on November 6, 2026 (v0.2.17):
+
+- The GOAT Cam banner can now load signed content from `goatcam.dagoat.io`: one signed file
+  plus one photo, verified with a public key built into the release and cached locally. When
+  offline, or when the file is missing, bad, expired or switched off, it falls back to the
+  original DaGoat.io banner. The Firefox package does not fetch this content in this release.
+
 ### Source Attribution
 
 All upstream copyright notices are preserved in the source code. The message-interception technique, patch anchor, and translation regexes used by the ChannelTranslator feature are derived from Equicord's own `MessageTranslate` plugin.

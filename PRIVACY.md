@@ -41,7 +41,8 @@ gone with them** — nothing counts characters any more, because nothing is bill
 | `clients2.google.com` | only if you turn on **Enable React DevTools** | your IP, to download that extension |
 | `discord.com` | continuously — it is Discord, and in the browser build it is the page the extension runs on | whatever you send Discord by using Discord. Nothing this app adds |
 | `raw.githubusercontent.com` and the other theme-asset hosts | **only if** a theme or QuickCSS *you* installed references a file there | a request for that file, and your IP. No message text, no key, no identifier |
-| `ko-fi.com`, `github.com`, `goatcam.dagoat.io`, `betterdiscord.app` and other link targets | **only when you click the link**, from the translator panel or a settings screen | what any link click sends: that you arrived from here. Nothing is requested until you click |
+| `ko-fi.com`, `github.com`, `betterdiscord.app` and other link targets | **only when you click the link**, from the translator panel or a settings screen | what any link click sends: that you arrived from here. Nothing is requested until you click |
+| `goatcam.dagoat.io` | while the translator panel or settings tab is on screen, at most about once a day plus retries (Chrome/Edge extension only) | one signed banner file and one image; the ordinary request details every web request carries, plus the page origin in the browser extension |
 
 **Why `raw.githubusercontent.com` is in that table and in the extension manifests.** It is one of
 the fourteen CSP entries that exist so installed themes can load images and fonts, and it is the one
@@ -60,6 +61,19 @@ actually served. A deployment cannot complete a single call without both.
 `translate.googleapis.com`.** Apps Script is mutually exclusive with it, and reaching it requires
 you to change the provider setting *and* paste your own deployment URL. Nothing else on the list
 ever receives message content.
+
+### The GOAT Cam banner request
+
+The banner starts with the original DaGoat.io content bundled in the app. While the translator panel
+or the settings tab is on screen, the Chrome/Edge browser extension may request one signed file and
+one image from `goatcam.dagoat.io`, at most about once a day plus retries. The file is verified with
+the public key built into the release and the result is cached locally. If the request is offline, or
+the file is missing, bad, expired or switched off, the bundled banner remains in use. The Firefox
+package does not fetch this content at all in this release.
+
+The server sees the ordinary request details every web request carries — your IP address, user agent
+and language — and, in the browser extension, the page origin. The request does **not** send an
+identifier, cookie, query string, analytics or message content.
 
 **Both are free. Neither takes an API key and neither can be billed** — the paid Cloud Translation
 v2 and DeepL endpoints that used to appear in this table were removed from the code, from both
@@ -320,21 +334,17 @@ explaining. `src/plugins/channelTranslator/panel/Panel.tsx` is the file.
 | **Star Project on Github** — a star button | `github.com`, this project's own repository | a button, an inline SVG and text |
 | **The GOAT Cam banner** — also shown in the settings tab | `goatcam.dagoat.io`, the website of GOAT Cam, the author's own iPhone app | a hyperlink, an inline SVG QR code, an embedded photo and text |
 
-**None of the three makes a request of any kind.** No fetch, no remote image, no web font, no
-analytics, no tracking parameter on any of the destinations. Every graphic is drawn by the panel
-itself — inline SVG, plus the banner's coffee photo, which is carried inside the plugin as a
-`data:` URI rather than downloaded — and the panel's stylesheet references no remote asset. The
-Ko-fi and GitHub buttons are `<button>` elements that call `window.open(..., "noopener,noreferrer")`
-when clicked; the banner is a plain `<a href>`. Until you click one, nothing about any of these
-hosts is contacted.
+The Ko-fi and GitHub buttons are `<button>` elements that call
+`window.open(..., "noopener,noreferrer")` when clicked; the banner is a plain `<a href>`. The
+bundled banner graphics are local, but the browser-extension update described above can request
+one signed file and one image while the panel or settings tab is visible.
 
 The banner's QR code encodes the app's App Store page. That address exists only as the code's
 black and white squares, so nothing in this app ever opens it; a phone camera does, if you scan it.
 
-`goatcam.dagoat.io` is never contacted unless you click the banner. In the built app it exists only
-as the banner's link target, and rendering the banner on its own in a headless browser — at rest,
-hovered and keyboard-focused — made no network request of any kind. Clicking any of the three sends
-only what any link click sends: that you arrived from this app.
+Clicking the banner opens `goatcam.dagoat.io` in a new tab with nothing about you added to the
+address. The banner update request does not include a query string, identifier, cookie, analytics or
+message content.
 
 **The Ko-fi button is a donation link and the GOAT Cam banner is self-promotion of the author's own
 app.** Neither is paid advertising, and both go to the same person who wrote this app.

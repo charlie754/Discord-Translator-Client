@@ -268,6 +268,7 @@ function makeHarness(opts: HarnessOptions = {}): Harness {
         "./styles.css": {},
         "@api/Notices": notices_,
         "@utils/types": { __esModule: true, default: (plugin: unknown) => plugin },
+        "./banner/coordinator": { configureGoatBannerGate: () => undefined },
         "./panel": { mountPanel: () => undefined, unmountPanel: () => undefined },
         "./patches": { CHANNEL_TRANSLATOR_PATCHES: [], patchHit: () => true },
         // THE REAL provider.ts, so start() is end-to-end rather than a stub call.

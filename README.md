@@ -119,10 +119,12 @@ The translator panel carries three outbound destinations, and all three are the 
 - A **Ko-fi donation button** linking to the author's page at `ko-fi.com`.
 - A **Star Project on Github** button linking to this repository.
 
-Each is a link, inline SVG and some text; the banner's background is a coffee photo embedded in
-the plugin itself, not downloaded. **None of them makes a network request**, runs code, mines
-anything or sends anything — those hosts are contacted only if you click. Nothing about you or your
-messages reaches any of them either way. [PRIVACY.md](./PRIVACY.md) lists all three.
+The Ko-fi and GitHub controls are links and contact their sites only when clicked. The GOAT Cam
+banner normally starts with bundled content, but while the translator panel or settings tab is on
+screen the Chrome/Edge extension may request one signed file and one image from `goatcam.dagoat.io`,
+at most about once a day plus retries. The Firefox package does not fetch this banner in this
+release. The request sends no identifier, cookie, query string, analytics or message content;
+[PRIVACY.md](./PRIVACY.md) explains the ordinary request details the server can see.
 
 ## Privacy
 

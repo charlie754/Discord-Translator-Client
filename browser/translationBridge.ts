@@ -411,6 +411,8 @@ function shapeRequest(init: unknown): ShapedRequest {
 
 const REQUEST = "discordTranslator:fetch";
 const RESPONSE = "discordTranslator:fetch:result";
+const GATE_REQUEST = "goatcamBanner:gate";
+const GATE_RESPONSE = "goatcamBanner:gate:result";
 
 /**
  * A request the background never answers must fail rather than hang: the plugin's
@@ -627,6 +629,8 @@ function shapeRetryAfter(header: string | null): number | undefined {
 
 let nextId = 1;
 const pending = new Map<number, (res: HttpResponse) => void>();
+let nextGateId = 1;
+const pendingGates = new Map<number, (granted: boolean) => void>();
 let listening = false;
 
 function listenForReplies() {
@@ -639,7 +643,18 @@ function listenForReplies() {
         if (event.source !== window) return;
 
         const data = event.data;
-        if (!data || data.type !== RESPONSE) return;
+        if (!data) return;
+
+        if (data.type === GATE_RESPONSE) {
+            const resolveGate = pendingGates.get(data.id);
+            if (!resolveGate) return;
+
+            pendingGates.delete(data.id);
+            resolveGate(typeof data.granted === "boolean" ? data.granted : false);
+            return;
+        }
+
+        if (data.type !== RESPONSE) return;
 
         const resolve = pending.get(data.id);
         if (!resolve) return;
@@ -683,6 +698,30 @@ function viaExtension(url: string, init?: HttpRequestInit): Promise<HttpResponse
             url,
             init: init === undefined ? undefined : { method: init.method, body: init.body }
         }, location.origin);
+    });
+}
+
+export function goatBannerGateFromExtension(): Promise<boolean> {
+    listenForReplies();
+
+    const id = nextGateId++;
+    return new Promise<boolean>(resolve => {
+        const timer = setTimeout(() => {
+            if (pendingGates.delete(id)) resolve(false);
+        }, 5_000);
+
+        pendingGates.set(id, granted => {
+            clearTimeout(timer);
+            resolve(granted);
+        });
+
+        try {
+            window.postMessage({ type: GATE_REQUEST, id }, window.location.origin);
+        } catch {
+            pendingGates.delete(id);
+            clearTimeout(timer);
+            resolve(false);
+        }
     });
 }
 
@@ -887,5 +926,5 @@ function manualFetch(href: string, shaped: { method: "GET" | "POST"; body?: stri
  */
 export const ChannelTranslatorHelper = {
     fetchTranslation: (url: string, init?: HttpRequestInit): Promise<HttpResponse> =>
-        IS_EXTENSION ? viaExtension(url, init) : directFetch(url, init)
+        (typeof IS_EXTENSION !== "undefined" && IS_EXTENSION) ? viaExtension(url, init) : directFetch(url, init)
 };

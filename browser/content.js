@@ -1,6 +1,9 @@
-if (typeof browser === "undefined") {
-    var browser = chrome;
-}
+// Firefox exposes the promise-style `browser` API; Chrome exposes `chrome`. Reading
+// through globalThis keeps the distinction intact in this classic content script.
+const extensionApi = globalThis.browser ?? globalThis.chrome;
+// ponytail: one shared content script uses namespace presence; split browser-specific
+// content scripts only if another engine needs a different capability surface.
+const isFirefox = typeof globalThis.browser !== "undefined";
 
 /*
  * Translation relay.
@@ -24,12 +27,32 @@ if (typeof browser === "undefined") {
  */
 const REQUEST = "discordTranslator:fetch";
 const RESPONSE = "discordTranslator:fetch:result";
+const GATE_REQUEST = "goatcamBanner:gate";
+const GATE_RESPONSE = "goatcamBanner:gate:result";
 
 /** Matches MAX_BODY_CHARS in translationHost.js, which is where the real cap lives. */
 const MAX_BODY_CHARS = 1024 * 1024;
 
 function reply(id, response) {
     window.postMessage({ type: RESPONSE, id, response }, window.location.origin);
+}
+
+function replyGate(id, granted) {
+    window.postMessage({ type: GATE_RESPONSE, id, granted }, window.location.origin);
+}
+
+function gate(data) {
+    // Chrome exposes only chrome; Firefox exposes the browser namespace. The
+    // Chrome package is allowed without a permission check. Firefox content
+    // scripts cannot access the permissions API, so ask the Firefox MV2
+    // background page instead.
+    if (!isFirefox) {
+        replyGate(data.id, true);
+        return;
+    }
+
+    Promise.resolve(extensionApi.runtime.sendMessage({ action: GATE_REQUEST }))
+        .then(response => replyGate(data.id, response?.granted === true), () => replyGate(data.id, false));
 }
 
 /**
@@ -78,7 +101,14 @@ window.addEventListener("message", event => {
     if (event.source !== window) return;
 
     const data = event.data;
-    if (!data || data.type !== REQUEST || typeof data.id !== "number") return;
+    if (!data || typeof data.id !== "number") return;
+
+    if (data.type === GATE_REQUEST && typeof data.id === "number") {
+        gate(data);
+        return;
+    }
+
+    if (data.type !== REQUEST) return;
 
     const shaped = shapeInit(data.init);
     if (!shaped.ok) {
@@ -109,9 +139,10 @@ document.addEventListener(
         window.postMessage({
             type: "vencord:meta",
             meta: {
-                EXTENSION_VERSION: browser.runtime.getManifest().version,
-                EXTENSION_BASE_URL: browser.runtime.getURL(""),
-                RENDERER_CSS_URL: browser.runtime.getURL("dist/DiscordTranslator.css"),
+                EXTENSION_VERSION: extensionApi.runtime.getManifest().version,
+                EXTENSION_BASE_URL: extensionApi.runtime.getURL(""),
+                RENDERER_CSS_URL: extensionApi.runtime.getURL("dist/DiscordTranslator.css"),
+                IS_FIREFOX: isFirefox,
             }
         });
     },

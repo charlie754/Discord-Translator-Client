@@ -8,6 +8,26 @@ function removeFirst(arr, predicate) {
     if (idx !== -1) arr.splice(idx, 1);
 }
 
+// Firefox content scripts cannot call the permissions API directly. The page-side
+// gate reaches this MV2 background listener through runtime.sendMessage instead.
+const firefoxApi = globalThis.browser;
+if (firefoxApi) {
+    firefoxApi.runtime.onMessage.addListener(message => {
+        if (!message || message.action !== "goatcamBanner:gate") return;
+
+        if (typeof firefoxApi.permissions?.getAll !== "function") {
+            return Promise.resolve({ granted: false });
+        }
+
+        return firefoxApi.permissions.getAll()
+            .then(permissions => ({
+                granted: Array.isArray(permissions?.data_collection)
+                    && permissions.data_collection.includes("technicalAndInteraction")
+            }))
+            .catch(() => ({ granted: false }));
+    });
+}
+
 chrome.webRequest.onHeadersReceived.addListener(
     ({ responseHeaders, type, url }) => {
         if (!responseHeaders) return;
