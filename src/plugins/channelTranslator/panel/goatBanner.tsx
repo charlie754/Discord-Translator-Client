@@ -409,6 +409,10 @@ export const GOAT_BANNER_CSS = `
   border-radius: 4.6px;
   object-fit: fill;
 }
+
+.goat--online .gc-badge{left:22px!important;right:auto!important;top:auto!important;bottom:7px!important;width:auto!important;max-width:calc(100% - 140px)!important;}
+.goat--online .goat-lockup__word{width:auto!important;max-width:calc(100% - 132px)!important;}
+.goat--online.goat--settings .gc-photo__frame{--gc-py:82%!important;top:82%!important;translate:calc(var(--gc-px,0%) * -1) -82%!important;}
 `;
 
 const STYLE_ID = "ct-goat-banner-css";
