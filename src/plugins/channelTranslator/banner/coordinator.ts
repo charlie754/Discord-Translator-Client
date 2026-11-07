@@ -216,7 +216,8 @@ export function configureGoatBannerGate() {
      * is not an extension-context fetch, so Firefox's per-install moz-extension
      * UUID never appears in the Origin header. The shared GoatBannerKey.firefoxOnline
      * flag is for apps whose fetch runs in an extension context; Discord Translator
-     * therefore uses Firefox's technicalAndInteraction permission as its own gate.
+     * therefore uses Firefox's OPTIONAL technicalAndInteraction permission as its own
+     * gate (Firefox rejects it as required).
      * If a user removes that data permission in Firefox's add-on settings, the
      * background check returns false and the bundled DaGoat banner is shown.
      */

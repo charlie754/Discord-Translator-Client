@@ -70,11 +70,14 @@
             "_comment_min_version": "140.0 because data_collection_permissions below is honoured only from Firefox 140 (142 on Android). At 128 the key was silently ignored, so the declaration users saw at install time was whatever Mozilla defaulted to rather than what we declared.",
             "strict_min_version": "140.0",
             "data_collection_permissions": {
-                "_comment": "This extension exists to send Discord message text to a translation provider. Declaring none was simply false. personalCommunications covers the chat messages; websiteContent covers the same text as page content; authenticationInfo covers the only credential the extension can hold - the Apps Script deployment URL, which is a credential in the sense that anyone holding it can spend that deployment's daily quota - stored locally, sent only to the user's own deployment, and only if they configure one. The GOAT Cam banner request happens on every install while the panel or settings tab is visible, so technicalAndInteraction is required; Firefox discloses that request at install time. There is no API key of any kind: both surviving providers are free, and neither can bill anyone.",
+                "_comment": "This extension exists to send Discord message text to a translation provider. Declaring none was simply false. personalCommunications covers the chat messages; websiteContent covers the same text as page content; authenticationInfo covers the only credential the extension can hold - the Apps Script deployment URL, which is a credential in the sense that anyone holding it can spend that deployment's daily quota - stored locally, sent only to the user's own deployment, and only if they configure one. There is no API key of any kind: both surviving providers are free, and neither can bill anyone.",
                 "required": [
                     "personalCommunications",
                     "websiteContent",
-                    "authenticationInfo",
+                    "authenticationInfo"
+                ],
+                "_comment_optional": "technicalAndInteraction is the GOAT Cam banner request (one signed file and one photo while the panel or settings tab is visible). Firefox only accepts it as OPTIONAL (as required it is rejected: must be one of authenticationInfo ... websiteContent or none). The user opts in at install or in about:addons > Permissions; without it Firefox shows the bundled DaGoat banner.",
+                "optional": [
                     "technicalAndInteraction"
                 ]
             }

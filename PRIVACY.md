@@ -68,8 +68,7 @@ The banner starts with the original DaGoat.io content bundled in the app. While 
 or the settings tab is on screen, both browser packages and the desktop client may request one signed
 file and one photo from `goatcam.dagoat.io`, at most about once a day plus retries. The file is verified
 with the public key built into the release and the result is cached locally. If the request is offline,
-or the file is missing, bad, expired or switched off, the bundled banner remains in use. Firefox shows
-this request under its "technical and interaction data" install-time disclosure.
+or the file is missing, bad, expired or switched off, the bundled banner remains in use. In Firefox it is an optional "technical and interaction data" permission: you can allow it when you install the add-on or later in about:addons > Permissions, and without it Firefox shows the bundled banner and requests nothing.
 
 The server sees the ordinary request details every web request carries — your IP address, user agent
 and language — and, in the browser extension, the page origin. The request does **not** send an
@@ -314,15 +313,15 @@ above — it is inherited from the upstream project, it is what makes user theme
 at all, and it applies to every Discord tab for as long as the extension is installed.
 
 **Firefox also declares what data the add-on collects**, under `data_collection_permissions` in
-`browser/manifestv2.json`, and Firefox shows that declaration at install time. Four entries are
+`browser/manifestv2.json`, and Firefox shows that declaration at install time. Three entries are
 declared as required: `personalCommunications` (the Discord messages being translated),
 `websiteContent` (the same text, as page content), and `authenticationInfo` (the Apps Script
 deployment URL, which is a credential in the sense that anyone holding it can spend that
 deployment's daily quota — stored locally, sent only to your own deployment, and only if you
-configure one), and `technicalAndInteraction` (the GOAT Cam banner's signed file and photo request
-while the panel or settings tab is visible). Firefox shows the latter under its "technical and
-interaction data" disclosure at install time. If a user removes that data permission in Firefox's
-add-on settings, the banner gate is false and the bundled DaGoat banner remains in use. Declaring
+configure one). `technicalAndInteraction` (the GOAT Cam banner's signed file and photo request
+while the panel or settings tab is visible) is declared as optional, because Firefox accepts it only
+as optional: you opt in at install or in about:addons > Permissions, and without it the banner gate is
+false and the bundled DaGoat banner remains in use. Declaring
 none would have been false, which is why they are there. There is no API key in that declaration any
 more, because there is no provider left that takes one.
 

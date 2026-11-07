@@ -122,8 +122,8 @@ The translator panel carries three outbound destinations, and all three are the 
 The Ko-fi and GitHub controls are links and contact their sites only when clicked. The GOAT Cam
 banner normally starts with bundled content, but while the translator panel or settings tab is on
 screen both browser packages and the desktop client may request one signed file and one photo from
-`goatcam.dagoat.io`, at most about once a day plus retries. Firefox shows this under its "technical
-and interaction data" install-time disclosure. The request sends no identifier, cookie, query string,
+`goatcam.dagoat.io`, at most about once a day plus retries. In Firefox this is the optional "technical
+and interaction data" permission; without it Firefox shows the bundled banner and requests nothing. The request sends no identifier, cookie, query string,
 analytics or message content;
 [PRIVACY.md](./PRIVACY.md) explains the ordinary request details the server can see.
 
