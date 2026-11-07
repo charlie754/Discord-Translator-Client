@@ -8,7 +8,7 @@
 import { React, SelectedChannelStore, SelectedGuildStore, useStateFromStores } from "@webpack/common";
 
 import { PanelState, UNAVAILABLE_FOOTER } from "../core/modes";
-import { patchesOk } from "../patches";
+import { messagesRendered, patchesOk, subscribePatchHits } from "../patches";
 import { settings } from "../settings";
 import { breakerOpen, pendingCount, persist,repaintChannel, subscribeProgress, toggle } from "../state";
 import { openEndpointModal } from "./EndpointModal";
@@ -78,12 +78,13 @@ export function Panel() {
     const store = settings.use(["targetLanguage", "mode"]);
     const [, forceTick] = React.useState(0);
     React.useEffect(() => subscribeProgress(() => forceTick(n => n + 1)), []);
+    React.useEffect(() => subscribePatchHits(() => forceTick(n => n + 1)), []);
 
     if (!channelId || !guildId) return null;
 
     const state = toggle.panelState({
         guildId,
-        patchesOk: patchesOk(),
+        patchesOk: patchesOk() || !messagesRendered(),
         breakerOpen: breakerOpen(),
         pending: pendingCount()
     });

@@ -16,9 +16,17 @@ import type { Patch } from "@utils/types";
  */
 
 const hits = { clone: false, wrap: false };
+const patchHitSubscribers = new Set<() => void>();
 
 export function markPatchHit(id: "clone" | "wrap"): void {
+    if (hits[id]) return;
     hits[id] = true;
+    for (const subscriber of patchHitSubscribers) subscriber();
+}
+
+export function subscribePatchHits(fn: () => void): () => void {
+    patchHitSubscribers.add(fn);
+    return () => patchHitSubscribers.delete(fn);
 }
 
 export function patchesOk(): boolean {
@@ -27,6 +35,12 @@ export function patchesOk(): boolean {
 
 export function patchHit(id: "clone" | "wrap"): boolean {
     return hits[id];
+}
+
+export function messagesRendered(): boolean {
+    return typeof document === "undefined"
+        ? true
+        : document.querySelector('[id^="message-content-"]') !== null;
 }
 
 export const CHANNEL_TRANSLATOR_PATCHES: Omit<Patch, "plugin">[] = [
