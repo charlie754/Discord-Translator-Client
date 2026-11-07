@@ -75,6 +75,17 @@ function headlineChildren(headline: string, emphasis: string | undefined): Array
     return [headline.slice(0, at), <em key="headline-emphasis">{emphasis}</em>, headline.slice(at + emphasis.length)];
 }
 
+/**
+ * Founder layout (2026-11-07): the caption above the plate is two rows, "GOAT Cam —"
+ * then the rest, split at the first spaced em dash of the signed headline. The
+ * words and punctuation stay the signed text; without a dash it is one row.
+ */
+function headlineRows(headline: string): Array<{ text: string; lead: boolean; }> {
+    const at = headline.indexOf(" — ");
+    if (at <= 0) return [{ text: headline, lead: false }];
+    return [{ text: `${headline.slice(0, at)} —`, lead: true }, { text: headline.slice(at + 3), lead: false }];
+}
+
 // A function, not a constant: JSX at module level runs the factory before Vencord exists.
 const mark = () => (
     <span className="goat-lockup__mark" aria-hidden="true">
@@ -166,7 +177,9 @@ function GoatBannerOnline({ variant, model }: { variant: "panel" | "settings"; m
     return (
         <div className={`goat goat--${variant} goat--gated goat--online`}>
             <div className="goat__copy">
-                <span className={`goat__line ${fitClass(headline, 48)}`}>{headlineChildren(headline, toText(banner.headlineEm) || undefined)}</span>
+                {headlineRows(headline).map((row, index) => (
+                    <span className={`goat__line goat__line--row ${fitClass(headline, 48)}`} key={`headline-row-${index}`}>{index === 0 && row.lead ? row.text : headlineChildren(row.text, toText(banner.headlineEm) || undefined)}</span>
+                ))}
             </div>
             <a className="goat-lockup goat__link" href={banner.link} target="_blank" rel="noopener noreferrer" aria-label={banner.labels?.link} data-goat-mark="" {...events}>
                 <span className="gc-photo" aria-hidden="true" style={photoStyle}>
@@ -260,6 +273,10 @@ export const GOAT_BANNER_CSS = `
 @keyframes goatcam-steam{0%{stroke-dashoffset:44;opacity:0;translate:0 0;}18%{opacity:.95;}65%{opacity:.6;}100%{stroke-dashoffset:-100;opacity:0;translate:2px -6px;}}@keyframes goatcam-tally{0%,100%{opacity:1;}50%{opacity:.3;}}
 @media (prefers-reduced-motion:reduce){.goat--online .gc-steam{display:none;}.goat--online .goat-lockup,.goat--online .goat-lockup:is(:hover,:focus-visible,.is-active),.goat--online .goat-lockup:is(:hover,:focus-visible,.is-active) .gc-photo__frame,.goat--online .goat-lockup:is(:hover,:focus-visible,.is-active) .gc-vf,.goat--online .gc-stage{transition:none;}.goat--online .goat-lockup:is(:hover,:focus-visible,.is-active) .gc-stage{transform:none;}.goat--online .goat-lockup:is(:hover,:focus-visible,.is-active) .gc-photo__frame{transform:none;}.goat--online .goat-lockup:is(:hover,:focus-visible,.is-active) .gc-vf{inset:var(--gc-vf-t,6px) var(--gc-vf-r,6px) var(--gc-vf-b,6px) var(--gc-vf-l,6px);}.goat--online .goat-lockup:is(:hover,:focus-visible,.is-active) .gc-osd__dot{animation:none;}.goat--online .goat-lockup,.goat--online .goat-lockup:is(:hover,:focus-visible,.is-active),.goat--online:not(.goat--gated) .goat-lockup:hover,.goat--online:not(.goat--gated) .goat-lockup:active{transform:none;}}
 
+
+.goat--online .goat__line--row{display:block;}
+.goat--online.goat--panel{margin-top:16px;}
+.goat--online.goat--panel .gc-iphone{left:100px;right:auto;top:21px;width:44px;height:96px;}
 `;
 
 const STYLE_ID = "ct-goat-banner-css";

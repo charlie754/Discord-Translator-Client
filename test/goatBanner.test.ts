@@ -190,7 +190,10 @@ describe("Goat banner two-model drawing", () => {
         const link = anchor(tree);
 
         expect(classes(tree)).toContain("goat--online");
-        expect(texts(firstClass(tree, "goat__line")).join("")).toBe(banner.headline);
+        // Founder layout 2026-11-07: the caption is two rows split at the spaced em dash.
+        const rows = elements(tree).filter(node => classes(node).includes("goat__line--row"));
+        expect(rows.length).toBe(banner.headline.includes(" — ") ? 2 : 1);
+        expect(rows.map(row => texts(row).join("")).join(" ")).toBe(banner.headline);
         expect(texts(firstClass(tree, "goat-lockup__name")).join("")).toBe(banner.wordmark);
         expect(texts(firstClass(tree, "gc-tag__a")).join("")).toBe(banner.tagline[0]);
         expect(texts(firstClass(tree, "gc-tag__b")).join("")).toBe(banner.tagline[1]);
@@ -279,7 +282,7 @@ describe("Goat banner two-model drawing", () => {
         const loaded = load(onlineModel(maxText));
         const tree = loaded.render("panel");
         const expected = (value: string, max: number) => loaded.helpers.fitClass(value, max).split(" ").filter(Boolean);
-        expect(classes(firstClass(tree, "goat__line")).slice(1)).toEqual(expected(maxText.headline, 48));
+        expect(classes(firstClass(tree, "goat__line")).slice(2)).toEqual(expected(maxText.headline, 48));
         expect(classes(firstClass(tree, "goat-lockup__name")).slice(1)).toEqual(expected(maxText.wordmark, 12));
         expect(classes(firstClass(tree, "gc-badge__text")).slice(1)).toEqual(expected(maxText.badge, 16));
         const parts = [firstClass(tree, "gc-tag__a"), firstClass(tree, "gc-tag__b")];
