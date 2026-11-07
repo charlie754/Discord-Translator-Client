@@ -27,6 +27,7 @@ vi.mock("@webpack/common", () => ({ React: fakeReact }));
 
 import {
     __resetGoatBannerForTests,
+    setGoatBannerGate,
     useGoatBannerModel
 } from "../src/plugins/channelTranslator/banner/coordinator";
 
@@ -131,6 +132,21 @@ describe("GoatCam banner coordinator", () => {
 
         expect(second.model).toEqual(first.model);
         expect(first.model.photoDataUrl).toMatch(/^data:image\/webp;base64,/);
+    });
+
+    it("uses a gate changed after runner creation for the next shown()", async () => {
+        const first = mount();
+        await vi.waitFor(() => expect(first.model.kind).toBe("online"));
+        first.unmount();
+        await settle();
+
+        const requestsBeforeGatedShown = requests.length;
+        setGoatBannerGate(async () => false);
+        const second = mount();
+        await settle();
+
+        expect(requests).toHaveLength(requestsBeforeGatedShown);
+        second.unmount();
     });
 
     it("remount churn does not create more than one request or fetch after the last unmount", async () => {

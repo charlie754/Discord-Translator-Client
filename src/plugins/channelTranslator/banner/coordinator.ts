@@ -136,7 +136,7 @@ const ensureRunner = () => {
         clearTimer,
         render,
         openLink: () => undefined,
-        gate,
+        gate: () => gate(),
         origin: ORIGIN,
         publicKeyRaw: runnerDeps.publicKeyRaw ?? hexBytes(globals.GoatBannerKey.publicKeyHex),
         kinds: KINDS,

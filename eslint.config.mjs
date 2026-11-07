@@ -13,7 +13,15 @@ import unusedImports from "eslint-plugin-unused-imports";
 import tseslint from "typescript-eslint";
 
 export default defineConfig(
-    { ignores: ["dist", "browser", "packages/vencord-types"] },
+    {
+        ignores: [
+            "dist",
+            "browser",
+            "packages/vencord-types",
+            // Byte-for-byte copies pinned by test/bannerCopies.test.ts; do not reformat.
+            "src/plugins/channelTranslator/banner/banner-*.js"
+        ]
+    },
     {
         files: ["src/**/*.{tsx,ts,mts,mjs,js,jsx}", "eslint.config.mjs"],
         settings: {
