@@ -12,7 +12,6 @@ import "./banner-key.js";
 import { React } from "@webpack/common";
 
 import { goatBannerGateFromExtension } from "../../../../browser/translationBridge";
-import { IS_FIREFOX, metaReady } from "../../../utils/web-metadata";
 import { type GoatBannerStorage, goatBannerStorage } from "./storage";
 
 type BannerRunnerModel =
@@ -221,10 +220,11 @@ export function configureGoatBannerGate() {
      * If a user removes that data permission in Firefox's add-on settings, the
      * background check returns false and the bundled DaGoat banner is shown.
      */
-    const extensionGate = async () => {
-        await metaReady;
-        return IS_FIREFOX ? goatBannerGateFromExtension() : true;
-    };
+    // Always ask the content script, which answers per browser: "granted" at once on Chrome, the
+    // background's permission check on Firefox. Deciding here from IS_FIREFOX trusted a page-world
+    // vencord:meta that is first-writer-wins - the real Vencord extension posts one without
+    // IS_FIREFOX - so a Firefox page could skip the permission (Council round 2).
+    const extensionGate = () => goatBannerGateFromExtension();
 
     setGoatBannerGate(extensionGate);
     return extensionGate;

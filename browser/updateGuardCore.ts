@@ -11,8 +11,7 @@ export const UPDATE_DISMISS_KEY = `${UPDATE_STORAGE_PREFIX}dismissed`;
 
 export const CHROME_STORE_URL = "https://chromewebstore.google.com/detail/discord-translator-web/jlofhkaokcnpkkhnalkldnnpilghjgaa";
 export const FIREFOX_STORE_URL = "https://addons.mozilla.org/en-US/firefox/addon/discord-translator/";
-export const AMO_VERSION_URL = "https://addons.mozilla.org/api/v5/addons/addon/discord-translator-web@charlie754.github.io/";
-export const GITHUB_VERSION_URL = "https://api.github.com/repos/charlie754/Discord-Translator-Client/releases/latest";
+// The version-check URLs live in browser/content.js: the request is made there, in the isolated world.
 
 export const UPDATE_INTERVAL_MS = 12 * 60 * 60 * 1000;
 export const UPDATE_DISMISS_MS = 24 * 60 * 60 * 1000;

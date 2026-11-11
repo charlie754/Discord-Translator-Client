@@ -192,9 +192,10 @@ describe("GOAT Cam extension gate bridge", () => {
         await vi.waitFor(() => expect(page.posted).toEqual([{
             type: "discordTranslator:update:check:result",
             id: 7,
-            response: { browser: "firefox", installed: "0.2.19", allowed: false }
+            response: { browser: "firefox", installed: "0.2.19", allowed: false, latest: null }
         }]));
-        // The permission question went to the background; nothing asked a Chrome worker.
+        // The permission question went to the background; nothing asked a Chrome worker, and
+        // with the permission refused the content script fetched nothing (latest: null).
         expect(sendMessage).toHaveBeenCalledTimes(1);
         expect(sendMessage).toHaveBeenCalledWith({ action: "goatcamBanner:gate" });
     });
@@ -335,7 +336,10 @@ describe("GOAT Cam extension gate bridge", () => {
         expect(fetchMock).not.toHaveBeenCalled();
     });
 
-    it("Chrome extension configuration resolves true without a permission message", async () => {
+    it("the extension gate always asks the content script, whatever vencord:meta claims", async () => {
+        // A page-world vencord:meta saying "not Firefox" - what the real Vencord extension posts
+        // (it has no IS_FIREFOX) - used to make this gate answer true without asking, skipping the
+        // Firefox permission. The content script decides per browser now: on Chrome it grants at once.
         const page = makeWindow();
         vi.stubGlobal("window", page);
         vi.stubGlobal("location", page.location);
@@ -349,7 +353,12 @@ describe("GOAT Cam extension gate bridge", () => {
         });
 
         const gate = configureGoatBannerGate();
-        await expect(gate?.()).resolves.toBe(true);
-        expect(page.posted).toEqual([]);
+        const pending = gate?.();
+        await vi.waitFor(() => expect(page.posted).toEqual([{ type: "goatcamBanner:gate", id: 1 }]));
+        page.dispatch("message", {
+            source: page,
+            data: { type: "goatcamBanner:gate:result", id: 1, granted: true }
+        });
+        await expect(pending).resolves.toBe(true);
     });
 });

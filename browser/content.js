@@ -55,40 +55,71 @@ function replyUpdateCheck(id, response) {
     window.postMessage({ type: UPDATE_CHECK_RESPONSE, id, response }, window.location.origin);
 }
 
+const AMO_VERSION_URL = "https://addons.mozilla.org/api/v5/addons/addon/discord-translator-web@charlie754.github.io/";
+const GITHUB_VERSION_URL = "https://api.github.com/repos/charlie754/Discord-Translator-Client/releases/latest";
+
 /*
- * The update check is decided HERE, in the isolated world, and not by the page. The page's own idea
- * of which browser it runs in comes from a `vencord:meta` message that any page script - or the real
- * Vencord extension, which posts the same message type without IS_FIREFOX - can post first. Trusting
- * it let a Firefox page take the Chrome path and query GitHub without the data permission.
+ * The update check is decided AND MADE here, in the isolated world - page scripts cannot reach this
+ * code. The page only receives the answer, which a hostile page script could fake to change the banner
+ * text, but it cannot make the extension send a request the permission forbids (Council round 2).
+ * Before this, the page decided from a `vencord:meta` message that any page script - or the real
+ * Vencord extension, which posts the same type without IS_FIREFOX - can post first.
  *
  * `probe` answers only who we are (browser and installed version) and touches no network: the page
- * sends it while its 12-hour cache is still fresh.
+ * sends it while its 12-hour cache is still fresh. A full check runs at most once per page load.
  */
+let fullUpdateCheckDone = false;
+
 function checkForExtensionUpdate(data) {
     const installed = extensionApi.runtime.getManifest().version;
 
-    if (data.probe === true) {
-        replyUpdateCheck(data.id, { browser: isFirefox ? "firefox" : "chrome", installed });
+    if (data.probe === true || fullUpdateCheckDone) {
+        replyUpdateCheck(data.id, { browser: isFirefox ? "firefox" : "chrome", installed, probe: true });
         return;
     }
+    fullUpdateCheckDone = true;
 
     if (isFirefox) {
         // Operator ruling: Firefox checks AMO only with the optional technicalAndInteraction data
         // permission - the same gate as the GOAT Cam banner, answered by the MV2 background page.
         Promise.resolve(extensionApi.runtime.sendMessage({ action: GATE_REQUEST }))
-            .then(
-                response => replyUpdateCheck(data.id, { browser: "firefox", installed, allowed: response?.granted === true }),
-                () => replyUpdateCheck(data.id, { browser: "firefox", installed, allowed: false })
-            );
+            .then(response => response?.granted === true, () => false)
+            .then(async allowed => {
+                const latest = allowed ? await fetchLatestVersion(AMO_VERSION_URL, json => json?.current_version?.version) : null;
+                replyUpdateCheck(data.id, { browser: "firefox", installed, allowed, latest });
+            });
         return;
     }
 
-    chrome.runtime.sendMessage({ action: UPDATE_CHECK_REQUEST }, response => {
+    chrome.runtime.sendMessage({ action: UPDATE_CHECK_REQUEST }, async response => {
         const error = chrome.runtime.lastError;
-        replyUpdateCheck(data.id, error
-            ? { browser: "chrome", installed, status: "unavailable" }
-            : { browser: "chrome", installed, status: response?.status, version: response?.version, installType: response?.installType });
+        if (error) {
+            replyUpdateCheck(data.id, { browser: "chrome", installed, status: "unavailable" });
+            return;
+        }
+        // An unpacked install has no store to ask, so it compares with the latest GitHub release.
+        const latest = response?.installType === "normal"
+            ? null
+            : await fetchLatestVersion(GITHUB_VERSION_URL, json => typeof json?.tag_name === "string" ? json.tag_name.replace(/^v/, "") : null);
+        replyUpdateCheck(data.id, { browser: "chrome", installed, status: response?.status, version: response?.version, installType: response?.installType, latest });
     });
+}
+
+/*
+ * A plain GET with nothing of ours in it. Firefox content scripts get `content.fetch`, which sends the
+ * request as the page (Origin https://discord.com) instead of with the add-on's per-install
+ * moz-extension origin; Chrome content scripts already fetch with the page's origin.
+ */
+async function fetchLatestVersion(url, pick) {
+    try {
+        const doFetch = typeof globalThis.content?.fetch === "function" ? globalThis.content.fetch.bind(globalThis.content) : fetch;
+        const response = await doFetch(url, { credentials: "omit" });
+        if (response.status !== 200) return null;
+        const version = pick(await response.json());
+        return typeof version === "string" && /^\d+(?:\.\d+)*$/.test(version) ? version : null;
+    } catch {
+        return null;
+    }
 }
 
 function reloadExtension(data) {

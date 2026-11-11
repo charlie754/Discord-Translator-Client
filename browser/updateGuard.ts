@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { BOOT_FAILURE_DELAY_MS, BOOT_GUARD_KEY, CHROME_STORE_URL, FIREFOX_STORE_URL, GITHUB_VERSION_URL, AMO_VERSION_URL, UPDATE_CACHE_KEY, UPDATE_DISMISS_KEY, decideBoot, getUpdateButton, getUpdateSource, isCheckDue, isDismissed, isVersionNewer, shouldFail } from "./updateGuardCore";
+import { BOOT_FAILURE_DELAY_MS, BOOT_GUARD_KEY, CHROME_STORE_URL, FIREFOX_STORE_URL, UPDATE_CACHE_KEY, UPDATE_DISMISS_KEY, decideBoot, getUpdateButton, getUpdateSource, isCheckDue, isDismissed, isVersionNewer, shouldFail } from "./updateGuardCore";
 import { BannerKind, openLink, showBanner, updateBanner } from "../src/utils/updateBanner";
 
 // Discord removes window.localStorage during startup. Capture the object before
@@ -41,6 +41,10 @@ interface GuardGlobal {
 interface ExtensionInfo {
     browser: "firefox" | "chrome";
     installed: string;
+    /** True when the content script answered without checking (cache fresh, or already checked). */
+    probe?: boolean;
+    /** Latest version the content script fetched itself (AMO on Firefox, GitHub for unpacked Chrome). */
+    latest: string | null;
     /** Firefox: whether the optional technicalAndInteraction data permission is granted. */
     allowed?: boolean;
     /** Chrome: requestUpdateCheck status, version and install type, from the service worker. */
@@ -295,14 +299,16 @@ async function getUpdateResultOnce(version: string): Promise<UpdateResult | null
     if (!info) return null; // no answer from our own content script: never guess, never fetch
     extensionInfo = info;
 
-    if (!due) return cached ? makeResult(cached.source, cached.latest, info.installed) : null;
+    // A probe answer (cache still fresh, or the content script already ran this page load's one full
+    // check) carries no version; fall back to the cache.
+    if (!due || info.probe) return cached ? makeResult(cached.source, cached.latest, info.installed) : null;
 
+    // The content script made any network request itself; here we only read its answer.
     if (info.browser === "firefox") {
         if (info.allowed !== true) return null;
 
-        const latest = await fetchFirefoxVersion();
-        saveCache({ checkedAt: Date.now(), latest, source: "firefox" });
-        return makeResult("firefox", latest, info.installed);
+        saveCache({ checkedAt: Date.now(), latest: info.latest, source: "firefox" });
+        return makeResult("firefox", info.latest, info.installed);
     }
 
     const source = getUpdateSource(false, info.installType ?? null);
@@ -313,9 +319,8 @@ async function getUpdateResultOnce(version: string): Promise<UpdateResult | null
     }
 
     if (source === "github") {
-        const latest = await fetchGithubVersion();
-        saveCache({ checkedAt: Date.now(), latest, source: "github" });
-        return makeResult("github", latest, info.installed);
+        saveCache({ checkedAt: Date.now(), latest: info.latest, source: "github" });
+        return makeResult("github", info.latest, info.installed);
     }
 
     saveCache({ checkedAt: Date.now(), latest: null, source: "chrome-store" });
@@ -336,34 +341,13 @@ function parseExtensionInfo(data: any): ExtensionInfo | null {
     return {
         browser: response.browser,
         installed: typeof response.installed === "string" ? response.installed : VERSION,
+        probe: response.probe === true,
         allowed: response.allowed === true,
+        latest: typeof response.latest === "string" ? response.latest : null,
         status: typeof response.status === "string" ? response.status : undefined,
         version: typeof response.version === "string" ? response.version : undefined,
         installType: typeof response.installType === "string" ? response.installType : null
     };
-}
-
-async function fetchFirefoxVersion(): Promise<string | null> {
-    try {
-        const response = await fetch(AMO_VERSION_URL);
-        if (response.status !== 200) return null;
-        const data = await response.json() as { current_version?: { version?: unknown } };
-        return typeof data.current_version?.version === "string" ? data.current_version.version : null;
-    } catch {
-        return null;
-    }
-}
-
-async function fetchGithubVersion(): Promise<string | null> {
-    try {
-        const response = await fetch(GITHUB_VERSION_URL);
-        if (response.status !== 200) return null;
-        const data = await response.json() as { tag_name?: unknown };
-        if (typeof data.tag_name !== "string") return null;
-        return data.tag_name.replace(/^v/, "");
-    } catch {
-        return null;
-    }
 }
 
 function installReplyListener(): void {

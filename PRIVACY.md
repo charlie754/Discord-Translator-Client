@@ -81,7 +81,7 @@ identifier, cookie, query string, analytics or message content.
 v2 and DeepL endpoints that used to appear in this table were removed from the code, from both
 browser manifests and from the host allow-list, so no build can reach them.
 
-**This app makes one request of its own at startup**, and it is the update check — Discord's own
+**The only requests this app makes of its own at startup are the update check** — Discord's own
 traffic to `discord.com` is not this app's and is not changed by it. `src/Vencord.ts` calls
 `checkForUpdates()`, which asks `api.github.com` for this project's latest release and, when
 that release differs from the installed one, for the list of changes between the two. Both are
@@ -241,11 +241,11 @@ to a billing account. What someone holding your deployment URL can do is spend i
 Script quota and send it text of their own. If that concerns you, redeploy the script — a new
 deployment gets a new URL and the old one stops working.
 
-**The extension checks for its own updates; it still has no changelog check.** The Changelog tab stays compiled out of the web build. What the update check does depends on the browser and how the extension was installed — which the extension's own content script decides, not the page — and in every case it sends no account, no Discord identifier and nothing about you, your messages or your settings; only what any web request carries (your IP address, user agent and the page origin `https://discord.com`):
+**The extension checks for its own updates; it still has no changelog check.** The Changelog tab stays compiled out of the web build. What the update check does depends on the browser and how the extension was installed. The extension's own content script — the part of the extension that page scripts cannot reach — decides which check runs, asks for the Firefox permission, and makes the request itself; the Discord tab only receives the answer. (A script running on discord.com could fake that answer to change what the banner says, but it cannot make the extension send a request the permission forbids.) In every case the request sends no account, no Discord identifier and nothing about you, your messages or your settings; only what any web request carries (your IP address, user agent and the page origin `https://discord.com`):
 
 - **Chrome Web Store install:** the extension asks Chrome's own updater (`runtime.requestUpdateCheck()`) whether the store has a newer version. The extension makes no request of its own. If an update is ready, **Update now** restarts the extension onto it and reloads Discord. The extension restarts only when its own background has seen the update arrive; if it cannot tell any more, the banner asks you to restart the browser instead, which is also when Chrome applies the update by itself.
-- **Unpacked Chrome install:** the Discord tab asks `api.github.com` for this project's latest release and reads only its version tag. **Update** opens the Chrome Web Store page.
-- **Firefox:** only if you granted the optional technical and interaction data permission (the same one the GOAT Cam banner uses), the Discord tab asks `addons.mozilla.org` for the version of this add-on's public listing. The request's address names the add-on's own ID, which is the same for every user. Without that permission the extension does not run the check. **Update** opens the add-on's page.
+- **Unpacked Chrome install:** the extension asks `api.github.com` for this project's latest release, sent as an ordinary request from the Discord page, and reads only its version tag. **Update** opens the Chrome Web Store page.
+- **Firefox:** only if you granted the optional technical and interaction data permission (the same one the GOAT Cam banner uses), the extension asks `addons.mozilla.org` for the version of this add-on's public listing, sent as an ordinary request from the Discord page rather than from the add-on's own address. The request's address names the add-on's own ID, which is the same for every user. Without that permission the extension does not run the check. **Update** opens the add-on's page.
 
 The check runs when a Discord tab loads, normally at most once every 12 hours, and never on a repeating timer. The 12-hour record, like the dismissal of a banner and the crash-guard record below, is kept in Discord's own page storage, so it is best-effort: clearing site data resets it, and any script running on discord.com can read or change it. The crash-guard record notes whether the translator's last start succeeded; if Discord failed to start with the translator, the next load skips the translator and says so. None of these records leave the browser.
 

@@ -3,7 +3,9 @@
  * registered synchronously at worker startup — the worker is torn down when idle,
  * and a listener added later would not be there to wake it for the next request.
  *
- * Firefox loads the same file through manifestv2.json's background.scripts instead.
+ * Chrome only. Firefox does not load this file: manifestv2.json's background.scripts are
+ * translationHost.js and background.js, so the update relay below has no Firefox counterpart
+ * (Firefox has no restart-onto-update path; its banner links to the add-on page).
  */
 importScripts("translationHost.js");
 
