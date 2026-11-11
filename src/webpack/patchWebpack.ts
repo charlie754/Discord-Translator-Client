@@ -94,8 +94,12 @@ const define: typeof Reflect.defineProperty = (target, p, attributes) => {
 
 // wreq.m is also wrapped in a proxy to intercept when new factories are set, patch them eargely, if enabled, and wrap them in the factory proxy.
 
+// Safe mode never evaluates src/Vencord, but keep this guard at the hook boundary
+// as a second line of defence for any future entry point that imports this module.
+const bootGuard = (globalThis as Record<string, any>).__discordTranslatorBootGuard;
+
 // If this is the main Webpack, we also set up the internal references to WebpackRequire.
-define(Function.prototype, "m", {
+if (bootGuard?.safeMode !== true) define(Function.prototype, "m", {
     enumerable: false,
 
     set(this: AnyWebpackRequire, originalModules: AnyWebpackRequire["m"]) {
@@ -116,6 +120,8 @@ define(Function.prototype, "m", {
         if (["sentry", "libdiscore", "fast-connect"].some(name => fileName?.toLowerCase()?.includes(name))) {
             return;
         }
+
+        bootGuard?.webpackSeen?.();
 
         // Define a setter for the bundlePath property of WebpackRequire. Only Webpack instances which include chunk loading functionality,
         // like the main Discord Webpack, have this property.

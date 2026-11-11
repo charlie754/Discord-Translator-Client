@@ -29,6 +29,9 @@ const REQUEST = "discordTranslator:fetch";
 const RESPONSE = "discordTranslator:fetch:result";
 const GATE_REQUEST = "goatcamBanner:gate";
 const GATE_RESPONSE = "goatcamBanner:gate:result";
+const UPDATE_CHECK_REQUEST = "discordTranslator:update:check";
+const UPDATE_CHECK_RESPONSE = "discordTranslator:update:check:result";
+const UPDATE_RELOAD_REQUEST = "discordTranslator:update:reload";
 
 /** Matches MAX_BODY_CHARS in translationHost.js, which is where the real cap lives. */
 const MAX_BODY_CHARS = 1024 * 1024;
@@ -39,6 +42,32 @@ function reply(id, response) {
 
 function replyGate(id, granted) {
     window.postMessage({ type: GATE_RESPONSE, id, granted }, window.location.origin);
+}
+
+function replyUpdateCheck(id, response) {
+    window.postMessage({ type: UPDATE_CHECK_RESPONSE, id, response }, window.location.origin);
+}
+
+function checkForExtensionUpdate(data) {
+    chrome.runtime.sendMessage({ action: UPDATE_CHECK_REQUEST }, response => {
+        const error = chrome.runtime.lastError;
+        replyUpdateCheck(data.id, error
+            ? { status: "unavailable" }
+            : { status: response?.status, version: response?.version, installType: response?.installType });
+    });
+}
+
+function reloadExtension() {
+    try {
+        chrome.runtime.sendMessage({ action: UPDATE_RELOAD_REQUEST }, () => {
+            // Reading lastError prevents Chrome from logging an unhandled callback
+            // error when runtime.reload tears down the worker immediately.
+            void chrome.runtime.lastError;
+        });
+    } catch {
+        // The page still performs its delayed reload; the store button remains the
+        // recovery path if the extension context has already disappeared.
+    }
 }
 
 function gate(data) {
@@ -105,6 +134,16 @@ window.addEventListener("message", event => {
 
     if (data.type === GATE_REQUEST && typeof data.id === "number") {
         gate(data);
+        return;
+    }
+
+    if (data.type === UPDATE_CHECK_REQUEST) {
+        checkForExtensionUpdate(data);
+        return;
+    }
+
+    if (data.type === UPDATE_RELOAD_REQUEST) {
+        reloadExtension();
         return;
     }
 
