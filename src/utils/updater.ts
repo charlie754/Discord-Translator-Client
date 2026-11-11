@@ -25,8 +25,10 @@ import { IpcRes } from "./types";
 export const UpdateLogger = /* #__PURE__*/ new Logger("Updater", "white");
 export let isOutdated = false;
 export let isNewer = false;
+export let latestVersion: string | null = null;
 export let updateError: any;
 export let changes: Record<"hash" | "author" | "message", string>[];
+let updateInFlight = false;
 
 async function Unwrap<T>(p: Promise<IpcRes<T>>) {
     const res = await p;
@@ -39,6 +41,9 @@ async function Unwrap<T>(p: Promise<IpcRes<T>>) {
 
 export async function checkForUpdates() {
     changes = await Unwrap(VencordNative.updater.getUpdates());
+    latestVersion = VencordNative.updater.getUpdateVersion
+        ? await Unwrap(VencordNative.updater.getUpdateVersion())
+        : null;
 
     // we only want to check this for the git updater, not the http updater
     if (!IS_STANDALONE) {
@@ -63,6 +68,18 @@ export async function update() {
     }
 
     return res;
+}
+
+export async function updateNow() {
+    if (updateInFlight) return;
+
+    updateInFlight = true;
+    try {
+        await update();
+        relaunch();
+    } finally {
+        updateInFlight = false;
+    }
 }
 
 export const getRepo = () => Unwrap(VencordNative.updater.getRepo());

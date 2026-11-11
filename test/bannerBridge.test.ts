@@ -145,9 +145,14 @@ describe("GOAT Cam extension gate bridge", () => {
         const sendMessage = vi.fn(() => Promise.resolve({ granted: false }));
         vi.stubGlobal("window", page);
         vi.stubGlobal("document", { addEventListener: () => undefined });
+        // What a Firefox CONTENT SCRIPT really gets (measured on Firefox Developer Edition 160):
+        // no runtime.getBrowserInfo. This stub used to provide one, which is why the old
+        // getBrowserInfo detection passed here while real Firefox was treated as Chrome and the
+        // gate answered "granted" without asking the background.
         vi.stubGlobal("browser", {
             runtime: {
-                getBrowserInfo: () => Promise.resolve({ name: "Firefox" }),
+                getURL: (path: string) => `moz-extension://0d1f1c4e-test/${path}`,
+                getManifest: () => ({ version: "0.2.19" }),
                 sendMessage
             }
         });
@@ -163,6 +168,59 @@ describe("GOAT Cam extension gate bridge", () => {
             granted: false
         }]));
         expect(sendMessage).toHaveBeenCalledWith({ action: "goatcamBanner:gate" });
+    });
+
+    it("Firefox update check without the data permission is refused by the content script", async () => {
+        const page: ReturnType<typeof makeWindow> & { top?: unknown } = makeWindow();
+        page.top = page;
+        const sendMessage = vi.fn(() => Promise.resolve({ granted: false }));
+        vi.stubGlobal("window", page);
+        vi.stubGlobal("document", { addEventListener: () => undefined });
+        vi.stubGlobal("browser", {
+            runtime: {
+                getURL: (path: string) => `moz-extension://0d1f1c4e-test/${path}`,
+                getManifest: () => ({ version: "0.2.19" }),
+                sendMessage
+            }
+        });
+        await import("../browser/content.js");
+
+        page.dispatch("message", {
+            source: page,
+            data: { type: "discordTranslator:update:check", id: 7 }
+        });
+        await vi.waitFor(() => expect(page.posted).toEqual([{
+            type: "discordTranslator:update:check:result",
+            id: 7,
+            response: { browser: "firefox", installed: "0.2.19", allowed: false, latest: null }
+        }]));
+        // The permission question went to the background; nothing asked a Chrome worker, and
+        // with the permission refused the content script fetched nothing (latest: null).
+        expect(sendMessage).toHaveBeenCalledTimes(1);
+        expect(sendMessage).toHaveBeenCalledWith({ action: "goatcamBanner:gate" });
+    });
+
+    it("update messages from a sub-frame never reach the extension", async () => {
+        const page: ReturnType<typeof makeWindow> & { top?: unknown } = makeWindow();
+        page.top = {};
+        const sendMessage = vi.fn();
+        const api = {
+            runtime: {
+                getURL: (path: string) => `chrome-extension://test/${path}`,
+                getManifest: () => ({ version: "0.2.19" }),
+                sendMessage
+            }
+        };
+        vi.stubGlobal("window", page);
+        vi.stubGlobal("document", { addEventListener: () => undefined });
+        vi.stubGlobal("chrome", api);
+        await import("../browser/content.js");
+
+        page.dispatch("message", { source: page, data: { type: "discordTranslator:update:check", id: 8 } });
+        page.dispatch("message", { source: page, data: { type: "discordTranslator:update:reload", id: 9 } });
+        await new Promise(resolve => setTimeout(resolve, 20));
+        expect(page.posted).toEqual([]);
+        expect(sendMessage).not.toHaveBeenCalled();
     });
 
     it("Firefox with permission granted resolves true and the runner fetches", async () => {
@@ -278,7 +336,10 @@ describe("GOAT Cam extension gate bridge", () => {
         expect(fetchMock).not.toHaveBeenCalled();
     });
 
-    it("Chrome extension configuration resolves true without a permission message", async () => {
+    it("the extension gate always asks the content script, whatever vencord:meta claims", async () => {
+        // A page-world vencord:meta saying "not Firefox" - what the real Vencord extension posts
+        // (it has no IS_FIREFOX) - used to make this gate answer true without asking, skipping the
+        // Firefox permission. The content script decides per browser now: on Chrome it grants at once.
         const page = makeWindow();
         vi.stubGlobal("window", page);
         vi.stubGlobal("location", page.location);
@@ -292,7 +353,12 @@ describe("GOAT Cam extension gate bridge", () => {
         });
 
         const gate = configureGoatBannerGate();
-        await expect(gate?.()).resolves.toBe(true);
-        expect(page.posted).toEqual([]);
+        const pending = gate?.();
+        await vi.waitFor(() => expect(page.posted).toEqual([{ type: "goatcamBanner:gate", id: 1 }]));
+        page.dispatch("message", {
+            source: page,
+            data: { type: "goatcamBanner:gate:result", id: 1, granted: true }
+        });
+        await expect(pending).resolves.toBe(true);
     });
 });

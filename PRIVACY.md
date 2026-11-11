@@ -37,7 +37,10 @@ gone with them** — nothing counts characters any more, because nothing is bill
 | `translate.googleapis.com` | the default provider: you enable translation, or double/triple-click text | the message text being translated, and the language pair |
 | `script.google.com` | **only if** you set the provider to Apps Script and paste your own deployment URL | the message text being translated, the language pair, and the deployment URL itself — which is what identifies your proxy |
 | `script.googleusercontent.com` | as the redirect target of the above, on every Apps Script call — Google serves the reply from here | nothing is posted here: after the redirect the app reissues **one bodiless GET**, so this host returns the translated text rather than receiving your message |
-| `api.github.com` | at startup, and on any later update check | a request for this project's latest release; no account, no identifiers |
+| `api.github.com` | desktop at startup, and on any later update check; unpacked Chrome extension when a Discord tab loads, normally at most every 12 hours | a request for this project's latest release (desktop: plus one request comparing the installed and latest versions when they differ); no account, no identifiers about you |
+| `github.com` (release download) | desktop, **only when you press Update now** | a download of this project's `desktop.asar` release asset (GitHub redirects it to its own file servers); the app refuses any other starting address |
+| `addons.mozilla.org` | Firefox extension only, and only with the optional data permission: when a Discord tab loads, normally at most every 12 hours | a request for this add-on's public listing, whose address names the add-on's own ID — the same for every user; nothing about you |
+| `chromewebstore.google.com`, `addons.mozilla.org` (store pages) | **only when you press Update** on the extension's banner | opens the add-on's store page in a new tab |
 | `clients2.google.com` | only if you turn on **Enable React DevTools** | your IP, to download that extension |
 | `discord.com` | continuously — it is Discord, and in the browser build it is the page the extension runs on | whatever you send Discord by using Discord. Nothing this app adds |
 | `raw.githubusercontent.com` and the other theme-asset hosts | **only if** a theme or QuickCSS *you* installed references a file there | a request for that file, and your IP. No message text, no key, no identifier |
@@ -78,15 +81,16 @@ identifier, cookie, query string, analytics or message content.
 v2 and DeepL endpoints that used to appear in this table were removed from the code, from both
 browser manifests and from the host allow-list, so no build can reach them.
 
-**This app makes one request of its own at startup**, and it is the update check — Discord's own
+**The only requests this app makes of its own at startup are the update check** — Discord's own
 traffic to `discord.com` is not this app's and is not changed by it. `src/Vencord.ts` calls
-`checkForUpdates()`, which asks `api.github.com` for this project's latest release. It is
-an unauthenticated GET — no account, no Discord user ID, no identifier of any kind, and
-nothing about your settings or your messages. It carries your IP, as any HTTPS request
-does. The same check runs again when you press **Check for Updates**, and on a 30-minute
-timer only if you turn auto-update on *and* update notifications off — with the shipped
-defaults there is no timer. Nothing else in the table above is contacted unless the condition
-listed beside it holds.
+`checkForUpdates()`, which asks `api.github.com` for this project's latest release and, when
+that release differs from the installed one, for the list of changes between the two. Both are
+unauthenticated GETs — no account, no Discord user ID, no identifier of any kind, and nothing
+about your settings or your messages. They carry your IP, as any HTTPS request does. The check
+runs at startup and when you press **Check for Updates**; there is no timer. Nothing is
+downloaded until you press **Update now**, and then only this repository's own `desktop.asar`
+release asset, which is checked to be a complete archive before it replaces the installed one.
+Nothing else in the table above is contacted unless the condition listed beside it holds.
 
 The QuickCSS editor no longer fetches anything: Monaco is bundled inside the archive, so opening it
 contacts nothing. Earlier versions loaded it from `cdn.jsdelivr.net`. The browser extension bundles
@@ -237,18 +241,15 @@ to a billing account. What someone holding your deployment URL can do is spend i
 Script quota and send it text of their own. If that concerns you, redeploy the script — a new
 deployment gets a new URL and the old one stops working.
 
-**No update check runs, and no changelog check either.** The web build ships no updater, and the
-Changelog tab is compiled out of it for the same reason — that tab asks `api.github.com` for the
-commits between the version you had and this one. It was originally left in, and this document
-originally claimed the extension contacts nothing at `api.github.com` on the strength of a recorded
-session showing only `discord.com` and `translate.googleapis.com`. **That evidence could not have
-found it:** the request fires only once a previous version has been seen, so a fresh install is
-exactly the case where it stays silent.
+**The extension checks for its own updates; it still has no changelog check.** The Changelog tab stays compiled out of the web build. What the update check does depends on the browser and how the extension was installed. The extension's own content script — the part of the extension that page scripts cannot reach — decides which check runs, asks for the Firefox permission, and makes the request itself; the Discord tab only receives the answer. (A script running on discord.com could fake that answer to change what the banner says, but it cannot make the extension send a request the permission forbids.) In every case the request sends no account, no Discord identifier and nothing about you, your messages or your settings; only what any web request carries (your IP address, user agent and the page origin `https://discord.com`):
 
-What is true now is checked against the built file rather than the source: the compare-URL
-construction and the `vnd.github+json` header are both absent from the shipped browser bundle and
-both present in the desktop one, so the removal is real and specific to this build. A single unused
-string constant remains in the bundle with nothing referencing it.
+- **Chrome Web Store install:** the extension asks Chrome's own updater (`runtime.requestUpdateCheck()`) whether the store has a newer version. The extension makes no request of its own. If an update is ready, **Update now** restarts the extension onto it and reloads Discord. The extension restarts only when its own background has seen the update arrive; if it cannot tell any more, the banner asks you to restart the browser instead, which is also when Chrome applies the update by itself.
+- **Unpacked Chrome install:** the extension asks `api.github.com` for this project's latest release, sent as an ordinary request from the Discord page, and reads only its version tag. **Update** opens the Chrome Web Store page.
+- **Firefox:** only if you granted the optional technical and interaction data permission (the same one the GOAT Cam banner uses), the extension asks `addons.mozilla.org` for the version of this add-on's public listing, sent as an ordinary request from the Discord page rather than from the add-on's own address. The request's address names the add-on's own ID, which is the same for every user. Without that permission the extension does not run the check. **Update** opens the add-on's page.
+
+The check runs when a Discord tab loads, normally at most once every 12 hours, and never on a repeating timer. The 12-hour record, like the dismissal of a banner and the crash-guard record below, is kept in Discord's own page storage, so it is best-effort: clearing site data resets it, and any script running on discord.com can read or change it. The crash-guard record notes whether the translator's last start succeeded; if Discord failed to start with the translator, the next load skips the translator and says so. None of these records leave the browser.
+
+Built-file evidence still shows that the compare-URL construction and the `vnd.github+json` header are both absent from the shipped browser bundle and both present in the desktop one, so the changelog removal is real and specific to this build. A single unused-string constant remains in the bundle with nothing referencing it.
 
 **The QuickCSS editor no longer contacts a CDN, and there is no fallback that could.** It loads
 Monaco from inside the extension, as the desktop build loads it from inside the archive, so opening

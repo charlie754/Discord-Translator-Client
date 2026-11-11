@@ -23,6 +23,7 @@ import type * as TSPattern from "ts-pattern";
 export let FluxDispatcher: t.FluxDispatcher;
 waitFor(["dispatch", "subscribe"], m => {
     FluxDispatcher = m;
+    (globalThis as Record<string, any>).__discordTranslatorBootGuard?.fluxDispatcherFound?.();
     // Importing this directly causes all webpack commons to be imported, which can easily cause circular dependencies.
     // For this reason, use a non import access here.
     Vencord.Api.PluginManager.subscribeAllPluginsFluxEvents(m);

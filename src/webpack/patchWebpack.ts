@@ -94,8 +94,12 @@ const define: typeof Reflect.defineProperty = (target, p, attributes) => {
 
 // wreq.m is also wrapped in a proxy to intercept when new factories are set, patch them eargely, if enabled, and wrap them in the factory proxy.
 
+// Safe mode never evaluates src/Vencord, but keep this guard at the hook boundary
+// as a second line of defence for any future entry point that imports this module.
+const bootGuard = (globalThis as Record<string, any>).__discordTranslatorBootGuard;
+
 // If this is the main Webpack, we also set up the internal references to WebpackRequire.
-define(Function.prototype, "m", {
+if (bootGuard?.safeMode !== true) define(Function.prototype, "m", {
     enumerable: false,
 
     set(this: AnyWebpackRequire, originalModules: AnyWebpackRequire["m"]) {
@@ -135,6 +139,7 @@ define(Function.prototype, "m", {
                 }
 
                 if (wreq == null && this.c != null) {
+                    bootGuard?.webpackSeen?.();
                     logger.info("Main WebpackInstance found" + interpolateIfDefined` in ${fileName}` + ", initializing internal references to WebpackRequire");
                     _initWebpack(this as WebpackRequire);
                 }
