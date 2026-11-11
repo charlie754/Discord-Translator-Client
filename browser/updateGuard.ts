@@ -5,7 +5,7 @@
  */
 
 import { BOOT_FAILURE_DELAY_MS, BOOT_GUARD_KEY, CHROME_STORE_URL, FIREFOX_STORE_URL, GITHUB_VERSION_URL, AMO_VERSION_URL, UPDATE_CACHE_KEY, UPDATE_DISMISS_KEY, decideBoot, getUpdateButton, getUpdateSource, isCheckDue, isDismissed, isVersionNewer, shouldFail } from "./updateGuardCore";
-import { BannerKind, openLink, showBanner, updateBanner } from "./updateBanner";
+import { BannerKind, openLink, showBanner, updateBanner } from "../src/utils/updateBanner";
 
 // Discord removes window.localStorage during startup. Capture the object before
 // the native stub and Discord itself have a chance to replace it.
