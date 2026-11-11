@@ -39,12 +39,12 @@ import { SettingsRouter } from "@webpack/common";
 
 import { get as dsGet } from "./api/DataStore";
 import { popNotice, showNotice } from "./api/Notices";
-import { NotificationData, showNotification } from "./api/Notifications";
+import { showNotification } from "./api/Notifications";
 import { initPluginManager, PMLogger, startAllPlugins } from "./api/PluginManager";
 import { PlainSettings, Settings, SettingsStore } from "./api/Settings";
 import { areLocalSettingsDirty, getCloudSettings, getCloudSyncDirection, markLocalSettingsDirty, putCloudSettings, shouldCloudSync } from "./api/SettingsSync/cloudSync";
 import { relaunch } from "./utils/native";
-import { checkForUpdates, isOutdated as getIsOutdated, update, UpdateLogger } from "./utils/updater";
+import { checkForUpdates, isOutdated as getIsOutdated, latestVersion, update, UpdateLogger, updateNow } from "./utils/updater";
 import { onceReady } from "./webpack";
 import { patches } from "./webpack/patchWebpack";
 
@@ -139,50 +139,34 @@ async function syncSettings() {
     });
 }
 
-let notifiedForUpdatesThisSession = false;
+function showUpdatePrompt() {
+    showNotice(
+        latestVersion === null
+            ? "A new version of Discord Translator is available."
+            : `Discord Translator ${latestVersion} is available.`,
+        "Update now",
+        async () => {
+            showNotice("Downloading the update - Discord will restart when it is done.", "Hide", popNotice);
+
+            try {
+                await updateNow();
+            } catch (err) {
+                UpdateLogger.error("Failed to install update", err);
+                showNotice("The update could not be installed.", "Open Updater", () => openSettingsTabModal(UpdaterTab!));
+            }
+        }
+    );
+}
 
 async function runUpdateCheck() {
     if (IS_UPDATER_DISABLED) return;
-
-    const notify = (data: NotificationData) => {
-        if (notifiedForUpdatesThisSession) return;
-        notifiedForUpdatesThisSession = true;
-
-        setTimeout(() => showNotification({
-            permanent: true,
-            noPersist: true,
-            ...data
-        }), 10_000);
-    };
 
     try {
         const isOutdated = await checkForUpdates();
         if (IS_DISCORD_DESKTOP) VencordNative.tray.setUpdateState(isOutdated);
         if (!isOutdated) return;
 
-        if (Settings.autoUpdate) {
-            await update();
-            if (Settings.autoUpdateNotification) {
-                if (notifiedForUpdatesThisSession) return;
-                notifiedForUpdatesThisSession = true;
-
-                showNotice(
-                    "Discord Translator has been updated!",
-                    "Restart",
-                    relaunch
-                );
-            }
-            return;
-        }
-
-        if (notifiedForUpdatesThisSession) return;
-        notifiedForUpdatesThisSession = true;
-
-        showNotice(
-            "A new version of Discord Translator is available!",
-            "View Update",
-            () => openSettingsTabModal(UpdaterTab!)
-        );
+        showUpdatePrompt();
     } catch (err) {
         UpdateLogger.error("Failed to check for updates", err);
     }
@@ -197,7 +181,7 @@ function initTrayIpc() {
             VencordNative.tray.setUpdateState(isOutdated);
 
             if (isOutdated) {
-                showNotice("A Discord Translator update is available!", "View Update", () => openSettingsTabModal(UpdaterTab!));
+                showUpdatePrompt();
             } else {
                 showNotice("No updates available, you're on the latest version!", "OK", popNotice);
             }
@@ -228,11 +212,6 @@ async function init() {
 
     if (!IS_DEV && !IS_WEB && !IS_UPDATER_DISABLED) {
         runUpdateCheck();
-
-        // this tends to get really annoying, so only do this if the user has auto-update without notification enabled
-        if (Settings.autoUpdate && !Settings.autoUpdateNotification) {
-            setInterval(runUpdateCheck, 1000 * 60 * 30); // 30 minutes
-        }
     }
 
     if (IS_DEV) {

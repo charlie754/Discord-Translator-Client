@@ -26,9 +26,12 @@ import gitHash from "~git-hash";
 import gitRemote from "~git-remote";
 
 import { ASAR_FILE, serializeErrors } from "./common";
+import { getComparePath, getReleaseInfo } from "./release";
 
 const API_BASE = `https://api.github.com/repos/${gitRemote}`;
 let PendingUpdate: string | null = null;
+let LatestReleaseSha: string | null = null;
+let LatestReleaseTag: string | null = null;
 
 async function githubGet<T = any>(endpoint: string) {
     return fetchJson<T>(API_BASE + endpoint, {
@@ -45,7 +48,7 @@ async function calculateGitChanges() {
     const isOutdated = await fetchUpdates();
     if (!isOutdated) return [];
 
-    const data = await githubGet(`/compare/${gitHash}...HEAD`);
+    const data = await githubGet(getComparePath(gitHash, LatestReleaseSha!));
 
     return data.commits.map((c: any) => ({
         hash: c.sha,
@@ -56,12 +59,22 @@ async function calculateGitChanges() {
 
 async function fetchUpdates() {
     const data = await githubGet("/releases/latest");
+    const release = getReleaseInfo(gitHash, data.name);
 
-    const hash = data.name.slice(data.name.lastIndexOf(" ") + 1);
-    if (hash === gitHash)
+    if (!release)
+        throw new Error("The latest release name does not contain a 40-character commit SHA");
+
+    LatestReleaseSha = release.sha;
+    LatestReleaseTag = typeof data.tag_name === "string" ? data.tag_name : null;
+    PendingUpdate = null;
+
+    if (release.isCurrent)
         return false;
 
     const asset = data.assets.find(a => a.name === ASAR_FILE);
+    if (!asset)
+        throw new Error(`The latest release does not contain the ${ASAR_FILE} asset`);
+
     PendingUpdate = asset.browser_download_url;
 
     return true;
@@ -80,5 +93,6 @@ async function applyUpdates() {
 
 ipcMain.handle(IpcEvents.GET_REPO, serializeErrors(() => `https://github.com/${gitRemote}`));
 ipcMain.handle(IpcEvents.GET_UPDATES, serializeErrors(calculateGitChanges));
+ipcMain.handle(IpcEvents.GET_UPDATE_VERSION, serializeErrors(() => LatestReleaseTag));
 ipcMain.handle(IpcEvents.UPDATE, serializeErrors(fetchUpdates));
 ipcMain.handle(IpcEvents.BUILD, serializeErrors(applyUpdates));

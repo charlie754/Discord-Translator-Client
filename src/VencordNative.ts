@@ -30,6 +30,19 @@ for (const [plugin, methods] of Object.entries(pluginIpcMap)) {
     }
 }
 
+const updater = {
+    getUpdates: () => invoke<IpcRes<Record<"hash" | "author" | "message", string>[]>>(IpcEvents.GET_UPDATES),
+    getUpdateVersion: () => invoke<IpcRes<string | null>>(IpcEvents.GET_UPDATE_VERSION),
+    update: () => invoke<IpcRes<boolean>>(IpcEvents.UPDATE),
+    rebuild: () => invoke<IpcRes<boolean>>(IpcEvents.BUILD),
+    getRepo: () => invoke<IpcRes<string>>(IpcEvents.GET_REPO),
+};
+
+type Updater = Omit<typeof updater, "getUpdateVersion"> & {
+    // Browser builds use a native stub without a main-process updater.
+    getUpdateVersion?: typeof updater.getUpdateVersion;
+};
+
 export default {
     themes: {
         uploadTheme: async (fileName: string, fileData: string): Promise<void> => {
@@ -45,12 +58,7 @@ export default {
         openFolder: () => invoke<void>(IpcEvents.OPEN_THEMES_FOLDER),
     },
 
-    updater: {
-        getUpdates: () => invoke<IpcRes<Record<"hash" | "author" | "message", string>[]>>(IpcEvents.GET_UPDATES),
-        update: () => invoke<IpcRes<boolean>>(IpcEvents.UPDATE),
-        rebuild: () => invoke<IpcRes<boolean>>(IpcEvents.BUILD),
-        getRepo: () => invoke<IpcRes<string>>(IpcEvents.GET_REPO),
-    },
+    updater: updater as Updater,
 
     settings: {
         get: () => sendSync<Settings>(IpcEvents.GET_SETTINGS),

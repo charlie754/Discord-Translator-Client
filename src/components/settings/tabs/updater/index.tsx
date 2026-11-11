@@ -16,9 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { useSettings } from "@api/Settings";
 import { Divider } from "@components/Divider";
-import { FormSwitch } from "@components/FormSwitch";
 import { Heading } from "@components/Heading";
 import { Link } from "@components/Link";
 import { Paragraph } from "@components/Paragraph";
@@ -38,8 +36,6 @@ interface CommonProps {
 }
 
 function Updater() {
-    const settings = useSettings(["autoUpdate", "autoUpdateNotification"]);
-
     const [repo, err, repoPending] = useAwaiter(getRepo, { fallbackValue: "Loading..." });
 
     React.useEffect(() => {
@@ -54,26 +50,9 @@ function Updater() {
 
     return (
         <SettingsTab>
-            <Heading className={Margins.top16}>Update Preferences</Heading>
-            <Paragraph className={Margins.bottom20}>
-                Control how Discord Translator keeps itself up to date. You can choose to update automatically in the background or be notified when new updates are available.
+            <Paragraph className={Margins.top16}>
+                Discord Translator checks for updates each time Discord starts and asks before installing one.
             </Paragraph>
-
-            <FormSwitch
-                title="Automatically update"
-                description="When enabled, Discord Translator will automatically download and install updates in the background without asking for confirmation. You'll need to restart Discord to apply the changes."
-                value={settings.autoUpdate}
-                onChange={(v: boolean) => settings.autoUpdate = v}
-                hideBorder
-            />
-            <FormSwitch
-                value={settings.autoUpdateNotification}
-                onChange={(v: boolean) => settings.autoUpdateNotification = v}
-                title="Get notified when an automatic update completes"
-                description="Receive a notification when Discord Translator finishes downloading an update in the background, so you know when to restart Discord."
-                disabled={!settings.autoUpdate}
-                hideBorder
-            />
 
             <Divider className={Margins.top20} />
 

@@ -83,10 +83,9 @@ traffic to `discord.com` is not this app's and is not changed by it. `src/Vencor
 `checkForUpdates()`, which asks `api.github.com` for this project's latest release. It is
 an unauthenticated GET — no account, no Discord user ID, no identifier of any kind, and
 nothing about your settings or your messages. It carries your IP, as any HTTPS request
-does. The same check runs again when you press **Check for Updates**, and on a 30-minute
-timer only if you turn auto-update on *and* update notifications off — with the shipped
-defaults there is no timer. Nothing else in the table above is contacted unless the condition
-listed beside it holds.
+does. The check runs at startup and when you press **Check for Updates**; there is no timer.
+Nothing is downloaded until you press **Update now**. Nothing else in the table above is
+contacted unless the condition listed beside it holds.
 
 The QuickCSS editor no longer fetches anything: Monaco is bundled inside the archive, so opening it
 contacts nothing. Earlier versions loaded it from `cdn.jsdelivr.net`. The browser extension bundles
