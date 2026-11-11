@@ -37,7 +37,8 @@ gone with them** — nothing counts characters any more, because nothing is bill
 | `translate.googleapis.com` | the default provider: you enable translation, or double/triple-click text | the message text being translated, and the language pair |
 | `script.google.com` | **only if** you set the provider to Apps Script and paste your own deployment URL | the message text being translated, the language pair, and the deployment URL itself — which is what identifies your proxy |
 | `script.googleusercontent.com` | as the redirect target of the above, on every Apps Script call — Google serves the reply from here | nothing is posted here: after the redirect the app reissues **one bodiless GET**, so this host returns the translated text rather than receiving your message |
-| `api.github.com` | at startup, and on any later update check | a request for this project's latest release; no account, no identifiers |
+| `api.github.com` | desktop at startup, and on any later update check; unpacked Chrome extension at most every 12 hours when a Discord tab loads | a request for this project's latest release; no account, no identifiers |
+| `addons.mozilla.org` | Firefox extension only, and only with the optional data permission: at most every 12 hours when a Discord tab loads | a request for this add-on's public listing version; no identifiers |
 | `clients2.google.com` | only if you turn on **Enable React DevTools** | your IP, to download that extension |
 | `discord.com` | continuously — it is Discord, and in the browser build it is the page the extension runs on | whatever you send Discord by using Discord. Nothing this app adds |
 | `raw.githubusercontent.com` and the other theme-asset hosts | **only if** a theme or QuickCSS *you* installed references a file there | a request for that file, and your IP. No message text, no key, no identifier |
@@ -236,18 +237,15 @@ to a billing account. What someone holding your deployment URL can do is spend i
 Script quota and send it text of their own. If that concerns you, redeploy the script — a new
 deployment gets a new URL and the old one stops working.
 
-**No update check runs, and no changelog check either.** The web build ships no updater, and the
-Changelog tab is compiled out of it for the same reason — that tab asks `api.github.com` for the
-commits between the version you had and this one. It was originally left in, and this document
-originally claimed the extension contacts nothing at `api.github.com` on the strength of a recorded
-session showing only `discord.com` and `translate.googleapis.com`. **That evidence could not have
-found it:** the request fires only once a previous version has been seen, so a fresh install is
-exactly the case where it stays silent.
+**The extension checks for its own updates; it still has no changelog check.** The Changelog tab stays compiled out of the web build. What the update check does depends on the browser and how the extension was installed, and in every case it sends no account, no Discord identifier, no extension identifier and nothing about your messages or settings - only what any web request carries (your IP address, user agent and the page origin `https://discord.com`):
 
-What is true now is checked against the built file rather than the source: the compare-URL
-construction and the `vnd.github+json` header are both absent from the shipped browser bundle and
-both present in the desktop one, so the removal is real and specific to this build. A single unused
-string constant remains in the bundle with nothing referencing it.
+- **Chrome Web Store install:** the extension asks Chrome's own updater (`runtime.requestUpdateCheck()`) whether the store has a newer version. The extension makes no request of its own. If one is ready, **Update now** restarts the extension onto it and reloads Discord.
+- **Unpacked Chrome install:** the Discord tab asks `api.github.com` for this project's latest release and reads only its version tag. **Update** opens the Chrome Web Store page.
+- **Firefox:** only if you granted the optional technical and interaction data permission (the same one the GOAT Cam banner uses), the Discord tab asks `addons.mozilla.org` for the public version number of this add-on's listing. Without that permission no check runs. **Update** opens the add-on's page.
+
+The check runs at most once every 12 hours, only when a Discord tab loads, never on a repeating timer. The extension also keeps a small record in Discord's local storage of whether its last start succeeded; if Discord failed to start with the translator, the next load skips the translator and says so. That record never leaves the browser.
+
+Built-file evidence still shows that the compare-URL construction and the `vnd.github+json` header are both absent from the shipped browser bundle and both present in the desktop one, so the changelog removal is real and specific to this build. A single unused-string constant remains in the bundle with nothing referencing it.
 
 **The QuickCSS editor no longer contacts a CDN, and there is no fallback that could.** It loads
 Monaco from inside the extension, as the desktop build loads it from inside the archive, so opening

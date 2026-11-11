@@ -16,10 +16,11 @@ describe("browser update guard decisions", () => {
     });
 
     it("fails only after webpack was seen and the full delay elapsed", () => {
-        expect(shouldFail(null, BOOT_FAILURE_DELAY_MS, false)).toBe(false);
-        expect(shouldFail(0, BOOT_FAILURE_DELAY_MS - 1, false)).toBe(false);
-        expect(shouldFail(0, BOOT_FAILURE_DELAY_MS, false)).toBe(true);
-        expect(shouldFail(0, BOOT_FAILURE_DELAY_MS, true)).toBe(false);
+        expect(shouldFail(null, BOOT_FAILURE_DELAY_MS, false, true)).toBe(false);
+        expect(shouldFail(0, BOOT_FAILURE_DELAY_MS - 1, false, true)).toBe(false);
+        expect(shouldFail(0, BOOT_FAILURE_DELAY_MS, false, true)).toBe(true);
+        expect(shouldFail(0, BOOT_FAILURE_DELAY_MS, false, false)).toBe(false);
+        expect(shouldFail(0, BOOT_FAILURE_DELAY_MS, true, true)).toBe(false);
     });
 
     it("compares dotted versions numerically", () => {

@@ -22,6 +22,7 @@ const UPDATE_CHECK_REQUEST = "discordTranslator:update:check";
 const UPDATE_CHECK_RESULT = "discordTranslator:update:check:result";
 const UPDATE_RELOAD_REQUEST = "discordTranslator:update:reload";
 const UPDATE_TIMEOUT_MS = 5_000;
+const DISCORD_HOSTNAMES = new Set(["discord.com", "ptb.discord.com", "canary.discord.com"]);
 
 interface GuardGlobal {
     safeMode: boolean;
@@ -66,7 +67,7 @@ const guardGlobal: GuardGlobal = {
 };
 
 export function startUpdateGuard(version: string): { safeMode: boolean } {
-    if (!ls || window.top !== window) return { safeMode: false };
+    if (!ls || window.top !== window || !DISCORD_HOSTNAMES.has(location.hostname)) return { safeMode: false };
 
     const stored = readBootRecord();
     const safeMode = decideBoot(stored, version) === "safe";
@@ -91,6 +92,43 @@ function installHealthSignals(version: string): void {
     let fluxFound = false;
     let healthy = false;
     let observer: MutationObserver | null = null;
+    let failureTimer: ReturnType<typeof setTimeout> | null = null;
+    let visibilityListenerInstalled = false;
+    let waitingForVisible = false;
+
+    const stopFailureWait = () => {
+        if (failureTimer !== null) {
+            clearTimeout(failureTimer);
+            failureTimer = null;
+        }
+        if (visibilityListenerInstalled) {
+            document.removeEventListener("visibilitychange", restartFailureWait);
+            visibilityListenerInstalled = false;
+            waitingForVisible = false;
+        }
+    };
+
+    const scheduleFailure = () => {
+        failureTimer = setTimeout(markFailedIfDue, BOOT_FAILURE_DELAY_MS);
+    };
+
+    const restartFailureWait = () => {
+        if (document.hidden) {
+            if (failureTimer !== null) {
+                clearTimeout(failureTimer);
+                failureTimer = null;
+            }
+            waitingForVisible = true;
+            return;
+        }
+
+        if (!waitingForVisible) return;
+        waitingForVisible = false;
+        if (webpackSeenAt === null || healthy) return;
+
+        webpackSeenAt = Date.now();
+        scheduleFailure();
+    };
 
     const markHealthyIfReady = () => {
         if (healthy || !fluxFound) return;
@@ -100,13 +138,21 @@ function installHealthSignals(version: string): void {
 
         healthy = true;
         observer?.disconnect();
+        stopFailureWait();
         writeBootState("healthy", version);
     };
 
     const markFailedIfDue = () => {
+        failureTimer = null;
         if (webpackSeenAt === null || healthy) return;
 
-        if (!shouldFail(webpackSeenAt, Date.now(), healthy)) return;
+        if (!shouldFail(webpackSeenAt, Date.now(), healthy, !document.hidden)) {
+            if (document.hidden && !waitingForVisible) {
+                waitingForVisible = true;
+            }
+            return;
+        }
+        stopFailureWait();
         observer?.disconnect();
         writeBootState("failed", version);
         bannerKind = "failure";
@@ -116,7 +162,10 @@ function installHealthSignals(version: string): void {
     guardGlobal.webpackSeen = () => {
         if (webpackSeenAt !== null) return;
         webpackSeenAt = Date.now();
-        setTimeout(markFailedIfDue, BOOT_FAILURE_DELAY_MS);
+        document.addEventListener("visibilitychange", restartFailureWait);
+        visibilityListenerInstalled = true;
+        if (document.hidden) waitingForVisible = true;
+        scheduleFailure();
     };
 
     guardGlobal.fluxDispatcherFound = () => {
@@ -210,9 +259,14 @@ async function performUpdate(result?: UpdateResult | null): Promise<void> {
         return;
     }
 
+    if (current) {
+        openLink(current.source === "firefox" ? FIREFOX_STORE_URL : CHROME_STORE_URL);
+        return;
+    }
+
     const meta = await getMeta();
-    const source = current?.source ?? getUpdateSource(meta.isFirefox, null);
-    openLink(source === "firefox" ? FIREFOX_STORE_URL : CHROME_STORE_URL);
+    if (!meta) return;
+    openLink(meta.isFirefox ? FIREFOX_STORE_URL : CHROME_STORE_URL);
 }
 
 async function getUpdateResult(version: string): Promise<UpdateResult | null> {
@@ -227,6 +281,7 @@ async function getUpdateResult(version: string): Promise<UpdateResult | null> {
 
 async function getUpdateResultOnce(version: string): Promise<UpdateResult | null> {
     const meta = await getMeta();
+    if (!meta) return null;
     const cached = readCache();
     if (!isCheckDue(cached, Date.now())) {
         if (!cached) return null;
@@ -275,19 +330,17 @@ function makeResult(source: UpdateResult["source"], latest: string | null, meta:
     };
 }
 
-async function getMeta(): Promise<MetaResult> {
+async function getMeta(): Promise<MetaResult | null> {
     try {
         const metadata = require("../src/utils/web-metadata") as typeof import("../src/utils/web-metadata");
-        await Promise.race([
-            metadata.metaReady,
-            new Promise<void>(resolve => setTimeout(resolve, UPDATE_TIMEOUT_MS))
-        ]);
+        await metadata.metaReady;
+        if (typeof metadata.IS_FIREFOX !== "boolean") return null;
         return {
-            isFirefox: metadata.IS_FIREFOX === true,
+            isFirefox: metadata.IS_FIREFOX,
             installed: typeof metadata.EXTENSION_VERSION === "string" ? metadata.EXTENSION_VERSION : VERSION
         };
     } catch {
-        return { isFirefox: false, installed: VERSION };
+        return null;
     }
 }
 

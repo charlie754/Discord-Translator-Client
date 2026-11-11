@@ -146,12 +146,14 @@ function showUpdatePrompt() {
             : `Discord Translator ${latestVersion} is available.`,
         "Update now",
         async () => {
+            popNotice();
             showNotice("Downloading the update - Discord will restart when it is done.", "Hide", popNotice);
 
             try {
                 await updateNow();
             } catch (err) {
                 UpdateLogger.error("Failed to install update", err);
+                popNotice();
                 showNotice("The update could not be installed.", "Open Updater", () => openSettingsTabModal(UpdaterTab!));
             }
         }

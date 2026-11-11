@@ -121,8 +121,6 @@ if (bootGuard?.safeMode !== true) define(Function.prototype, "m", {
             return;
         }
 
-        bootGuard?.webpackSeen?.();
-
         // Define a setter for the bundlePath property of WebpackRequire. Only Webpack instances which include chunk loading functionality,
         // like the main Discord Webpack, have this property.
         // So if the setter is called with the Discord bundlePath, this means we should patch this instance and initialize the internal references to WebpackRequire.
@@ -141,6 +139,7 @@ if (bootGuard?.safeMode !== true) define(Function.prototype, "m", {
                 }
 
                 if (wreq == null && this.c != null) {
+                    bootGuard?.webpackSeen?.();
                     logger.info("Main WebpackInstance found" + interpolateIfDefined` in ${fileName}` + ", initializing internal references to WebpackRequire");
                     _initWebpack(this as WebpackRequire);
                 }

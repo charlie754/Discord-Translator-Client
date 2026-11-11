@@ -46,8 +46,8 @@ export function decideBoot(record: BootRecord | null, version: string): "normal"
         : "normal";
 }
 
-export function shouldFail(webpackSeenAt: number | null, now: number, healthy: boolean): boolean {
-    return webpackSeenAt !== null && !healthy && now - webpackSeenAt >= BOOT_FAILURE_DELAY_MS;
+export function shouldFail(webpackSeenAt: number | null, now: number, healthy: boolean, visible: boolean): boolean {
+    return webpackSeenAt !== null && !healthy && visible && now - webpackSeenAt >= BOOT_FAILURE_DELAY_MS;
 }
 
 export function compareVersions(left: string, right: string): number {
