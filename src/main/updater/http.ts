@@ -26,10 +26,11 @@ import gitHash from "~git-hash";
 import gitRemote from "~git-remote";
 
 import { ASAR_FILE, serializeErrors } from "./common";
-import { getComparePath, getReleaseInfo } from "./release";
+import { getComparePath, getReleaseInfo, isCompleteAsar, isReleaseAssetUrl } from "./release";
 
 const API_BASE = `https://api.github.com/repos/${gitRemote}`;
-let PendingUpdate: string | null = null;
+let PendingUpdate: { url: string; size: number; } | null = null;
+let applying: Promise<boolean> | null = null;
 let LatestReleaseSha: string | null = null;
 let LatestReleaseTag: string | null = null;
 
@@ -74,16 +75,30 @@ async function fetchUpdates() {
     const asset = data.assets.find(a => a.name === ASAR_FILE);
     if (!asset)
         throw new Error(`The latest release does not contain the ${ASAR_FILE} asset`);
+    if (!isReleaseAssetUrl(asset.browser_download_url, gitRemote))
+        throw new Error(`Refusing to download ${ASAR_FILE} from outside this repository's releases`);
 
-    PendingUpdate = asset.browser_download_url;
+    PendingUpdate = { url: asset.browser_download_url, size: asset.size };
 
     return true;
 }
 
-async function applyUpdates() {
+// Single-flight: a second "Update now" (or the tray's Repair) while a download is running joins it
+// instead of starting another write of the same archive.
+function applyUpdates() {
+    return applying ??= applyPendingUpdate().finally(() => { applying = null; });
+}
+
+async function applyPendingUpdate() {
     if (!PendingUpdate) return true;
 
-    const data = await fetchBuffer(PendingUpdate);
+    const { url, size } = PendingUpdate;
+    const data = await fetchBuffer(url);
+    if (!isCompleteAsar(data, size))
+        throw new Error(`The downloaded ${ASAR_FILE} is incomplete or not an asar archive; nothing was written`);
+
+    // ponytail: in-place write of an already validated buffer; write-to-temp + rename if Windows
+    // allows renaming over the archive Electron holds open (unmeasured - Vencord has always written in place).
     writeFileSync(__dirname, data, { flush: true });
 
     PendingUpdate = null;

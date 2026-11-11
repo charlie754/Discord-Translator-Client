@@ -21,7 +21,9 @@ const GUARD_GLOBAL = "__discordTranslatorBootGuard";
 const UPDATE_CHECK_REQUEST = "discordTranslator:update:check";
 const UPDATE_CHECK_RESULT = "discordTranslator:update:check:result";
 const UPDATE_RELOAD_REQUEST = "discordTranslator:update:reload";
+const UPDATE_RELOAD_RESULT = "discordTranslator:update:reload:result";
 const UPDATE_TIMEOUT_MS = 5_000;
+const RELOAD_TIMEOUT_MS = 3_000;
 const DISCORD_HOSTNAMES = new Set(["discord.com", "ptb.discord.com", "canary.discord.com"]);
 
 interface GuardGlobal {
@@ -30,13 +32,19 @@ interface GuardGlobal {
     fluxDispatcherFound: () => void;
 }
 
-interface MetaResult {
-    isFirefox: boolean;
+/**
+ * What the extension's own content script (isolated world) reports. The browser and the Firefox
+ * permission are decided THERE, not here. The page-world `vencord:meta` that web-metadata reads is
+ * first-writer-wins, and the real Vencord extension posts one too (without IS_FIREFOX): trusting it let
+ * a Firefox page take the Chrome path and query GitHub without the optional data permission.
+ */
+interface ExtensionInfo {
+    browser: "firefox" | "chrome";
     installed: string;
-}
-
-interface ChromeCheckResult {
-    status: string;
+    /** Firefox: whether the optional technicalAndInteraction data permission is granted. */
+    allowed?: boolean;
+    /** Chrome: requestUpdateCheck status, version and install type, from the service worker. */
+    status?: string;
     version?: string;
     installType?: string | null;
 }
@@ -45,20 +53,20 @@ interface UpdateResult {
     latest: string | null;
     source: "firefox" | "chrome-store" | "github";
     updateReady: boolean;
-    isFirefox: boolean;
 }
 
-interface PendingUpdateRequest {
-    resolve: (result: ChromeCheckResult) => void;
+interface PendingReply {
+    resolve: (data: any) => void;
     timer: ReturnType<typeof setTimeout>;
 }
 
 let updateCheck: Promise<UpdateResult | null> | null = null;
 let lastUpdate: UpdateResult | null = null;
+let extensionInfo: ExtensionInfo | null = null;
 let bannerKind: BannerKind | null = null;
 let nextRequestId = 1;
-let updateListenerInstalled = false;
-const pendingUpdateRequests = new Map<number, PendingUpdateRequest>();
+let replyListenerInstalled = false;
+const pendingReplies = new Map<number, PendingReply>();
 
 const guardGlobal: GuardGlobal = {
     safeMode: false,
@@ -249,24 +257,22 @@ function makeUpdateAction(result?: UpdateResult) {
 async function performUpdate(result?: UpdateResult | null): Promise<void> {
     const current = result ?? lastUpdate ?? await getUpdateResult(VERSION);
     if (current && getUpdateButton(current.source, current.updateReady) === "reload") {
-        try {
-            window.postMessage({ type: UPDATE_RELOAD_REQUEST, id: nextRequestId++ }, window.location.origin);
-        } catch {
-            // The store URL is the recovery path if the page relay is gone.
-            openLink(CHROME_STORE_URL);
+        // The service worker restarts the extension only if IT saw the update arrive. If it was
+        // stopped and restarted since, it no longer knows, and Chrome applies the update on the
+        // next browser start instead.
+        const reply = await askExtension(UPDATE_RELOAD_REQUEST, {}, RELOAD_TIMEOUT_MS);
+        if (reply?.reloaded === false) {
+            updateBanner({ detail: "Restart your browser to finish the update." });
+            return;
         }
+        // reloaded === true, or no reply because the extension is already restarting.
         setTimeout(() => location.reload(), 2_500);
         return;
     }
 
-    if (current) {
-        openLink(current.source === "firefox" ? FIREFOX_STORE_URL : CHROME_STORE_URL);
-        return;
-    }
-
-    const meta = await getMeta();
-    if (!meta) return;
-    openLink(meta.isFirefox ? FIREFOX_STORE_URL : CHROME_STORE_URL);
+    const browser = current ? (current.source === "firefox" ? "firefox" : "chrome") : extensionInfo?.browser;
+    if (!browser) return;
+    openLink(browser === "firefox" ? FIREFOX_STORE_URL : CHROME_STORE_URL);
 }
 
 async function getUpdateResult(version: string): Promise<UpdateResult | null> {
@@ -280,68 +286,61 @@ async function getUpdateResult(version: string): Promise<UpdateResult | null> {
 }
 
 async function getUpdateResultOnce(version: string): Promise<UpdateResult | null> {
-    const meta = await getMeta();
-    if (!meta) return null;
     const cached = readCache();
-    if (!isCheckDue(cached, Date.now())) {
-        if (!cached) return null;
-        return makeResult(cached.source, cached.latest, meta);
-    }
+    const due = isCheckDue(cached, Date.now());
 
-    if (meta.isFirefox) {
-        let granted = false;
-        try {
-            const { goatBannerGateFromExtension } = require("./translationBridge") as typeof import("./translationBridge");
-            granted = await goatBannerGateFromExtension();
-        } catch {
-            granted = false;
-        }
-        if (!granted) return null;
+    // A probe only asks the content script who we are (no network); a full check also runs the
+    // per-browser gate: the Firefox data permission, or Chrome's own update check.
+    const info = parseExtensionInfo(await askExtension(UPDATE_CHECK_REQUEST, { probe: !due }, UPDATE_TIMEOUT_MS));
+    if (!info) return null; // no answer from our own content script: never guess, never fetch
+    extensionInfo = info;
+
+    if (!due) return cached ? makeResult(cached.source, cached.latest, info.installed) : null;
+
+    if (info.browser === "firefox") {
+        if (info.allowed !== true) return null;
 
         const latest = await fetchFirefoxVersion();
         saveCache({ checkedAt: Date.now(), latest, source: "firefox" });
-        return makeResult("firefox", latest, meta);
+        return makeResult("firefox", latest, info.installed);
     }
 
-    const chrome = await requestChromeUpdateCheck();
-    const source = getUpdateSource(false, chrome.installType ?? null);
-    if (source === "chrome-store" && chrome.status === "update_available") {
-        const latest = chrome.version ?? "newer version";
+    const source = getUpdateSource(false, info.installType ?? null);
+    if (source === "chrome-store" && info.status === "update_available") {
+        const latest = info.version ?? "newer version";
         saveCache({ checkedAt: Date.now(), latest, source: "chrome-store" });
-        return makeResult("chrome-store", latest, meta, true);
+        return makeResult("chrome-store", latest, info.installed, true);
     }
 
     if (source === "github") {
         const latest = await fetchGithubVersion();
         saveCache({ checkedAt: Date.now(), latest, source: "github" });
-        return makeResult("github", latest, meta);
+        return makeResult("github", latest, info.installed);
     }
 
     saveCache({ checkedAt: Date.now(), latest: null, source: "chrome-store" });
-    return makeResult("chrome-store", null, meta);
+    return makeResult("chrome-store", null, info.installed);
 }
 
-function makeResult(source: UpdateResult["source"], latest: string | null, meta: MetaResult, updateReady = false): UpdateResult {
+function makeResult(source: UpdateResult["source"], latest: string | null, installed: string, updateReady = false): UpdateResult {
     return {
         source,
         latest,
-        isFirefox: meta.isFirefox,
-        updateReady: updateReady || isVersionNewer(latest, meta.installed)
+        updateReady: updateReady || isVersionNewer(latest, installed)
     };
 }
 
-async function getMeta(): Promise<MetaResult | null> {
-    try {
-        const metadata = require("../src/utils/web-metadata") as typeof import("../src/utils/web-metadata");
-        await metadata.metaReady;
-        if (typeof metadata.IS_FIREFOX !== "boolean") return null;
-        return {
-            isFirefox: metadata.IS_FIREFOX,
-            installed: typeof metadata.EXTENSION_VERSION === "string" ? metadata.EXTENSION_VERSION : VERSION
-        };
-    } catch {
-        return null;
-    }
+function parseExtensionInfo(data: any): ExtensionInfo | null {
+    const response = data?.response;
+    if (response?.browser !== "firefox" && response?.browser !== "chrome") return null;
+    return {
+        browser: response.browser,
+        installed: typeof response.installed === "string" ? response.installed : VERSION,
+        allowed: response.allowed === true,
+        status: typeof response.status === "string" ? response.status : undefined,
+        version: typeof response.version === "string" ? response.version : undefined,
+        installType: typeof response.installType === "string" ? response.installType : null
+    };
 }
 
 async function fetchFirefoxVersion(): Promise<string | null> {
@@ -367,39 +366,36 @@ async function fetchGithubVersion(): Promise<string | null> {
     }
 }
 
-function installUpdateListener(): void {
-    if (updateListenerInstalled) return;
-    updateListenerInstalled = true;
+function installReplyListener(): void {
+    if (replyListenerInstalled) return;
+    replyListenerInstalled = true;
     window.addEventListener("message", event => {
-        if (event.source !== window || event.data?.type !== UPDATE_CHECK_RESULT) return;
-        const pending = pendingUpdateRequests.get(event.data.id);
+        const type = event.data?.type;
+        if (event.source !== window || (type !== UPDATE_CHECK_RESULT && type !== UPDATE_RELOAD_RESULT)) return;
+        const pending = pendingReplies.get(event.data.id);
         if (!pending) return;
-        pendingUpdateRequests.delete(event.data.id);
+        pendingReplies.delete(event.data.id);
         clearTimeout(pending.timer);
-        const response = event.data.response;
-        pending.resolve({
-            status: typeof response?.status === "string" ? response.status : "error",
-            version: typeof response?.version === "string" ? response.version : undefined,
-            installType: typeof response?.installType === "string" ? response.installType : null
-        });
+        pending.resolve(event.data);
     });
 }
 
-function requestChromeUpdateCheck(): Promise<ChromeCheckResult> {
-    installUpdateListener();
+/** Ask our content script and wait for its reply; null on timeout or if the relay is gone. */
+function askExtension(type: string, extra: Record<string, unknown>, timeoutMs: number): Promise<any | null> {
+    installReplyListener();
     const id = nextRequestId++;
     return new Promise(resolve => {
         const timer = setTimeout(() => {
-            pendingUpdateRequests.delete(id);
-            resolve({ status: "error" });
-        }, UPDATE_TIMEOUT_MS);
-        pendingUpdateRequests.set(id, { resolve, timer });
+            pendingReplies.delete(id);
+            resolve(null);
+        }, timeoutMs);
+        pendingReplies.set(id, { resolve, timer });
         try {
-            window.postMessage({ type: UPDATE_CHECK_REQUEST, id }, window.location.origin);
+            window.postMessage({ ...extra, type, id }, window.location.origin);
         } catch {
             clearTimeout(timer);
-            pendingUpdateRequests.delete(id);
-            resolve({ status: "error" });
+            pendingReplies.delete(id);
+            resolve(null);
         }
     });
 }

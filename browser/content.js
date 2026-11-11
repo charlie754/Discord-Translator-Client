@@ -2,8 +2,14 @@
 // through globalThis keeps the distinction intact in this classic content script.
 const extensionApi = globalThis.browser ?? globalThis.chrome;
 // Chrome 151 also defines `browser` in extension contexts, so namespace presence is not
-// a Firefox test. runtime.getBrowserInfo exists only in Firefox.
-const isFirefox = typeof extensionApi?.runtime?.getBrowserInfo === "function";
+// a Firefox test. Neither is runtime.getBrowserInfo: measured 2026-11-11 on Firefox Developer
+// Edition 160, a CONTENT SCRIPT does not have it (only background and extension pages do), so that
+// test reported Firefox as Chrome and the GOAT Cam permission gate below answered "granted"
+// without asking - shipped in v0.2.17 and v0.2.18. The extension's own URL scheme is the test:
+// moz-extension:// in Firefox, chrome-extension:// in Chrome and Edge, and runtime.getURL is
+// available to content scripts in all of them.
+const isFirefox = typeof extensionApi?.runtime?.getURL === "function"
+    && extensionApi.runtime.getURL("").startsWith("moz-extension://");
 
 /*
  * Translation relay.
@@ -32,6 +38,7 @@ const GATE_RESPONSE = "goatcamBanner:gate:result";
 const UPDATE_CHECK_REQUEST = "discordTranslator:update:check";
 const UPDATE_CHECK_RESPONSE = "discordTranslator:update:check:result";
 const UPDATE_RELOAD_REQUEST = "discordTranslator:update:reload";
+const UPDATE_RELOAD_RESPONSE = "discordTranslator:update:reload:result";
 
 /** Matches MAX_BODY_CHARS in translationHost.js, which is where the real cap lives. */
 const MAX_BODY_CHARS = 1024 * 1024;
@@ -48,25 +55,61 @@ function replyUpdateCheck(id, response) {
     window.postMessage({ type: UPDATE_CHECK_RESPONSE, id, response }, window.location.origin);
 }
 
+/*
+ * The update check is decided HERE, in the isolated world, and not by the page. The page's own idea
+ * of which browser it runs in comes from a `vencord:meta` message that any page script - or the real
+ * Vencord extension, which posts the same message type without IS_FIREFOX - can post first. Trusting
+ * it let a Firefox page take the Chrome path and query GitHub without the data permission.
+ *
+ * `probe` answers only who we are (browser and installed version) and touches no network: the page
+ * sends it while its 12-hour cache is still fresh.
+ */
 function checkForExtensionUpdate(data) {
+    const installed = extensionApi.runtime.getManifest().version;
+
+    if (data.probe === true) {
+        replyUpdateCheck(data.id, { browser: isFirefox ? "firefox" : "chrome", installed });
+        return;
+    }
+
+    if (isFirefox) {
+        // Operator ruling: Firefox checks AMO only with the optional technicalAndInteraction data
+        // permission - the same gate as the GOAT Cam banner, answered by the MV2 background page.
+        Promise.resolve(extensionApi.runtime.sendMessage({ action: GATE_REQUEST }))
+            .then(
+                response => replyUpdateCheck(data.id, { browser: "firefox", installed, allowed: response?.granted === true }),
+                () => replyUpdateCheck(data.id, { browser: "firefox", installed, allowed: false })
+            );
+        return;
+    }
+
     chrome.runtime.sendMessage({ action: UPDATE_CHECK_REQUEST }, response => {
         const error = chrome.runtime.lastError;
         replyUpdateCheck(data.id, error
-            ? { status: "unavailable" }
-            : { status: response?.status, version: response?.version, installType: response?.installType });
+            ? { browser: "chrome", installed, status: "unavailable" }
+            : { browser: "chrome", installed, status: response?.status, version: response?.version, installType: response?.installType });
     });
 }
 
-function reloadExtension() {
+function reloadExtension(data) {
+    const replyReload = reloaded => window.postMessage({ type: UPDATE_RELOAD_RESPONSE, id: data.id, reloaded }, window.location.origin);
+
+    // Firefox has no restart-onto-update path here; the banner links to the add-on page instead.
+    if (isFirefox) {
+        replyReload(false);
+        return;
+    }
+
     try {
-        chrome.runtime.sendMessage({ action: UPDATE_RELOAD_REQUEST }, () => {
-            // Reading lastError prevents Chrome from logging an unhandled callback
-            // error when runtime.reload tears down the worker immediately.
-            void chrome.runtime.lastError;
+        chrome.runtime.sendMessage({ action: UPDATE_RELOAD_REQUEST }, response => {
+            // Reading lastError also stops Chrome logging an unhandled error when the reload
+            // tears the worker down before it answers.
+            const error = chrome.runtime.lastError;
+            replyReload(error ? true : response?.reloaded === true);
         });
     } catch {
-        // The page still performs its delayed reload; the store button remains the
-        // recovery path if the extension context has already disappeared.
+        // The extension context is gone - typically because it already restarted onto the update.
+        replyReload(true);
     }
 }
 
@@ -137,13 +180,15 @@ window.addEventListener("message", event => {
         return;
     }
 
+    // Update messages are honoured only in the top frame: that is the only frame the update banner
+    // runs in, and a discord.com sub-frame must not be able to drive the update relay.
     if (data.type === UPDATE_CHECK_REQUEST) {
-        checkForExtensionUpdate(data);
+        if (window.top === window) checkForExtensionUpdate(data);
         return;
     }
 
     if (data.type === UPDATE_RELOAD_REQUEST) {
-        reloadExtension();
+        if (window.top === window) reloadExtension(data);
         return;
     }
 
