@@ -1,6 +1,6 @@
 {
     "manifest_version": 3,
-    "version": "0.2.18",
+    "version": "0.2.19",
     "minimum_chrome_version": "111",
     "name": "Discord Translator Web",
     "description": "Translate a whole Discord channel, including scrollback, with one toggle.",
