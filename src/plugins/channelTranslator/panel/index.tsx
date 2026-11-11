@@ -5,6 +5,8 @@
  */
 
 // plugin/panel/index.tsx
+import "../banner/coordinator";
+
 import { createRoot,React } from "@webpack/common";
 
 import { Panel } from "./Panel";

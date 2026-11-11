@@ -9,8 +9,9 @@ import "./styles.css";
 import { popNotice, showNotice } from "@api/Notices";
 import definePlugin from "@utils/types";
 
+import { configureGoatBannerGate } from "./banner/coordinator";
 import { mountPanel, unmountPanel } from "./panel";
-import { CHANNEL_TRANSLATOR_PATCHES, patchHit } from "./patches";
+import { CHANNEL_TRANSLATOR_PATCHES, messagesRendered, patchHit } from "./patches";
 import { migrateUnavailableProvider } from "./provider";
 import { transformMessage, wrapContent } from "./render";
 import { installSelectionHandler, removeSelectionHandler } from "./selection";
@@ -41,6 +42,8 @@ export default definePlugin({
     wrapContent,
 
     start() {
+        configureGoatBannerGate();
+
         // FIRST, before anything reads `provider`. A persisted provider id that
         // this build's registry can no longer serve refuses every translation
         // with developer wording and never heals itself, so it is repaired here
@@ -90,7 +93,7 @@ export default definePlugin({
 
         // The patches register lazily on first render, so check after the UI settles.
         // Console-only failure is what makes a rotted patch invisible; this is loud.
-        setTimeout(() => {
+        const warnIfPatchesMissing = () => {
             const clone = patchHit("clone");
             const wrap = patchHit("wrap");
             if (clone && wrap) return;
@@ -106,7 +109,31 @@ export default definePlugin({
                 "OK",
                 () => popNotice()
             );
-        }, 15_000);
+        };
+
+        const checkStartupPatches = () => {
+            if (messagesRendered()) {
+                warnIfPatchesMissing();
+                return;
+            }
+
+            // ponytail: poll for 2 minutes when startup has no message rows;
+            // upgrade to Discord's first-message render subscription when exposed.
+            let polls = 0;
+            const maxPolls = 24;
+            const poll = setInterval(() => {
+                if (messagesRendered()) {
+                    clearInterval(poll);
+                    warnIfPatchesMissing();
+                    return;
+                }
+
+                polls++;
+                if (polls >= maxPolls) clearInterval(poll);
+            }, 5_000);
+        };
+
+        setTimeout(checkStartupPatches, 15_000);
     },
 
     stop() {

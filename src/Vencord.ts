@@ -38,13 +38,13 @@ import { StartAt } from "@utils/types";
 import { SettingsRouter } from "@webpack/common";
 
 import { get as dsGet } from "./api/DataStore";
-import { popNotice, showNotice } from "./api/Notices";
-import { NotificationData, showNotification } from "./api/Notifications";
+import { showNotification } from "./api/Notifications";
 import { initPluginManager, PMLogger, startAllPlugins } from "./api/PluginManager";
 import { PlainSettings, Settings, SettingsStore } from "./api/Settings";
 import { areLocalSettingsDirty, getCloudSettings, getCloudSyncDirection, markLocalSettingsDirty, putCloudSettings, shouldCloudSync } from "./api/SettingsSync/cloudSync";
 import { relaunch } from "./utils/native";
-import { checkForUpdates, isOutdated as getIsOutdated, update, UpdateLogger } from "./utils/updater";
+import { showBanner, updateBanner } from "./utils/updateBanner";
+import { checkForUpdates, isOutdated as getIsOutdated, latestVersion, update, UpdateLogger, updateNow } from "./utils/updater";
 import { onceReady } from "./webpack";
 import { patches } from "./webpack/patchWebpack";
 
@@ -139,50 +139,62 @@ async function syncSettings() {
     });
 }
 
-let notifiedForUpdatesThisSession = false;
+// The update prompt is our own DOM card, not a Discord notice. Measured on the desktop client
+// 2026-11-11: Discord's NoticeStore accepted the notice and drew nothing, so the prompt was
+// invisible. A self-rendered card also still works when a Discord update has broken our patches,
+// which is exactly when the user most needs to be told about a fix.
+function showUpdatePrompt() {
+    let installing = false;
+
+    showBanner({
+        kind: "update",
+        placement: "corner",
+        message: latestVersion === null
+            ? "A new version of Discord Translator is available."
+            : `Discord Translator ${latestVersion} is available.`,
+        updateAction: {
+            label: "Update now",
+            onClick: async () => {
+                if (installing) return;
+                installing = true;
+                updateBanner({ detail: "Downloading - Discord will restart when it is done." });
+
+                try {
+                    await updateNow();
+                } catch (err) {
+                    installing = false;
+                    UpdateLogger.error("Failed to install update", err);
+                    updateBanner({
+                        detail: "The update could not be installed.",
+                        updateAction: { label: "Open Updater", onClick: openUpdaterTab }
+                    });
+                }
+            }
+        }
+    });
+}
+
+function showUpdateStatus(message: string) {
+    showBanner({ kind: "update", placement: "corner", message });
+}
+
+function openUpdaterTab() {
+    try {
+        openSettingsTabModal(UpdaterTab!);
+    } catch (err) {
+        UpdateLogger.error("Failed to open the Updater tab", err);
+    }
+}
 
 async function runUpdateCheck() {
     if (IS_UPDATER_DISABLED) return;
-
-    const notify = (data: NotificationData) => {
-        if (notifiedForUpdatesThisSession) return;
-        notifiedForUpdatesThisSession = true;
-
-        setTimeout(() => showNotification({
-            permanent: true,
-            noPersist: true,
-            ...data
-        }), 10_000);
-    };
 
     try {
         const isOutdated = await checkForUpdates();
         if (IS_DISCORD_DESKTOP) VencordNative.tray.setUpdateState(isOutdated);
         if (!isOutdated) return;
 
-        if (Settings.autoUpdate) {
-            await update();
-            if (Settings.autoUpdateNotification) {
-                if (notifiedForUpdatesThisSession) return;
-                notifiedForUpdatesThisSession = true;
-
-                showNotice(
-                    "Discord Translator has been updated!",
-                    "Restart",
-                    relaunch
-                );
-            }
-            return;
-        }
-
-        if (notifiedForUpdatesThisSession) return;
-        notifiedForUpdatesThisSession = true;
-
-        showNotice(
-            "A new version of Discord Translator is available!",
-            "View Update",
-            () => openSettingsTabModal(UpdaterTab!)
-        );
+        showUpdatePrompt();
     } catch (err) {
         UpdateLogger.error("Failed to check for updates", err);
     }
@@ -197,13 +209,13 @@ function initTrayIpc() {
             VencordNative.tray.setUpdateState(isOutdated);
 
             if (isOutdated) {
-                showNotice("A Discord Translator update is available!", "View Update", () => openSettingsTabModal(UpdaterTab!));
+                showUpdatePrompt();
             } else {
-                showNotice("No updates available, you're on the latest version!", "OK", popNotice);
+                showUpdateStatus("Discord Translator is up to date.");
             }
         } catch (err) {
             UpdateLogger.error("Failed to check for updates from tray", err);
-            showNotice("Failed to check for updates, check the console for more info", "OK", popNotice);
+            showUpdateStatus("Could not check for Discord Translator updates. Try again later.");
         }
     });
 
@@ -225,15 +237,6 @@ async function init() {
 
     syncSettings();
     initTrayIpc();
-
-    if (!IS_DEV && !IS_WEB && !IS_UPDATER_DISABLED) {
-        runUpdateCheck();
-
-        // this tends to get really annoying, so only do this if the user has auto-update without notification enabled
-        if (Settings.autoUpdate && !Settings.autoUpdateNotification) {
-            setInterval(runUpdateCheck, 1000 * 60 * 30); // 30 minutes
-        }
-    }
 
     if (IS_DEV) {
         const pendingPatches = patches.filter(p => !p.all && p.predicate?.() !== false);
@@ -257,6 +260,13 @@ initPluginManager();
 initStyles();
 startAllPlugins(StartAt.Init);
 init();
+
+// Not inside init(): init() waits on onceReady, which never resolves if a Discord update has
+// broken our webpack layer - and that is the moment the update prompt matters most. The check
+// itself is IPC to the main process and the prompt is plain DOM, so neither needs webpack.
+if (!IS_DEV && !IS_WEB && !IS_UPDATER_DISABLED) {
+    runUpdateCheck();
+}
 
 document.addEventListener("DOMContentLoaded", () => {
     startAllPlugins(StartAt.DOMContentLoaded);

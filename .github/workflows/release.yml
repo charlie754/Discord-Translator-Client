@@ -105,6 +105,14 @@ jobs:
           echo "github.sha:  ${{ github.sha }}"
           test "$built" = "${{ github.sha }}"
 
+      - name: Verify the updater compares against the release, not HEAD
+        run: |
+          if grep -a -q '\.\.\.HEAD' dist/desktop/patcher.js; then
+            echo "the updater still compares against HEAD"
+            exit 1
+          fi
+          grep -a -q 'VencordGetUpdateVersion' dist/desktop/patcher.js
+
       # Enumerates every host in the packed archives against scripts/allowed-hosts.txt.
       # Must run after the build: it reads dist/*.asar, never the sources. This is
       # the same gate test.yml runs, but test.yml is filtered to branches and never
@@ -145,6 +153,12 @@ jobs:
       - name: Verify the extension packages
         run: node scripts/checkExtensionPackages.mjs
 
+      - name: Verify the boot guard is in both extension bundles
+        run: |
+          for bundle in dist/browser/chromium-unpacked/dist/DiscordTranslator.js dist/browser/firefox-unpacked/dist/DiscordTranslator.js; do
+            grep -a -q 'discordTranslator:bootGuard' "$bundle"
+          done
+
       - uses: softprops/action-gh-release@v2
         with:
           # The release name must END with the commit hash stamped into the
@@ -164,7 +178,6 @@ jobs:
             which downloads `desktop.asar` from this release and patches your Discord desktop app.
 
             **Browser extension** — `extension-chrome.zip` (Chrome, Edge) and
-            `extension-firefox.zip` (Firefox). Neither store hosts these yet, so
-            they install unpacked; the README has the steps.
+            `extension-firefox.zip` (Firefox). Both are also published: [Chrome Web Store](https://chromewebstore.google.com/detail/discord-translator-web/jlofhkaokcnpkkhnalkldnnpilghjgaa) and [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/discord-translator/) - store installs update themselves. The zips here install unpacked; the README has the steps.
 
             To build from source instead, see the README.

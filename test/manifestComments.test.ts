@@ -284,6 +284,8 @@ describe("the packaged Firefox settings the comments were explaining", () => {
         expect(got?.gecko?.strict_min_version).toBe(wanted.gecko.strict_min_version);
         expect(got?.gecko?.data_collection_permissions?.required)
             .toEqual(wanted.gecko.data_collection_permissions.required);
+        expect(got?.gecko?.data_collection_permissions?.optional)
+            .toEqual(wanted.gecko.data_collection_permissions.optional);
         expect(got?.gecko_android?.strict_min_version).toBe(wanted.gecko_android.strict_min_version);
     });
 });

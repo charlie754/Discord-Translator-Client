@@ -87,5 +87,6 @@ async function build() {
 
 ipcMain.handle(IpcEvents.GET_REPO, serializeErrors(getRepo));
 ipcMain.handle(IpcEvents.GET_UPDATES, serializeErrors(calculateGitChanges));
+ipcMain.handle(IpcEvents.GET_UPDATE_VERSION, serializeErrors(() => null));
 ipcMain.handle(IpcEvents.UPDATE, serializeErrors(pull));
 ipcMain.handle(IpcEvents.BUILD, serializeErrors(build));

@@ -1,5 +1,6 @@
 {
     "manifest_version": 2,
+    "version": "0.2.19",
     "minimum_chrome_version": "91",
     "name": "Discord Translator Web",
     "description": "Translate a whole Discord channel, including scrollback, with one toggle.",
@@ -74,6 +75,10 @@
                     "personalCommunications",
                     "websiteContent",
                     "authenticationInfo"
+                ],
+                "_comment_optional": "technicalAndInteraction is the GOAT Cam banner request (one signed file and one photo while the panel or settings tab is visible). Firefox only accepts it as OPTIONAL (as required it is rejected: must be one of authenticationInfo ... websiteContent or none). The user opts in at install or in about:addons > Permissions; without it Firefox shows the bundled DaGoat banner.",
+                "optional": [
+                    "technicalAndInteraction"
                 ]
             }
         }

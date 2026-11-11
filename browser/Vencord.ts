@@ -16,6 +16,26 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import "./VencordNativeStub";
+// This entry point intentionally uses lazy CommonJS requires. The browser build
+// is an IIFE, so esbuild still bundles both modules and gives the normal path the
+// same exports, while safe mode can avoid evaluating Vencord (and its plugin,
+// webpack, and Discord-injection side effects) altogether.
+const guard = IS_EXTENSION
+    ? require("./updateGuard").startUpdateGuard(VERSION) as { safeMode: boolean }
+    : { safeMode: false };
 
-export * from "../src/Vencord";
+if (!guard.safeMode) require("./VencordNativeStub");
+
+const implementation = guard.safeMode
+    ? undefined
+    : require("../src/Vencord") as typeof import("../src/Vencord");
+
+export const Api = implementation?.Api;
+export const Plugins = implementation?.Plugins;
+export const Components = implementation?.Components;
+export const Util = implementation?.Util;
+export const Updater = implementation?.Updater;
+export const Webpack = implementation?.Webpack;
+export const WebpackPatcher = implementation?.WebpackPatcher;
+export const PlainSettings = implementation?.PlainSettings;
+export const Settings = implementation?.Settings;

@@ -77,8 +77,48 @@ The following further modifications were made on August 22, 2026:
 - Labelled the Goat Project banner with the product it belongs to, and disclosed the
   promotion in README.md and PRIVACY.md rather than only in this changelog
 
+The following further modifications were made on October 25, 2026:
+
+- Replaced the Goat Project banner in the translator panel and the settings tab with a banner
+  for GOAT Cam, the author's own iPhone app, linking to `goatcam.dagoat.io`. It keeps the
+  previous banner's layout (two copy lines, now with new sentences, above a link plate) and
+  its animated lockup, and adds an embedded coffee photo (credited below) and a QR code for
+  the app's App Store page. Nothing in it is fetched from the network.
+
+The following further modifications were made on October 26, 2026:
+
+- Redesigned the GOAT Cam banner (v2): removed its second copy line and the animated goat
+  lockup, which belonged to the author's other project; the GOAT Cam website's own coffee photo
+  now fills the whole banner with the wordmark over it, at 1600 px in the settings tab for
+  high-DPI screens; and the App Store QR code enlarges on hover or keyboard focus so a phone can
+  scan it. Nothing in it is fetched from the network
+
+The following further modifications were made on November 6, 2026 (v0.2.17):
+
+- The GOAT Cam banner can now load signed content from `goatcam.dagoat.io`: one signed file
+  plus one photo, verified with a public key built into the release and cached locally. The two
+  browser packages and the desktop client request it while the translator panel or settings tab
+  is visible. When offline, or when the file is missing, bad, expired or switched off, it falls
+  back to the original DaGoat.io banner. In Firefox the request needs the optional "technical and
+  interaction data" permission; without it Firefox shows the DaGoat.io banner.
+
 ### Source Attribution
 
 All upstream copyright notices are preserved in the source code. The message-interception technique, patch anchor, and translation regexes used by the ChannelTranslator feature are derived from Equicord's own `MessageTranslate` plugin.
 
 Complete corresponding source is available at https://github.com/charlie754/Discord-Translator-Client, satisfying GPL-3.0 section 6(d).
+
+### Image Credits
+
+The coffee photo in the GOAT Cam banner (`src/plugins/channelTranslator/panel/goatBanner.tsx`)
+is "White cup and MacBook" by Alex Knight (https://unsplash.com/@agkdesign), taken
+2017-01-18 in Akasaka, Minato, Tokyo. Source page: https://unsplash.com/photos/j4uuKnN43_M.
+
+It is dedicated to the public domain under the Creative Commons CC0 1.0 Universal Public Domain
+Dedication (https://creativecommons.org/publicdomain/zero/1.0/). Unsplash published photos under
+CC0 until 5 June 2017, and this photo was on Unsplash before that date; Wikimedia Commons records
+the same licence (https://commons.wikimedia.org/wiki/File:White_cup_and_MacBook_(Unsplash).jpg).
+It is the photo the GOAT Cam website shows, resized to 800 and 1600 pixels wide, colour-graded
+and stripped of its embedded metadata.
+
+CC0 does not require attribution. The photographer is credited anyway, with thanks.

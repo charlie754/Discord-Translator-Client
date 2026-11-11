@@ -25,8 +25,13 @@ install a second app. **Close Discord completely first**, including the tray ico
 
 ### Browser extension (Chrome, Edge, Firefox)
 
-For Discord in a browser tab. Download from the
-[latest release](https://github.com/charlie754/Discord-Translator-Client/releases/latest):
+For Discord in a browser tab:
+
+**Chrome and Edge:** install from the [Chrome Web Store](https://chromewebstore.google.com/detail/discord-translator-web/jlofhkaokcnpkkhnalkldnnpilghjgaa). **Firefox:** install from [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/discord-translator/). Store installs update themselves; the store can lag a GitHub release by a few days while it is reviewed.
+
+Or install a release zip by hand:
+
+Download the [latest release](https://github.com/charlie754/Discord-Translator-Client/releases/latest):
 
 **Chrome and Edge** — `extension-chrome.zip`
 
@@ -44,17 +49,14 @@ For Discord in a browser tab. Download from the
    loading before it started
 4. Open a **server channel**
 
-**On Firefox this lasts until you close the browser.** A permanent install needs the add-on to be
-signed by Mozilla, and it is not signed yet — so on release Firefox there is currently no way to keep
-it installed across restarts. Firefox Developer Edition and Nightly can keep it by setting
-`xpinstall.signatures.required` to `false` in `about:config`, which lowers a real security protection
-for every add-on you install, not just this one.
+**On Firefox, a release-zip install lasts until you close the browser.** A permanent install is
+available from Firefox Add-ons above. Firefox Developer Edition and Nightly can also keep a zip
+install by setting `xpinstall.signatures.required` to `false` in `about:config`, which lowers a real
+security protection for every add-on you install, not just this one.
 
 **There is no toolbar button, and the panel is hidden in DMs by design.** Open a server channel and
 look at the top-right of the chat area for the translator panel. On the Friends or DM screen there is
 nothing to see, which is expected rather than a failure.
-
-Neither extension is in the Chrome Web Store or on addons.mozilla.org.
 
 ### Build from source
 
@@ -112,15 +114,20 @@ The hosts those two providers used are no longer reachable from any build. They 
 
 The translator panel carries three outbound destinations, and all three are the author's:
 
-- A **banner linking to [Goat Project](https://dagoat.io)**, also shown in the settings tab.
-  **Goat Project is the author's own project**, so this is self-promotion rather than paid
-  advertising.
+- A **banner for [GOAT Cam](https://goatcam.dagoat.io)**, the author's own iPhone app, also shown
+  in the settings tab. **GOAT Cam is the author's own app**, so this is self-promotion rather than
+  paid advertising. The banner links to `goatcam.dagoat.io`; its QR code opens the app's App Store
+  page only if you scan it with a phone.
 - A **Ko-fi donation button** linking to the author's page at `ko-fi.com`.
 - A **Star Project on Github** button linking to this repository.
 
-Each is a link, an inline SVG and some text. **None of them makes a network request**, runs code,
-mines anything or sends anything — those hosts are contacted only if you click. Nothing about you or
-your messages reaches any of them either way. [PRIVACY.md](./PRIVACY.md) lists all three.
+The Ko-fi and GitHub controls are links and contact their sites only when clicked. The GOAT Cam
+banner normally starts with bundled content, but while the translator panel or settings tab is on
+screen both browser packages and the desktop client may request one signed file and one photo from
+`goatcam.dagoat.io`, at most about once a day plus retries. In Firefox this is the optional "technical
+and interaction data" permission; without it Firefox shows the bundled banner and requests nothing. The request sends no identifier, cookie, query string,
+analytics or message content;
+[PRIVACY.md](./PRIVACY.md) explains the ordinary request details the server can see.
 
 ## Privacy
 
